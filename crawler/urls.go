@@ -15,6 +15,7 @@ const (
 //
 // GetRegURL 要求query参数至少包含2个字符。
 // 以query为关键字，获取相关repository list的JSON格式响应，最大响应结果数目为10000。
+// source可选范围: official, community, publisher(可能要求url中的q换为query)。
 func GetRegURL(query, source, page, size string) string {
 	return fmt.Sprintf(RegURLTemplate, query, source, page, size)
 }

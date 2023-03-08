@@ -1,14 +1,13 @@
 package crawler
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/gocolly/colly"
 )
 
-// GetCollector 用于配置一个适用于本项目的colly.Collector
-func GetCollector() *colly.Collector {
+// GetDockerHubCollector 用于配置一个适用于Docker Hub的colly.Collector父版
+func GetDockerHubCollector() *colly.Collector {
 	// 创建新的Collector
 	c := colly.NewCollector(
 		colly.AllowedDomains("hub.docker.com"),
@@ -29,11 +28,11 @@ func GetCollector() *colly.Collector {
 
 // GetRegisterCollector 为爬取指定Register的Repo list的Collector绑定回调函数
 func GetRegisterCollector() *colly.Collector {
-	c := GetCollector()
+	c := GetDockerHubCollector()
 
 	// 绑定回调函数
 	c.OnRequest(func(r *colly.Request) {
-		fmt.Println("FROM OnRequest-----------------------")
+		fmt.Println("FROM RegisterCollector-----------------------Requesting")
 		fmt.Println("Visiting: ", r.URL)
 		// 查看request时使用的proxy
 		fmt.Println("Proxy: ", r.ProxyURL)
@@ -41,12 +40,16 @@ func GetRegisterCollector() *colly.Collector {
 		fmt.Println("Cookie: ", r.Headers.Get("Cookie"))
 	})
 
+	// 处理JSON
 	c.OnResponse(func(r *colly.Response) {
-		fmt.Println("FROM OnResponse-----------------------")
+		fmt.Println("FROM RegisterCollector-----------------------Response From ", r.Request.URL)
 		fmt.Println("Status Code", r.StatusCode)
-		var content map[string]interface{}
-		json.NewDecoder(bytes.NewReader(r.Body)).Decode(&content)
-		fmt.Println(content)
+
+		if err := json.Unmarshal([]byte(r.Body), &RegisterRepoList); err != nil {
+			fmt.Println("Error Occurred While Doing json.Unmarshal() Response From ", r.Request.URL)
+			fmt.Println(err)
+		}
+		ChannelRegRepoList <- RegisterRepoList
 	})
 
 	return c
