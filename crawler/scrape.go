@@ -15,6 +15,17 @@ func ScrapeRegRepoListRecursive(c *colly.Collector, keyword, source string) {
 	close(ChannelRegRepoList)
 }
 
+// ScrapeRepoInfo 用于爬取指定repo的metadata和全部tag的信息。
+// 考虑进一步将metadata和tag持久化。
+func ScrapeRepoInfo(namespace, repo string) {
+
+}
+
+// ScrapeRepoMetadata 用于爬取指定repo的metadata，返回一个。
+func ScrapeRepoMetadata(namespace, repo string) {
+
+}
+
 // ScrapeRepoTagsRecursive 递归爬取指定Repo的全部Tag记录。
 func ScrapeRepoTagsRecursive(c *colly.Collector, namespace, repo string) {
 	for _, i := range []string{"1"} {

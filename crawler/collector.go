@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gocolly/colly"
+	"net/http"
 )
 
 // GetDockerHubCollector 用于配置一个适用于Docker Hub的colly.Collector父版
@@ -26,8 +27,8 @@ func GetDockerHubCollector() *colly.Collector {
 	return c
 }
 
-// GetRegisterCollector 为爬取指定Register的Repo list的Collector绑定回调函数
-func GetRegisterCollector() *colly.Collector {
+// GetRegRepoListCollector 为爬取指定Register的Repo list的Collector绑定回调函数
+func GetRegRepoListCollector() *colly.Collector {
 	c := GetDockerHubCollector()
 
 	// 绑定回调函数
@@ -42,14 +43,76 @@ func GetRegisterCollector() *colly.Collector {
 
 	// 处理JSON
 	c.OnResponse(func(r *colly.Response) {
-		fmt.Println("FROM RegisterCollector-----------------------Response From ", r.Request.URL)
+		fmt.Println("FROM RegisterCollector-----------------------Response")
+		fmt.Println("From: ", r.Request.URL)
 		fmt.Println("Status Code", r.StatusCode)
 
+		var RegisterRepoList RegisterRepoList__
 		if err := json.Unmarshal([]byte(r.Body), &RegisterRepoList); err != nil {
 			fmt.Println("Error Occurred While Doing json.Unmarshal() Response From ", r.Request.URL)
 			fmt.Println(err)
 		}
 		ChannelRegRepoList <- RegisterRepoList
+	})
+
+	return c
+}
+
+// GetRepoMetadataCollector 为爬取指定Repository的Tag list的Collector绑定回调函数
+func GetRepoMetadataCollector() *colly.Collector {
+	c := GetDockerHubCollector()
+
+	// 爬Tag不需要考虑keep-alive
+	c.WithTransport(&http.Transport{
+		DisableKeepAlives: true,
+	})
+
+	// 绑定回调函数
+	c.OnRequest(func(r *colly.Request) {
+		fmt.Println("FROM RepoMetadataCollector-----------------------Requesting")
+		fmt.Println("Visiting: ", r.URL)
+		// 查看request时使用的proxy
+		fmt.Println("Proxy: ", r.ProxyURL)
+		// 查看Cookie，如果有要清除，否则容易封号
+		fmt.Println("Cookie: ", r.Headers.Get("Cookie"))
+	})
+
+	// 处理JSON
+	c.OnResponse(func(r *colly.Response) {
+		fmt.Println("FROM RepoMetadataCollector-----------------------Response")
+		fmt.Println("From: ", r.Request.URL)
+		fmt.Println("Status Code", r.StatusCode)
+
+	})
+
+	return c
+}
+
+// GetRepoTagsCollector 为爬取指定Repository的Tag list的Collector绑定回调函数
+func GetRepoTagsCollector() *colly.Collector {
+	c := GetDockerHubCollector()
+
+	// 爬Tag不需要考虑keep-alive
+	c.WithTransport(&http.Transport{
+		DisableKeepAlives: true,
+	})
+
+	// 绑定回调函数
+	c.OnRequest(func(r *colly.Request) {
+		fmt.Println("FROM RepoTagsCollector-----------------------Requesting")
+		fmt.Println("Visiting: ", r.URL)
+		// 查看request时使用的proxy
+		fmt.Println("Proxy: ", r.ProxyURL)
+		// 查看Cookie，如果有要清除，否则容易封号
+		fmt.Println("Cookie: ", r.Headers.Get("Cookie"))
+	})
+
+	// 处理JSON
+	c.OnResponse(func(r *colly.Response) {
+		fmt.Println("FROM RepoTagsCollector-----------------------Response")
+		fmt.Println("From: ", r.Request.URL)
+		fmt.Println("Status Code", r.StatusCode)
+
 	})
 
 	return c
