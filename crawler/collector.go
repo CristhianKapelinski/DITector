@@ -99,7 +99,7 @@ func GetRepoMetadataCollector(Repo Repository__) *colly.Collector {
 
 // GetRepoTagsCollector 为爬取指定Repository的Tag list的Collector绑定回调函数。
 // 测试通过！！！
-func GetRepoTagsCollector(TagRec TagReceiver__) *colly.Collector {
+func GetRepoTagsCollector(TagRec *TagReceiver__) *colly.Collector {
 	c := GetDockerHubCollector()
 
 	// 爬Tag不需要考虑keep-alive
@@ -128,7 +128,7 @@ func GetRepoTagsCollector(TagRec TagReceiver__) *colly.Collector {
 			fmt.Println("[ERROR] Occurred While Doing json.Unmarshal() Response From ", r.Request.URL)
 			fmt.Println(err)
 		}
-		fmt.Println(TagRec)
+		//fmt.Println(TagRec)
 	})
 
 	return c
@@ -136,7 +136,7 @@ func GetRepoTagsCollector(TagRec TagReceiver__) *colly.Collector {
 
 // GetImageHistoryCollector 为爬取指定Namespace/Repository:tag Image的构建命令的Collector绑定回调函数。
 // 测试成功！！！
-func GetImageHistoryCollector(Arch []Arch__) *colly.Collector {
+func GetImageHistoryCollector(Arch *[]Arch__) *colly.Collector {
 	c := GetDockerHubCollector()
 
 	// 爬Tag不需要考虑keep-alive
@@ -165,7 +165,7 @@ func GetImageHistoryCollector(Arch []Arch__) *colly.Collector {
 			fmt.Println("[ERROR] Occurred While Doing json.Unmarshal() Response From ", r.Request.URL)
 			fmt.Println(err)
 		}
-		fmt.Println(Arch)
+		//fmt.Println(Arch)
 	})
 
 	return c
