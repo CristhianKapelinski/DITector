@@ -22,7 +22,7 @@ func ScrapeRegRepoListRecursive(keyword, source string, chRegRepoList chan Regis
 			continue
 		}
 	}
-	close(ChannelRegRepoList)
+	close(chRegRepoList)
 }
 
 // ScrapeRepoInfo 用于爬取指定repo的metadata和全部tag的信息。

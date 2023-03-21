@@ -24,14 +24,14 @@ func main() {
 	//var Repo crawler.Repository__
 	//c := crawler.GetRepoMetadataCollector(Repo)
 	//c.Visit(crawler.GetRepoMetaURL("library", "mongo"))
-	var TagR crawler.TagReceiver__
-	c2 := crawler.GetRepoTagsCollector(&TagR)
-	c2.Visit(crawler.GetRepoTagsURL("library", "mongo", "1", "4"))
-	fmt.Println(TagR)
-	time.Sleep(time.Second * 3)
-	c3 := crawler.GetImageHistoryCollector(&TagR.Results[0].Archs)
-	c3.Visit(crawler.GetImageHistoryURL("library", "mongo", "latest"))
-	fmt.Println(TagR)
+	//var TagR crawler.TagReceiver__
+	//c2 := crawler.GetRepoTagsCollector(&TagR)
+	//c2.Visit(crawler.GetRepoTagsURL("library", "mongo", "1", "4"))
+	//fmt.Println(TagR)
+	//time.Sleep(time.Second * 3)
+	//c3 := crawler.GetImageHistoryCollector(&TagR.Results[0].Archs)
+	//c3.Visit(crawler.GetImageHistoryURL("library", "mongo", "latest"))
+	//fmt.Println(TagR)
 
 	//fmt.Println(crawler.GetNamespaceURL("aa281916", "1", "4"))
 	//fmt.Println(crawler.GetRepoMetaURL("aa281916", "getting-started"))
@@ -42,6 +42,8 @@ func main() {
 	//for _, i := range []string{"1"} {
 	//	c.Visit(strings.Replace(RegURLTemplate, "{PAGE}", i, 1))
 	//}
+
+	fmt.Println(crawler.GenerateNextKeyword("____", true))
 
 	go func() { time.Sleep(time.Second * 3); done <- struct{}{} }()
 	// 退出程序
