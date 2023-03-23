@@ -1,6 +1,8 @@
 package crawler
 
-import "github.com/gocolly/colly"
+import (
+	"github.com/gocolly/colly"
+)
 
 // 实现一些统一的遍历爬取
 
@@ -19,14 +21,32 @@ func ScrapeDockerHubRecursive() {
 //
 // count<9000时，将GenerateNextKeyword(keyword, true)传入ChanKeyword，同时递归爬取该keyword对应的全部RegisterRepoList__，
 // 传入ChanRegRepoList。
-func ScrapeRegRepoListRecursive(keyword, source string, chRegRepoList chan RegisterRepoList__) {
+func ScrapeRegRepoListRecursive(keyword, source string) {
+	// 启动一个专门处理chRegRepoList的函数，用来判断是否应在第一轮退出程序
+	chRegRepoList := make(chan RegisterRepoList__)
+	go func(chRegRepoList chan RegisterRepoList__) {
+		for rrl := range chRegRepoList {
+			// Count过大，退出
+			if rrl.Count > 9000 {
+				// 一定是函数主体都处理好才向ChanKeyword中传数据，因为ChanKeyword是无缓冲通道，在核心调度器会阻塞。
+				ChanKeyword <- GenerateNextKeyword(keyword, false)
+			} else {
+				ChanRegRepoList <- rrl
+			}
+		}
+	}(chRegRepoList)
+
+	// page_size=100情况下，一般会有很多页，所以可以新建一个
 	c := GetRegRepoListCollector(chRegRepoList)
+
 	for _, i := range []string{"1", "2", "3"} {
 		if err := c.Visit(GetRegURL(keyword, source, i, "4")); err != nil {
 			continue
 		}
 	}
+
 	close(chRegRepoList)
+	ChanKeyword <- GenerateNextKeyword(keyword, true)
 }
 
 // ScrapeRepoInfo 用于爬取指定repo的metadata，全部tag，以及每个tag对应镜像的history信息。

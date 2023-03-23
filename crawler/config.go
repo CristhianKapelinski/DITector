@@ -12,6 +12,10 @@ var ConfigCrawler struct {
 	ProxyFile string `json:"proxy_file"`
 }
 
+var Proxies struct {
+	Addresses []string `json:"proxies"`
+}
+
 func init() {
 	fb, err := os.ReadFile("crawler/config.json")
 	if err != nil {
@@ -24,6 +28,14 @@ func init() {
 	if ConfigCrawler.MaxThread == 0 {
 		ConfigCrawler.MaxThread = runtime.GOMAXPROCS(runtime.NumCPU())
 	}
+	// 初始化核心调度器的全局管道
 	ChanLimitMainGoroutine = make(chan struct{}, ConfigCrawler.MaxThread)
-	fmt.Println(ConfigCrawler)
+	ChanRegRepoList = make(chan RegisterRepoList__, ConfigCrawler.MaxThread)
+	// 初始化go colly Proxies
+	ps, _ := os.ReadFile(ConfigCrawler.ProxyFile)
+	if err := json.Unmarshal(ps, &Proxies); err != nil {
+		fmt.Println("[ERROR] Json unmarshal failed while parsing proxyaddr file.")
+	}
+
+	fmt.Println("Init Crawler Config Success:\n", ConfigCrawler)
 }

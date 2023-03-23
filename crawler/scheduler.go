@@ -15,7 +15,8 @@ var (
 // 定义一系列用于任务调度的关键字
 
 var (
-	ChanKeyword     chan string
+	// ChanKeyword 用于传递keyword，优先爬完有关一个keyword的所有镜像，再进入下一个keyword。
+	ChanKeyword     = make(chan string)
 	ChanRegRepoList chan RegisterRepoList__
 )
 
@@ -29,8 +30,36 @@ func CrawlDockerHubStaged() {
 }
 
 // CoreScheduler 作为crawler运行时必须启动的goroutine，负责整个crawler内scraper的调度。
-func CoreScheduler() {
-	select {}
+//
+// 核心调度包括：
+//
+// 将keyword分发给ScrapeRegRepoListRecursive，生成下一个keyword，爬取当前keyword的仓库列表。
+//
+// 将regrepolist分发给ScrapeRepoInfo，爬取仓库metadata，爬取仓库所有tag的所有arch history。
+func CoreScheduler(initKw string) {
+	go func() {
+		ChanKeyword <- initKw
+	}()
+	for {
+		select {
+		// 获取到新的keyword，将其传入ScrapeRegRepoListRecursive尝试
+		case kw := <-ChanKeyword:
+			// 每一个核心任务开始前申请一个核心goroutine
+			ChanLimitMainGoroutine <- struct{}{}
+			go func(kw string) {
+				defer func() { <-ChanLimitMainGoroutine }()
+				ScrapeRegRepoListRecursive(kw, "community")
+			}(kw)
+		case rrl := <-ChanRegRepoList:
+			ChanLimitMainGoroutine <- struct{}{}
+			go func(rrl RegisterRepoList__) {
+				defer func() { <-ChanLimitMainGoroutine }()
+				for _, s := range rrl.Summaries {
+					ScrapeRepoInfo(s.Name, s.Source)
+				}
+			}(rrl)
+		}
+	}
 }
 
 // DistributeKeywordToScrapeRegRepoList 负责具体将Repo count<9000的keyword分发给ScrapeRegRepoListRecursive。

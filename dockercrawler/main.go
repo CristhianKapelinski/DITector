@@ -1,5 +1,10 @@
 package main
 
+import (
+	"fmt"
+	"time"
+)
+
 // done 用于标识整个爬虫结束
 var done = make(chan struct{})
 
@@ -58,4 +63,19 @@ func main() {
 	//go func() { time.Sleep(time.Second * 3); done <- struct{}{} }()
 	//// 退出程序
 	//<-done
+
+	ch := make(chan int)
+	go func() {
+		for i := range ch {
+			fmt.Println(i)
+		}
+	}()
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Second)
+		ch <- i
+	}
+	close(ch)
+
+	time.Sleep(time.Second)
 }
