@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crawler"
-	"fmt"
 	"time"
 )
 
@@ -64,7 +62,5 @@ func main() {
 	//go func() { time.Sleep(time.Second * 3); done <- struct{}{} }()
 	//// 退出程序
 	//<-done
-
-	fmt.Println(crawler.GenerateNextKeyword("mo", false))
 	time.Sleep(time.Second)
 }

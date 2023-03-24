@@ -83,16 +83,14 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	// 然后再调Cache，Cache内调用Do，Do内调time.Sleep实现请求间的时延。
 	// 所以每一个goroutine的OnRequest都瞬间调用了，然后Delay，然后实际进行HTTP请求，然后HandleOnResponse。
 	// 导致在输出上只有多个Visit的OnResponse间间隔了预设的Delay时间。
-	wg := sync.WaitGroup{}
 	for i = 2; i <= pages; i++ {
-		wg.Add(1)
-		go func(j int) {
-			c.Visit(GetRegURL(keyword, source, strconv.Itoa(j), "100"))
-			wg.Done()
-		}(i)
+		if err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil {
+			fmt.Println("[ERROR] In ScrapeRegRepoListRecursive while visiting: ",
+				GetRegURL(keyword, source, strconv.Itoa(i), "100"))
+		}
 	}
 
-	wg.Wait()
+	c.Wait()
 
 	close(chRegRepoList)
 

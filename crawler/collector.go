@@ -13,7 +13,7 @@ func GetDockerHubCollector() *colly.Collector {
 	// 创建新的Collector
 	c := colly.NewCollector(
 		colly.AllowedDomains("hub.docker.com"),
-		//colly.Async(true),
+		colly.Async(true),
 	)
 
 	// 配置Collector
@@ -22,10 +22,13 @@ func GetDockerHubCollector() *colly.Collector {
 		DisableKeepAlives: true,
 	})
 
-	// 引入随机延时
+	// 设置HTTP请求间随机延时
+	// 设置colly Collector线程数
 	c.Limit(&colly.LimitRule{
-		DomainGlob: "hub.docker.com",
-		Delay:      5 * time.Second,
+		// 必须配置DomainGlob与DomainRegexp之一，否则limit不生效
+		DomainGlob:  "hub.docker.com",
+		RandomDelay: 2 * time.Second,
+		Parallelism: 2,
 	})
 
 	// 配置代理池

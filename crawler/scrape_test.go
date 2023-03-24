@@ -21,7 +21,7 @@ func TestScrapeRegRepoListRecursive(t *testing.T) {
 				go func(kw string) {
 					defer func() { <-ChanLimitMainGoroutine }()
 					fmt.Println("CoreScheduler received keyword: ", kw)
-					asst.Equal("0001", kw, "Next keyword for 0000 should be 0001.")
+					asst.Equal("001", kw, "Next keyword for 0000 should be 0001.")
 					//asst.Equal("mo0", kw, "Next keyword for mo0 should be mo.")
 				}(kw)
 			case rrl := <-ChanRegRepoList:
@@ -34,7 +34,7 @@ func TestScrapeRegRepoListRecursive(t *testing.T) {
 			}
 		}
 	}()
-	ScrapeRegRepoListRecursive("0000", "community")
+	ScrapeRegRepoListRecursive("000", "community")
 	//ScrapeRegRepoListRecursive("mo", "community")
 
 	time.Sleep(time.Second)
