@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gocolly/colly"
-	"github.com/gocolly/colly/proxy"
 	"net/http"
 	"time"
 )
@@ -25,17 +24,18 @@ func GetDockerHubCollector() *colly.Collector {
 
 	// 引入随机延时
 	c.Limit(&colly.LimitRule{
-		RandomDelay: 2 * time.Second,
+		DomainGlob: "hub.docker.com",
+		Delay:      5 * time.Second,
 	})
 
 	// 配置代理池
 	// To be done: 打乱顺序将Proxies.Addresses传入RoundRobinProxySwitcher作为代理池
 	//fmt.Println(Proxies)
-	if p, err := proxy.RoundRobinProxySwitcher(
-		Proxies.Addresses...,
-	); err == nil {
-		c.SetProxyFunc(p)
-	}
+	//if p, err := proxy.RoundRobinProxySwitcher(
+	//	Proxies.Addresses...,
+	//); err == nil {
+	//	c.SetProxyFunc(p)
+	//}
 
 	return c
 }
@@ -60,7 +60,8 @@ func GetRegRepoListCollector(ch chan RegisterRepoList__) *colly.Collector {
 	c.OnResponse(func(r *colly.Response) {
 		fmt.Println("FROM RegRepoListCollector-----------------------Response")
 		fmt.Println("From: ", r.Request.URL)
-		fmt.Println("Status Code", r.StatusCode)
+		fmt.Println("Status Code ", r.StatusCode)
+		fmt.Println("X-Ratelimit-Remaining: ", r.Headers.Get("X-Ratelimit-Remaining"))
 
 		var RegRepoList RegisterRepoList__
 		if err := json.Unmarshal([]byte(r.Body), &RegRepoList); err != nil {

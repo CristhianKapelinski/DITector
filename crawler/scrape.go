@@ -26,11 +26,14 @@ func ScrapeDockerHubRecursive() {
 // 传入ChanRegRepoList。
 func ScrapeRegRepoListRecursive(keyword, source string) {
 	var (
-		pages int
-		stop  bool
+		pages    int
+		stop     bool
+		stopLock sync.Mutex
 	)
 	// 启动一个专门处理chRegRepoList的函数，用于
 	chRegRepoList := make(chan RegisterRepoList__)
+	// 起始时需要将stopLock上锁
+	stopLock.Lock()
 	go func(ch chan RegisterRepoList__) {
 		for rrl := range ch {
 			// pages为0，代表i为1，即当前结果为当前keyword的第一次爬取结果
@@ -48,6 +51,8 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 					}
 					ChanRegRepoList <- rrl
 				}
+				// 第一页判断后将stopLock解锁
+				stopLock.Unlock()
 			} else {
 				// pages不为0，只负责转发
 				ChanRegRepoList <- rrl
@@ -62,12 +67,16 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100"))
 
 	// Count>9000，在核心调度器消费掉下一个keyword后退出。
+	// stopLock阻塞当前任务的主协程，等待内部管道放行
+	stopLock.Lock()
 	if stop {
+		stopLock.Unlock()
 		fmt.Println("[INFO] Count > 9000, Stop ScrapeRegRepoListRecursive for keyword: ", keyword)
 		close(chRegRepoList)
 		ChanKeyword <- GenerateNextKeyword(keyword, false)
 		return
 	}
+	stopLock.Unlock()
 
 	// 待测试，这样的话collector中的时延是否还有效，如果有效将形成相对高效的流水线
 	wg := sync.WaitGroup{}
