@@ -78,7 +78,11 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	}
 	stopLock.Unlock()
 
-	// 待测试，这样的话collector中的时延是否还有效，如果有效将形成相对高效的流水线
+	// colly设计上存在问题，Visit本质上是调用内置函数scrape实现的，
+	// 内部先组织请求头和数据，组织好后掉用HandleOnRequest，
+	// 然后再调Cache，Cache内调用Do，Do内调time.Sleep实现请求间的时延。
+	// 所以每一个goroutine的OnRequest都瞬间调用了，然后Delay，然后实际进行HTTP请求，然后HandleOnResponse。
+	// 导致在输出上只有多个Visit的OnResponse间间隔了预设的Delay时间。
 	wg := sync.WaitGroup{}
 	for i = 2; i <= pages; i++ {
 		wg.Add(1)
