@@ -13,22 +13,12 @@ func GetDockerHubCollector() *colly.Collector {
 	// 创建新的Collector
 	c := colly.NewCollector(
 		colly.AllowedDomains("hub.docker.com"),
-		colly.Async(true),
 	)
 
 	// 配置Collector
 	// 关keep-alive
 	c.WithTransport(&http.Transport{
 		DisableKeepAlives: true,
-	})
-
-	// 设置HTTP请求间随机延时
-	// 设置colly Collector线程数
-	c.Limit(&colly.LimitRule{
-		// 必须配置DomainGlob与DomainRegexp之一，否则limit不生效
-		DomainGlob:  "hub.docker.com",
-		RandomDelay: 2 * time.Second,
-		Parallelism: 2,
 	})
 
 	// 配置代理池
@@ -43,11 +33,31 @@ func GetDockerHubCollector() *colly.Collector {
 	return c
 }
 
+// GetDockerHubAsyncCollector 返回进行了Async配置的DockerHubCollector
+func GetDockerHubAsyncCollector() *colly.Collector {
+	c := GetDockerHubCollector()
+
+	// 配置异步
+	c.Async = true
+
+	// 配置并发
+	// 设置HTTP请求间随机延时
+	// 设置colly Collector线程数
+	c.Limit(&colly.LimitRule{
+		// 必须配置DomainGlob与DomainRegexp之一，否则limit不生效
+		DomainGlob:  "hub.docker.com",
+		RandomDelay: 2 * time.Second,
+		Parallelism: 2,
+	})
+
+	return c
+}
+
 // GetRegRepoListCollector 为爬取指定Register的Repo list的Collector绑定回调函数。
 // 爬取顺利的情况下，向chRegRepoList通道中传入爬到的RegisterRepoList__结果。
 // 测试通过！！！
 func GetRegRepoListCollector(ch chan RegisterRepoList__) *colly.Collector {
-	c := GetDockerHubCollector()
+	c := GetDockerHubAsyncCollector()
 
 	// 绑定回调函数
 	c.OnRequest(func(r *colly.Request) {
@@ -79,7 +89,7 @@ func GetRegRepoListCollector(ch chan RegisterRepoList__) *colly.Collector {
 
 // GetRepoMetadataCollector 为爬取指定Repository的Tag list的Collector绑定回调函数。
 // 测试通过！！！
-func GetRepoMetadataCollector(Repo *Repository__) *colly.Collector {
+func GetRepoMetadataCollector(repo *Repository__) *colly.Collector {
 	c := GetDockerHubCollector()
 
 	// 绑定回调函数
@@ -99,11 +109,11 @@ func GetRepoMetadataCollector(Repo *Repository__) *colly.Collector {
 		fmt.Println("Status Code", r.StatusCode)
 
 		//var Repo Repository__
-		if err := json.Unmarshal([]byte(r.Body), &Repo); err != nil {
+		if err := json.Unmarshal([]byte(r.Body), &repo); err != nil {
 			fmt.Println("[ERROR] Occurred While Doing json.Unmarshal() Response From ", r.Request.URL)
 			fmt.Println(err)
 		}
-		fmt.Println(Repo)
+		fmt.Println(repo)
 	})
 
 	return c
@@ -112,12 +122,8 @@ func GetRepoMetadataCollector(Repo *Repository__) *colly.Collector {
 // GetRepoTagsCollector 为爬取指定Repository的Tag list的Collector绑定回调函数。
 // 测试通过！！！
 func GetRepoTagsCollector(ch chan TagReceiver__) *colly.Collector {
+	// Tags有很强的时间顺序需求，不用Async Collector
 	c := GetDockerHubCollector()
-
-	// 爬Tag不需要考虑keep-alive
-	c.WithTransport(&http.Transport{
-		DisableKeepAlives: true,
-	})
 
 	// 绑定回调函数
 	c.OnRequest(func(r *colly.Request) {
@@ -151,11 +157,6 @@ func GetRepoTagsCollector(ch chan TagReceiver__) *colly.Collector {
 // 测试成功！！！
 func GetImageHistoryCollector(Arch *[]Arch__) *colly.Collector {
 	c := GetDockerHubCollector()
-
-	// 爬Tag不需要考虑keep-alive
-	c.WithTransport(&http.Transport{
-		DisableKeepAlives: true,
-	})
 
 	// 绑定回调函数
 	c.OnRequest(func(r *colly.Request) {

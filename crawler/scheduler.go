@@ -8,16 +8,16 @@ import "fmt"
 // 用于限制goroutine数量
 
 var (
-	// ChanLimitMainGoroutine 限制核心调度器goroutine数量
-	ChanLimitMainGoroutine chan struct{}
+	// chanLimitMainGoroutine 限制核心调度器goroutine数量
+	chanLimitMainGoroutine chan struct{}
 )
 
 // 定义一系列用于任务调度的关键字
 
 var (
-	// ChanKeyword 用于传递keyword，优先爬完有关一个keyword的所有镜像，再进入下一个keyword。
-	ChanKeyword     = make(chan string)
-	ChanRegRepoList chan RegisterRepoList__
+	// chanKeyword 用于传递keyword，优先爬完有关一个keyword的所有镜像，再进入下一个keyword。
+	chanKeyword     = make(chan string)
+	chanRegRepoList chan RegisterRepoList__
 )
 
 // CrawlDockerHubStaged 划分阶段进行整个DockerHub的爬取。
@@ -38,22 +38,22 @@ func CrawlDockerHubStaged() {
 // 将regrepolist分发给ScrapeRepoInfo，爬取仓库metadata，爬取仓库所有tag的所有arch history。
 func CoreScheduler(initKw string) {
 	go func() {
-		ChanKeyword <- initKw
+		chanKeyword <- initKw
 	}()
 	for {
 		select {
 		// 获取到新的keyword，将其传入ScrapeRegRepoListRecursive尝试
-		case kw := <-ChanKeyword:
+		case kw := <-chanKeyword:
 			// 每一个核心任务开始前申请一个核心goroutine
-			ChanLimitMainGoroutine <- struct{}{}
+			chanLimitMainGoroutine <- struct{}{}
 			go func(kw string) {
-				defer func() { <-ChanLimitMainGoroutine }()
+				defer func() { <-chanLimitMainGoroutine }()
 				ScrapeRegRepoListRecursive(kw, "community")
 			}(kw)
-		case rrl := <-ChanRegRepoList:
-			ChanLimitMainGoroutine <- struct{}{}
+		case rrl := <-chanRegRepoList:
+			chanLimitMainGoroutine <- struct{}{}
 			go func(rrl RegisterRepoList__) {
-				defer func() { <-ChanLimitMainGoroutine }()
+				defer func() { <-chanLimitMainGoroutine }()
 				for _, s := range rrl.Summaries {
 					ScrapeRepoInfo(s.Name, s.Source)
 				}

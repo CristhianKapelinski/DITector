@@ -31,7 +31,7 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 		stopLock sync.Mutex
 	)
 	// 启动一个专门处理chRegRepoList的函数，用于
-	chRegRepoList := make(chan RegisterRepoList__)
+	ch := make(chan RegisterRepoList__)
 	// 起始时需要将stopLock上锁
 	stopLock.Lock()
 	go func(ch chan RegisterRepoList__) {
@@ -45,23 +45,23 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 					stop = true
 				} else {
 					if (cnt % 100) != 0 {
-						pages = rrl.Count/100 + 1
+						pages = cnt/100 + 1
 					} else {
-						pages = rrl.Count / 100
+						pages = cnt / 100
 					}
-					ChanRegRepoList <- rrl
+					chanRegRepoList <- rrl
 				}
 				// 第一页判断后将stopLock解锁
 				stopLock.Unlock()
 			} else {
 				// pages不为0，只负责转发
-				ChanRegRepoList <- rrl
+				chanRegRepoList <- rrl
 			}
 
 		}
-	}(chRegRepoList)
+	}(ch)
 
-	c := GetRegRepoListCollector(chRegRepoList)
+	c := GetRegRepoListCollector(ch)
 	// 第一页爬取主动进行
 	i := 1
 	c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100"))
@@ -72,8 +72,8 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	if stop {
 		stopLock.Unlock()
 		fmt.Println("[INFO] Count > 9000, Stop ScrapeRegRepoListRecursive for keyword: ", keyword)
-		close(chRegRepoList)
-		ChanKeyword <- GenerateNextKeyword(keyword, false)
+		close(ch)
+		chanKeyword <- GenerateNextKeyword(keyword, false)
 		return
 	}
 	stopLock.Unlock()
@@ -92,36 +92,64 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 
 	c.Wait()
 
-	close(chRegRepoList)
+	close(ch)
 
 	// 一定是函数主体都处理好才向ChanKeyword中传数据，因为ChanKeyword是无缓冲通道，在核心调度器会阻塞。
-	ChanKeyword <- GenerateNextKeyword(keyword, true)
+	chanKeyword <- GenerateNextKeyword(keyword, true)
 }
 
-// ScrapeRepoInfo 用于爬取指定repo的metadata，全部tag，以及每个tag对应镜像的history信息。
-// 考虑在内部进一步将metadata和tag信息持久化。
-func ScrapeRepoInfo(namespace, repo string) {
-	// 思路1-------------------------
-	// 建立有效管道每阶段都在传数据
-	// ch1 := make(chan Repository__)
-	// ScrapeRepoMetadata 爬Metadata，结果传进ch1
+// ScrapeRepoInfo 用于爬取仓库namespace/repository的metadata，全部tag，以及每个tag对应镜像的history信息。
+// 考虑根据这里的结果进一步将metadata和tag信息持久化。
+func ScrapeRepoInfo(namespace, repository string) {
+	var repo Repository__
 
-	// 读ch1
-	// ch2 := make(chan TagReceiver__ 收tag list)
-	// ScrapeRepoTagsRecursive爬tag list传进ch2
+	// 爬取Metadata
+	cm := GetRepoMetadataCollector(&repo)
+	cm.Visit(GetRepoMetaURL(namespace, repository))
 
-	// 思路2-------------------------
-	// GetCollector时候传入&Repository__
-	// ch := make(chan TagReceiver__ 收tag list)
-	// ScrapeRepoTagsRecursive爬tag list传进ch
-	// 读ch
-	// for t := range ch {
-	// 	for _, tag := range t.Results {
-	// 		进一步爬每个tag的Archs
-	//
-	//	}
-	// }
-	// 后续都在这个基础上
+	// 爬所有Tags，可能涉及多页，建管道维护
+	chTags := make(chan TagReceiver__)
+	ct := GetRepoTagsCollector(chTags)
+	var (
+		i        = 1
+		pages    int
+		pageLock sync.Mutex
+	)
+
+	pageLock.Lock()
+	go func(ch chan TagReceiver__) {
+		for tags := range ch {
+			if pages == 0 {
+				cnt := tags.Count
+				if cnt > 100 {
+					if (cnt % 100) != 0 {
+						pages = cnt/100 + 1
+					} else {
+						pages = cnt / 100
+					}
+				}
+				pageLock.Unlock()
+				// 第一页的结果别忘了存进来
+				repo.Tags = append(repo.Tags, tags.Results...)
+			} else {
+				repo.Tags = append(repo.Tags, tags.Results...)
+			}
+		}
+	}(chTags)
+	// 访问第一页
+	ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(i), "100"))
+
+	// 尝试获取锁，获取的一瞬间就可以关闭锁，做一次pages的同步
+	pageLock.Lock()
+	pageLock.Unlock()
+
+	if pages > 0 {
+		for i = 2; i <= pages; i++ {
+			ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(i), "100"))
+		}
+	}
+
+	// 爬每个Tag的所有Arch History
 }
 
 // ScrapeRepoMetadata 用于爬取指定repo的metadata，返回一个。
