@@ -41,6 +41,8 @@ func TestScrapeRegRepoListRecursive(t *testing.T) {
 }
 
 func TestScrapeRepoInfo(t *testing.T) {
-	//ScrapeRepoInfo("xmrig2021", "r2021")
-	ScrapeRepoInfo("patsissons", "xmrig")
+	// 只有1个tag的基本验证
+	ScrapeRepoInfo("xmrig2021", "r2021")
+	// 有更多tags的仓库
+	//ScrapeRepoInfo("patsissons", "xmrig")
 }

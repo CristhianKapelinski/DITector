@@ -89,7 +89,8 @@ type Layer__ struct {
 
 func (r Repository__) String() string {
 	return fmt.Sprintf(
-		`User: %s
+		`Metadata-------------------------------------
+User: %s
 Name: %s
 Namespace: %s
 RepositoryType: %s
@@ -114,7 +115,8 @@ Tags: %v`,
 
 func (t Tag__) String() string {
 	return fmt.Sprintf(
-		`Name: %s
+		`Tag----------------------------------------
+	Name: %s
 	LastUpdated: %s
 	LastUpdaterUsername: %s
 	TagLastPulled: %s
@@ -130,7 +132,8 @@ func (t Tag__) String() string {
 
 func (a Arch__) String() string {
 	return fmt.Sprintf(
-		`Architecture: %s
+		`Arch------------------------------------------
+		Architecture: %s
 		Features: %s
 		Variant: %s
 		Digest: %s
@@ -147,7 +150,8 @@ func (a Arch__) String() string {
 
 func (l Layer__) String() string {
 	return fmt.Sprintf(
-		`Digest: %s
+		`Layer--------------------------------------
+			Digest: %s
 			Size: %d
 			Instruction: %s`,
 		l.Digest, l.Size, l.Instruction,
