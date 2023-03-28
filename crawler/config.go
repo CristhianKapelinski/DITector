@@ -11,12 +11,14 @@ import (
 const ConfigFile = "config.json"
 
 var ConfigCrawler struct {
-	MaxThread int    `json:"max_thread"`
-	ProxyFile string `json:"proxy_file"`
+	MaxThread  int    `json:"max_thread"`
+	LocalProxy bool   `json:"local_proxy"`
+	ProxyFile  string `json:"proxy_file"`
 }
 
 var Proxies struct {
 	Addresses []string `json:"proxies"`
+	Banned    []string
 }
 
 func init() {
@@ -35,14 +37,20 @@ func init() {
 	} else {
 		runtime.GOMAXPROCS(ConfigCrawler.MaxThread)
 	}
+
+	fmt.Println("Init Crawler Config Success: ", ConfigCrawler)
+
 	// 初始化核心调度器的全局管道
 	chanLimitMainGoroutine = make(chan struct{}, ConfigCrawler.MaxThread)
 	chanRegRepoList = make(chan RegisterRepoList__, ConfigCrawler.MaxThread)
 	// 初始化go colly Proxies
-	ps, _ := os.ReadFile(ConfigCrawler.ProxyFile)
-	if err := json.Unmarshal(ps, &Proxies); err != nil {
-		fmt.Println("[ERROR] Json unmarshal failed while parsing proxyaddr file: ", ConfigCrawler.ProxyFile)
+	if ConfigCrawler.LocalProxy {
+		ps, _ := os.ReadFile(ConfigCrawler.ProxyFile)
+		if err := json.Unmarshal(ps, &Proxies); err != nil {
+			fmt.Println("[ERROR] Json unmarshal failed while parsing proxyaddr file: ", ConfigCrawler.ProxyFile)
+		}
+	} else {
+		UpdateProxiesFrom("")
 	}
-
-	fmt.Println("Init Crawler Config Success: ", ConfigCrawler)
+	fmt.Println("Init Proxies Success: ", Proxies)
 }

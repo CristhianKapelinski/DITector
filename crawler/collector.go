@@ -26,7 +26,9 @@ func GetDockerHubCollector() *colly.Collector {
 	//fmt.Println(Proxies)
 	//if p, err := proxy.RoundRobinProxySwitcher(
 	//	Proxies.Addresses...,
-	//); err == nil {
+	//); err != nil {
+	//	fmt.Println("[ERROR] collector SetProxy Failed with: ", err)
+	//} else {
 	//	c.SetProxyFunc(p)
 	//}
 
@@ -72,6 +74,7 @@ func GetRegRepoListCollector(ch chan RegisterRepoList__) *colly.Collector {
 	c.OnResponse(func(r *colly.Response) {
 		fmt.Println("FROM RegRepoListCollector-----------------------Response")
 		fmt.Println("From: ", r.Request.URL)
+		fmt.Println("Proxy: ", r.Request.ProxyURL)
 		fmt.Println("Status Code ", r.StatusCode)
 		fmt.Println("X-Ratelimit-Remaining: ", r.Headers.Get("X-Ratelimit-Remaining"))
 
@@ -181,4 +184,11 @@ func GetImageHistoryCollector(Arch *[]Arch__) *colly.Collector {
 	})
 
 	return c
+}
+
+func UpdateProxiesFrom(url string) {
+	Proxies.Addresses = []string{
+		"https://117.50.175.76:1081",
+		"https://112.124.38.70:3128",
+	}
 }

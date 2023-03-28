@@ -3,8 +3,10 @@ package crawler
 import (
 	"fmt"
 	"github.com/gocolly/colly"
+	"math/rand"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // 实现一些统一的遍历爬取
@@ -151,21 +153,35 @@ func ScrapeRepoInfo(namespace, repository string) {
 	close(chTags)
 
 	// 爬每个Tag的所有Arch History
-	limit := make(chan struct{}, 10)
-	wg := sync.WaitGroup{}
+	// 并发导致随机延时只能短暂延缓达到Rate-Limit的速度
+	//limit := make(chan struct{}, 5)
+	//wg := sync.WaitGroup{}
+	//for i, _ := range repo.Tags {
+	//	limit <- struct{}{}
+	//	wg.Add(1)
+	//	go func(i int) {
+	//		defer func() {
+	//			wg.Done()
+	//			<-limit
+	//		}()
+	//		// 引入随机延时，防止快速达到限制
+	//		rd := time.Duration(rand.Int63n(int64(5 * time.Second)))
+	//		time.Sleep(rd)
+	//		ca := GetImageHistoryCollector(&repo.Tags[i].Archs)
+	//		ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name))
+	//	}(i)
+	//}
+	//wg.Wait()
+
+	// 随机延时可以在某一刻忽然将Rate-Limit补满，对单IP有效
+	// Test显示71个tag用时142s
 	for i, _ := range repo.Tags {
-		limit <- struct{}{}
-		wg.Add(1)
-		go func(i int) {
-			defer func() {
-				wg.Done()
-				<-limit
-			}()
-			ca := GetImageHistoryCollector(&repo.Tags[i].Archs)
-			ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name))
-		}(i)
+		// 引入随机延时，防止快速达到限制
+		rd := time.Duration(rand.Int63n(int64(2 * time.Second)))
+		time.Sleep(rd)
+		ca := GetImageHistoryCollector(&repo.Tags[i].Archs)
+		ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name))
 	}
-	wg.Wait()
 
 	// 爬取结束，做存储工作
 	fmt.Println(repo)
