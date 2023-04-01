@@ -185,10 +185,3 @@ func GetImageHistoryCollector(Arch *[]Arch__) *colly.Collector {
 
 	return c
 }
-
-func UpdateProxiesFrom(url string) {
-	Proxies.Addresses = []string{
-		"https://117.50.175.76:1081",
-		"https://112.124.38.70:3128",
-	}
-}

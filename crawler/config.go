@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"runtime"
 )
-
-// ConfigFile 做test时修改为 config.json，run dockercrawler时修改为 crawler/config.json
-const ConfigFile = "config.json"
 
 var ConfigCrawler struct {
 	MaxThread  int    `json:"max_thread"`
@@ -22,13 +20,17 @@ var Proxies struct {
 }
 
 func init() {
+	// 获取程序根目录
+	_, filename, _, _ := runtime.Caller(0)
+	root := path.Dir(path.Dir(filename))
+	configFile := root + "/config.json"
 	// 加载DockerCrawler Config
-	fb, err := os.ReadFile(ConfigFile)
+	fb, err := os.ReadFile(configFile)
 	if err != nil {
-		fmt.Println("[ERROR] Failed to load ", ConfigFile)
+		fmt.Println("[ERROR] Failed to load ", configFile)
 	}
 	if err := json.Unmarshal(fb, &ConfigCrawler); err != nil {
-		fmt.Printf("[ERROR] Json failed to unmarshal %s with err: %v\n", ConfigFile, err)
+		fmt.Printf("[ERROR] Json failed to unmarshal %s with err: %v\n", configFile, err)
 	}
 	// 默认情况下，允许启动的核心goroutine数为系统可调内核数
 	if ConfigCrawler.MaxThread <= 0 {
@@ -47,7 +49,9 @@ func init() {
 
 	// 初始化go colly Proxies
 	if ConfigCrawler.LocalProxy {
-		ps, _ := os.ReadFile(ConfigCrawler.ProxyFile)
+		// 获取proxy文件位置
+		proxyFile := root + "/" + ConfigCrawler.ProxyFile
+		ps, _ := os.ReadFile(proxyFile)
 		if err := json.Unmarshal(ps, &Proxies); err != nil {
 			fmt.Println("[ERROR] Json unmarshal failed while parsing proxyaddr file: ", ConfigCrawler.ProxyFile)
 		}
@@ -55,4 +59,11 @@ func init() {
 		UpdateProxiesFrom("")
 	}
 	fmt.Println("Init Proxies Success: ", Proxies)
+}
+
+func UpdateProxiesFrom(url string) {
+	Proxies.Addresses = []string{
+		"https://117.50.175.76:1081",
+		"https://112.124.38.70:3128",
+	}
 }
