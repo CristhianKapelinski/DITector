@@ -1,7 +1,6 @@
 package db
 
 import (
-	"crawler"
 	"database/sql"
 	"fmt"
 )
@@ -9,7 +8,7 @@ import (
 // keyword.go为DockerDB绑定repository插入、删除和查询功能
 
 const insertRepository = `
-INSERT INTO 
+INSERT IGNORE INTO 
 repository 
 (user,name,namespace,repository_type,description,flag,star_count,pull_count,last_updated,date_registered,full_description)
 VALUES
@@ -18,20 +17,13 @@ VALUES
 );
 `
 
-// InsertRepository__ 根据crawler.Repository__插入数据库记录
-func (d *DockerDB) InsertRepository__(r crawler.Repository__) (sql.Result, error) {
-	var flag int8
-	if r.IsPrivate {
-		flag |= 1 << 0
-	}
-	if r.IsAutomated {
-		flag |= 1 << 1
-	}
+// InsertRepository 根据向repository表插入数据库记录
+func (d *DockerDB) InsertRepository(user, name, namespace, repositoryType, description string, flag int8, starCount int,
+	pullCount int64, lastUpdated, dateRegistered, fullDescription string) (sql.Result, error) {
 
 	insert := fmt.Sprintf(insertRepository,
-		r.User, r.Name, r.Namespace, r.RepositoryType, EscapeString(r.Description), flag,
-		r.StarCount, r.PullCount, r.LastUpdated[:19], r.DateRegistered[:19],
-		EscapeString(r.FullDescription))
+		user, name, namespace, repositoryType, EscapeString(description), flag,
+		starCount, pullCount, lastUpdated, dateRegistered, EscapeString(fullDescription))
 
 	return d.db.Exec(insert)
 }

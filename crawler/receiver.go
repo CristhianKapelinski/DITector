@@ -82,7 +82,7 @@ type Arch__ struct {
 
 type Layer__ struct {
 	Digest      string `json:"digest,omitempty"`
-	Size        int    `json:"size"`
+	Size        int64  `json:"size"`
 	Instruction string `json:"instruction"`
 }
 

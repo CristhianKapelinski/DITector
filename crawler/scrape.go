@@ -102,8 +102,11 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 		// DockerCrawler结束信号
 		chanDone <- struct{}{}
 	} else {
-		// ToDo: 把当前keyword、nxt保存到进度中
-
+		// 把当前keyword保存到进度数据库中
+		_, err := dockerDB.InsertKeyword(keyword)
+		if err != nil {
+			fmt.Printf("[ERROR] Insert keyword '%s' into keywords failed with: %s\n", keyword, err)
+		}
 		chanKeyword <- nxt
 	}
 }
@@ -116,6 +119,17 @@ func ScrapeRepoInfo(namespace, repository string) {
 	// 爬取Metadata
 	cm := GetRepoMetadataCollector(&repo)
 	cm.Visit(GetRepoMetaURL(namespace, repository))
+	// 存储Metadata
+	res, err := StoreRepository__(&repo)
+	if err != nil {
+		fmt.Println("[ERROR] Insert into repository failed with: ", err)
+	}
+	if i, _ := res.RowsAffected(); i == 0 {
+		fmt.Printf("Repository '%s' already exist, ignore tags and images.\n", repo.Namespace+"/"+repo.Name)
+		return
+	} else {
+		fmt.Printf("Insert repository '%s' success.\n", namespace+"/"+repository)
+	}
 
 	// 爬所有Tags，可能涉及多页，建管道维护
 	chTags := make(chan TagReceiver__)
@@ -160,6 +174,19 @@ func ScrapeRepoInfo(namespace, repository string) {
 	// 获取后关闭通道
 	close(chTags)
 
+	// 存储tags
+	for i, _ := range repo.Tags {
+		res, err := StoreTag__(namespace, repository, &repo.Tags[i])
+		if err != nil {
+			fmt.Println("[ERROR] Insert into tags failed with: ", err)
+		}
+		if j, _ := res.RowsAffected(); j == 0 {
+			fmt.Printf("[WARN] Tag '%s' for repository '%s' already exist.\n", repo.Tags[i].Name, namespace+"/"+repository)
+		} else {
+			fmt.Printf("Insert tag '%s' for repository '%s' success.\n", repo.Tags[i].Name, namespace+"/"+repository)
+		}
+	}
+
 	// 爬每个Tag的所有Arch History
 	// ToDo: 根据是否包含Proxy判断应该使用并发还是延迟
 	// 并发导致随机延时只能短暂延缓达到Rate-Limit的速度
@@ -190,9 +217,12 @@ func ScrapeRepoInfo(namespace, repository string) {
 		time.Sleep(rd)
 		ca := GetImageHistoryCollector(&repo.Tags[i].Archs)
 		ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name))
+
 	}
 
 	// 爬取结束，做存储工作
+	// 先存tags
+
 	fmt.Println(repo)
 }
 

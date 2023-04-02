@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS repository
     repository_type VARCHAR(255),
     description TEXT,
 	flag TINYINT,
-	star_count MEDIUMINT,
+	star_count INT,
 	pull_count BIGINT,
 	last_updated TIMESTAMP,
 	date_registered TIMESTAMP,
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS images
 (
     namespace VARCHAR(255),
     repository VARCHAR(255),
-    tag VARCHAR(255) NOT NULL ,
+    tag VARCHAR(255) NOT NULL,
     architecture TINYTEXT,
     features TINYTEXT,
     variant TINYTEXT,
@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS images
     status VARCHAR(8),
     last_pulled TIMESTAMP,
     last_pushed TIMESTAMP,
+    layers LONGTEXT,
     FOREIGN KEY (namespace,repository) REFERENCES repository(namespace,name)
 );`
 	_, err = db2.Exec(createImages)
@@ -132,7 +133,7 @@ CREATE TABLE IF NOT EXISTS images
 CREATE TABLE IF NOT EXISTS layers
 (
     digest CHAR(64) PRIMARY KEY,
-    size INT,
+    size BIGINT,
     instruction TEXT
 );`
 	_, err = db2.Exec(createLayers)

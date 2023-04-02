@@ -1,8 +1,10 @@
 package crawler
 
 import (
+	"db"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"runtime"
@@ -18,6 +20,8 @@ var Proxies struct {
 	Addresses []string `json:"proxies"`
 	Banned    []string
 }
+
+var dockerDB *db.DockerDB
 
 func init() {
 	// 获取程序根目录
@@ -59,6 +63,16 @@ func init() {
 		UpdateProxiesFrom("")
 	}
 	fmt.Println("Init Proxies Success: ", Proxies)
+
+	// 初始化数据库连接
+	dockerDB, err = db.NewDockerDB("docker:docker@/dockerhub")
+	if err != nil {
+		log.Fatalln("[ERROR] Open mysql database failed with: ", err)
+	}
+	err = dockerDB.Ping()
+	if err != nil {
+		log.Fatalln("[ERROR] Ping mysql database failed with: ", err)
+	}
 }
 
 func UpdateProxiesFrom(url string) {
