@@ -17,3 +17,17 @@ func NewDockerDB(dsn string) (*DockerDB, error) {
 	d.db, err = sql.Open("mysql", dsn)
 	return &d, err
 }
+
+func (d *DockerDB) Ping() error {
+	return d.db.Ping()
+}
+
+func (d *DockerDB) Close() error {
+	return d.db.Close()
+}
+
+// EscapeString
+// TODO: Escape string
+func EscapeString(s string) string {
+	return s
+}

@@ -1,17 +1,22 @@
 package crawler
 
 // LegalRuneList 作为生成时参考的字符表
-var LegalRuneList = [...]rune{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+var LegalRuneList = [...]rune{
+	'-',
+	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+	'_',
 	'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-	'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '-', '_'}
+	'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+}
 
 // LegalRuneMap 用于索引rune在LegalRuneList中的下标
 var LegalRuneMap = map[uint8]int{
-	'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
-	'a': 10, 'b': 11, 'c': 12, 'd': 13, 'e': 14, 'f': 15, 'g': 16, 'h': 17, 'i': 18,
-	'j': 19, 'k': 20, 'l': 21, 'm': 22, 'n': 23, 'o': 24, 'p': 25, 'q': 26, 'r': 27,
-	's': 28, 't': 29, 'u': 30, 'v': 31, 'w': 32, 'x': 33, 'y': 34, 'z': 35,
-	'-': 36, '_': 37,
+	'-': 0,
+	'0': 1, '1': 2, '2': 3, '3': 4, '4': 5, '5': 6, '6': 7, '7': 8, '8': 9, '9': 10,
+	'_': 11,
+	'a': 12, 'b': 13, 'c': 14, 'd': 15, 'e': 16, 'f': 17, 'g': 18, 'h': 19, 'i': 20,
+	'j': 21, 'k': 22, 'l': 23, 'm': 24, 'n': 25, 'o': 26, 'p': 27, 'q': 28, 'r': 29,
+	's': 30, 't': 31, 'u': 32, 'v': 33, 'w': 34, 'x': 35, 'y': 36, 'z': 37,
 }
 
 // GenerateNextKeyword 用于根据当前关键字字符串生成下一个可选的字符。
@@ -23,7 +28,7 @@ func GenerateNextKeyword(curr string, flg bool) string {
 		return ""
 	}
 	if flg {
-		if curr[l-1] == '_' {
+		if curr[l-1] == 'z' {
 			return GenerateNextKeyword(curr[:l-1], true)
 		} else {
 			return curr[:l-1] + string(LegalRuneList[LegalRuneMap[curr[l-1]]+1])
