@@ -15,6 +15,7 @@ func GetDockerHubCollector() *colly.Collector {
 	c := colly.NewCollector(
 		//colly.AllowedDomains("hub.docker.com"),
 		colly.UserAgent(UserAgents[rand.Intn(len(UserAgents))]),
+		colly.AllowURLRevisit(), // 因为代理网络问题，经常需要重复爬取页面
 	)
 
 	// 配置Collector
@@ -22,18 +23,6 @@ func GetDockerHubCollector() *colly.Collector {
 	c.WithTransport(&http.Transport{
 		DisableKeepAlives: true,
 	})
-
-	// 配置代理池
-	// TODO: 不用轮换模式了，就是随机从代理池里取出来一个能用的就行
-	// To be done: 打乱顺序将Proxies.Addresses传入RoundRobinProxySwitcher作为代理池
-	//fmt.Println(Proxies)
-	//if p, err := proxy.RoundRobinProxySwitcher(
-	//	Proxies.Addresses...,
-	//); err != nil {
-	//	fmt.Println("[ERROR] collector SetProxy Failed with: ", err)
-	//} else {
-	//	c.SetProxyFunc(p)
-	//}
 
 	return c
 }
@@ -61,7 +50,7 @@ func GetDockerHubAsyncCollector() *colly.Collector {
 // GetRegRepoListCollector 为爬取指定Register的Repo list的Collector绑定回调函数。
 // 爬取顺利的情况下，向chRegRepoList通道中传入爬到的RegisterRepoList__结果。
 func GetRegRepoListCollector(ch chan RegisterRepoList__) *colly.Collector {
-	c := GetDockerHubAsyncCollector()
+	c := GetDockerHubCollector()
 
 	// 绑定回调函数
 	c.OnRequest(func(r *colly.Request) {

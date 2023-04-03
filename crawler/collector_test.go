@@ -20,10 +20,10 @@ func TestSetProxy(t *testing.T) {
 	//} else {
 	//	c.SetProxyFunc(p)
 	//}
-	if err := c.SetProxy("http://49.86.179.155:8089"); err != nil {
-		fmt.Println("[ERROR] Set proxy failed with: ", err)
-	}
-	fmt.Println("Set proxy success: ", c)
+	//if err := c.SetProxy("http://36.6.145.210:8089"); err != nil {
+	//	fmt.Println("[ERROR] Set proxy failed with: ", err)
+	//}
+	fmt.Println("Set proxy success.")
 
 	//c.SetRequestTimeout(time.Second * 20)
 
@@ -63,7 +63,7 @@ func TestSetProxy(t *testing.T) {
 	fmt.Println(testurl)
 
 	for i := 1; i < 10; i++ {
-		if err := c.Visit(GetRepoTagsURL("library", "mongo", strconv.Itoa(i), "4")); err != nil {
+		for err := c.Visit(GetRepoTagsURL("library", "mongo", strconv.Itoa(i), "4")); err != nil; err = c.Visit(GetRepoTagsURL("library", "mongo", strconv.Itoa(i), "4")) {
 			fmt.Println("[ERROR] Colly visit failed with: ", err)
 		}
 	}

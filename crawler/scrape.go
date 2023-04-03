@@ -5,20 +5,10 @@ import (
 	"github.com/gocolly/colly"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
-
-// 实现一些统一的遍历爬取
-
-// ScrapeDockerHubRecursive 用于自动化爬取Docker Hub仓库。
-// 主要工作流程为:
-// 根据当前关键字visit一次第一页，拿到count。
-// 如果count<9000，把关键字的分发下去进一步调用ScrapeRegRepoListRecursive；
-// 如果count>9000，则继续根据当前关键字生成下一个关键字。
-func ScrapeDockerHubRecursive() {
-
-}
 
 // ScrapeRegRepoListRecursive 根据keyword返回结果进入不同的分支：
 //
@@ -31,8 +21,9 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 		pages    int
 		stop     bool
 		stopLock sync.Mutex
+		errCnt   int8 // 用来计数连续出错误次数
 	)
-	// 启动一个专门处理chRegRepoList的函数，用于
+	// 启动一个专门处理chRegRepoList的函数，用于处理第一页结果，转发合法结果
 	ch := make(chan RegisterRepoList__)
 	// 起始时需要将stopLock上锁
 	stopLock.Lock()
@@ -59,14 +50,48 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 				// pages不为0，只负责转发
 				chanRegRepoList <- rrl
 			}
-
 		}
 	}(ch)
 
 	c := GetRegRepoListCollector(ch)
-	// 第一页爬取主动进行
+
+	// 第一页爬取主动进行，直到爬取成功
 	i := 1
-	c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100"))
+	for err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil; err = c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")) {
+		// keyword不存在对应的任何镜像，直接退出
+		if strings.Contains(err.Error(), "Not Found") {
+			fmt.Println("[-] No repository for keyword: ", keyword)
+			close(ch)
+			stopLock.Unlock()
+			// 比较特殊，如果传false会无限延长keyword，导致无限404循环
+			nxt := GenerateNextKeyword(keyword, true)
+			if nxt == "" {
+				// 爬虫结束信号
+				chanDone <- struct{}{}
+			} else {
+				chanKeyword <- nxt
+			}
+			return
+		}
+
+		// 代理问题
+		errCnt++
+		// 每个ip给3次重试机会，然后就换代理
+		if errCnt%3 == 0 {
+			c.SetProxy(GetHTTPSProxyRemote())
+		}
+		// TODO: 需要考虑是否需要在次数过多时退出？如果退出下一个keyword应该传什么？
+		// 重试次数过多就退出
+		if errCnt > 22 {
+			fmt.Println("[ERROR] Getting first page failed for keyword: ", keyword, ", source: ", source, "\nError: ", err)
+
+			close(ch)
+			stopLock.Unlock()
+			chanKeyword <- GenerateNextKeyword(keyword, false)
+			return
+		}
+	}
+	errCnt = 0
 
 	// Count>9000，在核心调度器消费掉下一个keyword后退出。
 	// stopLock阻塞当前任务的主协程，等待内部管道放行
@@ -86,13 +111,12 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	// 所以每一个goroutine的OnRequest都瞬间调用了，然后Delay，然后实际进行HTTP请求，然后HandleOnResponse。
 	// 导致在输出上只有多个Visit的OnResponse间间隔了预设的Delay时间。
 	for i = 2; i <= pages; i++ {
+		// TODO: 改成err循环模式
 		if err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil {
 			fmt.Println("[ERROR] In ScrapeRegRepoListRecursive while visiting: ",
 				GetRegURL(keyword, source, strconv.Itoa(i), "100"))
 		}
 	}
-
-	c.Wait()
 
 	close(ch)
 
@@ -115,7 +139,7 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 
 // ScrapeRepoInfo 用于爬取仓库namespace/repository的metadata，全部tag，以及每个tag对应镜像的history信息。
 // 考虑根据这里的结果进一步将metadata和tag信息持久化。
-// TODO: 完全重构，分发任务调整为单任务分发模式，方便快速处理err的网页
+// TODO: 改成可以自适应换代理的模式
 func ScrapeRepoInfo(namespace, repository string) {
 	var repo Repository__
 

@@ -51,7 +51,7 @@ func init() {
 	if err != nil {
 		fmt.Println("[ERROR] Failed to load ", configFile)
 	}
-	if err := json.Unmarshal(fb, &ConfigCrawler); err != nil {
+	if err = json.Unmarshal(fb, &ConfigCrawler); err != nil {
 		fmt.Printf("[ERROR] Json failed to unmarshal %s with err: %v\n", configFile, err)
 	}
 	// 默认情况下，允许启动的核心goroutine数为系统可调内核数
@@ -74,13 +74,15 @@ func init() {
 		// 获取proxy文件位置
 		proxyFile := root + "/" + ConfigCrawler.ProxyFile
 		ps, _ := os.ReadFile(proxyFile)
-		if err := json.Unmarshal(ps, &Proxies); err != nil {
+		if err = json.Unmarshal(ps, &Proxies); err != nil {
 			fmt.Println("[ERROR] Json unmarshal failed while parsing proxyaddr file: ", ConfigCrawler.ProxyFile)
+		} else {
+			fmt.Println("[+] Init Proxies From Local Success: ", Proxies)
 		}
 	} else {
-		UpdateProxiesFrom("")
+		UpdateProxies()
+		fmt.Println("[+] Init Proxies From Remote Success: ", Proxies)
 	}
-	fmt.Println("Init Proxies Success: ", Proxies)
 
 	// 初始化数据库连接
 	dockerDB, err = db.NewDockerDB("docker:docker@/dockerhub")
@@ -90,12 +92,5 @@ func init() {
 	err = dockerDB.Ping()
 	if err != nil {
 		log.Fatalln("[ERROR] Ping mysql database failed with: ", err)
-	}
-}
-
-func UpdateProxiesFrom(url string) {
-	Proxies.Addresses = []string{
-		"https://117.50.175.76:1081",
-		"https://112.124.38.70:3128",
 	}
 }

@@ -1,6 +1,9 @@
 package crawler
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // 负责整个爬虫的核心调度，启动goroutine等。
 
@@ -12,7 +15,8 @@ var (
 	chanLimitMainGoroutine chan struct{}
 )
 
-// 定义一系列用于任务调度的关键字
+// 以下部分为proxy稳定状态下可用的
+// 定义一系列用于稳定proxy下任务调度的关键字
 
 var (
 	// chanKeyword 用于传递keyword，优先爬完有关一个keyword的所有镜像，再进入下一个keyword。
@@ -23,13 +27,17 @@ var (
 	chanDone = make(chan struct{})
 )
 
-// Start 是整个DockerCrawler的入口函数
-func Start() {
+// StartRecursive 是Proxy稳定状态下整个DockerCrawler的入口函数
+func StartRecursive() {
 	// 启动核心调度器
 	go CoreScheduler()
-	// 传入初始Keyword
-	// ToDO: cur读取进度而不是每次从"00"开始
-	cur := "00"
+	// 传入初始Keyword，启动整个爬取过程
+	cur, err := dockerDB.GetLastKeyword()
+	if strings.Contains(err.Error(), "no rows in result set") {
+		cur = "00"
+	} else {
+		cur = GenerateNextKeyword(cur, true)
+	}
 	chanKeyword <- cur
 }
 

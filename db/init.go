@@ -17,18 +17,18 @@ func init() {
 		log.Fatalln("[ERROR] Open mysql failed with err: ", err)
 	}
 	defer db.Close()
-	fmt.Println("Open mysql Success.")
+	fmt.Println("[+] Open mysql Success.")
 	if err := db.Ping(); err != nil {
 		log.Fatalln("[ERROR] Ping mysql database failed with err: ", err)
 	}
-	fmt.Println("Ping mysql Success.")
+	fmt.Println("[+] Ping mysql Success.")
 
 	createDatabase := `CREATE DATABASE IF NOT EXISTS dockerhub`
 	_, err = db.Exec(createDatabase)
 	if err != nil {
 		log.Fatalln("[ERROR] CREATE DATABASE dockerhub failed with err: ", err)
 	} else {
-		fmt.Println("Create db dockerhub success.")
+		fmt.Println("[+] Create db dockerhub success.")
 	}
 
 	// 初始化dockerhub数据库内的数据表
@@ -37,11 +37,11 @@ func init() {
 		log.Fatalln("[ERROR] Open DATABASE dockerhub failed with err: ", err)
 	}
 	defer db2.Close()
-	fmt.Println("Open DATABASE dockerhub Success.")
+	fmt.Println("[+] Open DATABASE dockerhub Success.")
 	if err := db2.Ping(); err != nil {
 		log.Fatalln("[ERROR] Ping DATABASE dockerhub failed with err: ", err)
 	}
-	fmt.Println("Ping database dockerhub Success.")
+	fmt.Println("[+] Ping database dockerhub Success.")
 
 	// 创建keywords表
 	createKeywords := `
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS keywords
 	if err != nil {
 		log.Fatalln("[ERROR] CREATE TABLE keywords failed with err: ", err)
 	} else {
-		fmt.Println("CREATE TABLE keywords success.")
+		fmt.Println("[+] CREATE TABLE keywords success.")
 	}
 
 	// 创建repository表
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS repository
 	if err != nil {
 		log.Fatalln("[ERROR] CREATE TABLE repository failed with err: ", err)
 	} else {
-		fmt.Println("CREATE TABLE repository success.")
+		fmt.Println("[+] CREATE TABLE repository success.")
 	}
 
 	// 创建tags表
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS tags
 	if err != nil {
 		log.Fatalln("[ERROR] CREATE TABLE tags failed with err: ", err)
 	} else {
-		fmt.Println("CREATE TABLE tags success.")
+		fmt.Println("[+] CREATE TABLE tags success.")
 	}
 
 	// 创建images表，真正对应到image上，包含层信息，来自Arch__
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS images
 	if err != nil {
 		log.Fatalln("[ERROR] CREATE TABLE images failed with err: ", err)
 	} else {
-		fmt.Println("CREATE TABLE images success.")
+		fmt.Println("[+] CREATE TABLE images success.")
 	}
 
 	// 创建layers表
@@ -140,6 +140,6 @@ CREATE TABLE IF NOT EXISTS layers
 	if err != nil {
 		log.Fatalln("[ERROR] CREATE TABLE layers failed with err: ", err)
 	} else {
-		fmt.Println("CREATE TABLE layers success.")
+		fmt.Println("[+] CREATE TABLE layers success.")
 	}
 }
