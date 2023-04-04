@@ -43,7 +43,7 @@ func GetHTTPSProxy() string {
 	return GetHTTPSProxyRemote()
 }
 
-// GetHTTPSProxyRemote 从远程API返回一个新的代理地址
+// GetHTTPSProxyRemote 从Proxies中随机返回一个代理地址。
 func GetHTTPSProxyRemote() string {
 	return "http://127.0.0.1:80"
 }
@@ -53,7 +53,8 @@ func GetHTTPSProxyLocal() string {
 	return ""
 }
 
-// UpdateProxies 更新本地的proxy pool
+// UpdateProxies 更新本地的proxy pool。
+// 从快代理提取一批IP保存到全局Proxies变量中。
 func UpdateProxies() {
 	return
 }

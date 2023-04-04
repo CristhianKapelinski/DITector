@@ -166,7 +166,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 		if errCnt == 0 {
 			if strings.Contains(err.Error(), "Not Found") {
 				fmt.Println("[-] Not Found repository: ", namespace, "/", repository)
-				break
+				return
 			}
 		}
 

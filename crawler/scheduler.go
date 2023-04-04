@@ -73,7 +73,9 @@ func CoreScheduler() {
 			go func(rrl RegisterRepoList__) {
 				defer func() { <-chanLimitMainGoroutine }()
 				for _, s := range rrl.Summaries {
-					ScrapeRepoInfo(s.Name, s.Source)
+					ns := strings.Split(s.Name, "/")
+					namespace, repository := ns[0], ns[1]
+					ScrapeRepoInfo(namespace, repository)
 				}
 			}(rrl)
 		case <-chanDone:
