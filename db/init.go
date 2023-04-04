@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS tags
     tag_last_pushed TIMESTAMP,
     media_type TINYTEXT,
     content_type TINYTEXT,
-    FOREIGN KEY (namespace,repository) REFERENCES repository(namespace,name)
+    PRIMARY KEY (namespace, repository, name),
 );`
 	_, err = db2.Exec(createTags)
 	if err != nil {
@@ -112,14 +112,13 @@ CREATE TABLE IF NOT EXISTS images
     architecture TINYTEXT,
     features TINYTEXT,
     variant TINYTEXT,
-    digest CHAR(64) NOT NULL,
+    digest CHAR(64) PRIMARY KEY,
     os TINYTEXT,
     size BIGINT,
     status VARCHAR(8),
     last_pulled TIMESTAMP,
     last_pushed TIMESTAMP,
     layers LONGTEXT,
-    FOREIGN KEY (namespace,repository) REFERENCES repository(namespace,name)
 );`
 	_, err = db2.Exec(createImages)
 	if err != nil {

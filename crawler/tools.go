@@ -38,6 +38,11 @@ func GenerateNextKeyword(curr string, flg bool) string {
 	}
 }
 
+// GetHTTPSProxy 按策略返回一个代理地址
+func GetHTTPSProxy() string {
+	return GetHTTPSProxyRemote()
+}
+
 // GetHTTPSProxyRemote 从远程API返回一个新的代理地址
 func GetHTTPSProxyRemote() string {
 	return ""

@@ -3,11 +3,9 @@ package crawler
 import (
 	"fmt"
 	"github.com/gocolly/colly"
-	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 // ScrapeRegRepoListRecursive 根据keyword返回结果进入不同的分支：
@@ -59,36 +57,38 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	i := 1
 	for err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil; err = c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")) {
 		// keyword不存在对应的任何镜像，直接退出
-		if strings.Contains(err.Error(), "Not Found") {
-			fmt.Println("[-] No repository for keyword: ", keyword)
-			close(ch)
-			stopLock.Unlock()
-			// 比较特殊，如果传false会无限延长keyword，导致无限404循环
-			nxt := GenerateNextKeyword(keyword, true)
-			if nxt == "" {
-				// 爬虫结束信号
-				chanDone <- struct{}{}
-			} else {
-				chanKeyword <- nxt
+		if errCnt == 0 {
+			if strings.Contains(err.Error(), "Not Found") {
+				fmt.Println("[-] No repository for keyword: ", keyword)
+				close(ch)
+				stopLock.Unlock()
+				// 比较特殊，如果传false会无限延长keyword，导致无限404循环
+				nxt := GenerateNextKeyword(keyword, true)
+				if nxt == "" {
+					// 爬虫结束信号
+					chanDone <- struct{}{}
+				} else {
+					chanKeyword <- nxt
+				}
+				return
 			}
-			return
 		}
 
 		// 代理问题
 		errCnt++
-		// 每个ip给3次重试机会，然后就换代理
-		if errCnt%3 == 0 {
-			c.SetProxy(GetHTTPSProxyRemote())
-		}
-		// TODO: 需要考虑是否需要在次数过多时退出？如果退出下一个keyword应该传什么？
 		// 重试次数过多就退出
-		if errCnt > 22 {
+		// TODO: 需要考虑是否需要在次数过多时退出？如果退出下一个keyword应该传什么？
+		if errCnt > 20 {
 			fmt.Println("[ERROR] Getting first page failed for keyword: ", keyword, ", source: ", source, "\nError: ", err)
 
 			close(ch)
 			stopLock.Unlock()
 			chanKeyword <- GenerateNextKeyword(keyword, false)
 			return
+		}
+		// 每个ip给3次重试机会，然后就换代理
+		if errCnt%3 == 0 {
+			c.SetProxy(GetHTTPSProxy())
 		}
 	}
 	errCnt = 0
@@ -111,11 +111,25 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	// 所以每一个goroutine的OnRequest都瞬间调用了，然后Delay，然后实际进行HTTP请求，然后HandleOnResponse。
 	// 导致在输出上只有多个Visit的OnResponse间间隔了预设的Delay时间。
 	for i = 2; i <= pages; i++ {
-		// TODO: 改成err循环模式
-		if err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil {
-			fmt.Println("[ERROR] In ScrapeRegRepoListRecursive while visiting: ",
-				GetRegURL(keyword, source, strconv.Itoa(i), "100"))
+		for err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil; err = c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")) {
+			// 页码不存在
+			if errCnt == 0 {
+				if strings.Contains(err.Error(), "Not Found") {
+					fmt.Println("[-] No repository for keyword: ", keyword, ", page: ", i)
+					break
+				}
+			}
+
+			errCnt++
+			if errCnt > 11 {
+				fmt.Println("[ERROR] Getting page: ", i, " failed for keyword: ", keyword, ", source: ", source, "\nError: ", err)
+				break
+			}
+			if errCnt%3 == 0 {
+				c.SetProxy(GetHTTPSProxy())
+			}
 		}
+		errCnt = 0
 	}
 
 	close(ch)
@@ -131,7 +145,7 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 		if err != nil {
 			fmt.Printf("[ERROR] Insert keyword '%s' into keywords failed with: %s\n", keyword, err)
 		} else {
-			fmt.Printf("Insert keyword '%s' success.\n", keyword)
+			fmt.Printf("[+] Insert keyword '%s' success.\n", keyword)
 		}
 		chanKeyword <- nxt
 	}
@@ -139,23 +153,46 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 
 // ScrapeRepoInfo 用于爬取仓库namespace/repository的metadata，全部tag，以及每个tag对应镜像的history信息。
 // 考虑根据这里的结果进一步将metadata和tag信息持久化。
-// TODO: 改成可以自适应换代理的模式
 func ScrapeRepoInfo(namespace, repository string) {
-	var repo Repository__
+
+	var (
+		errCnt int8
+		repo   Repository__
+	)
 
 	// 爬取Metadata
 	cm := GetRepoMetadataCollector(&repo)
-	cm.Visit(GetRepoMetaURL(namespace, repository))
+	for err := cm.Visit(GetRepoMetaURL(namespace, repository)); err != nil; err = cm.Visit(GetRepoMetaURL(namespace, repository)) {
+		if errCnt == 0 {
+			if strings.Contains(err.Error(), "Not Found") {
+				fmt.Println("[-] Not Found repository: ", namespace, "/", repository)
+				break
+			}
+		}
+
+		errCnt++
+		if errCnt > 20 {
+			fmt.Println("[ERROR] Getting metadata failed for repository: ", namespace, "/", repository, "\nError: ", err)
+			return
+		}
+		if errCnt%3 == 0 {
+			cm.SetProxy(GetHTTPSProxy())
+		}
+	}
+	errCnt = 0
+
 	// 存储Metadata
 	res, err := StoreRepository__(&repo)
 	if err != nil {
 		fmt.Println("[ERROR] Insert into repository failed with: ", err)
+		return
 	}
+	// TODO: 后面要添加update数据库需要对修改
 	if i, _ := res.RowsAffected(); i == 0 {
-		fmt.Printf("Repository '%s' already exist, ignore tags and images.\n", repo.Namespace+"/"+repo.Name)
+		fmt.Printf("[WARN] Repository '%s' already exists, ignore its tags and images.\n", namespace+"/"+repository)
 		return
 	} else {
-		fmt.Printf("Insert repository '%s' success.\n", namespace+"/"+repository)
+		fmt.Printf("[INFO] Insert repository '%s' success.\n", namespace+"/"+repository)
 	}
 
 	// 爬所有Tags，可能涉及多页，建管道维护
@@ -168,6 +205,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 	)
 
 	pageLock.Lock()
+	// 负责计算总页数与数据存储
 	go func(ch chan TagReceiver__) {
 		for tags := range ch {
 			if pages == 0 {
@@ -182,13 +220,54 @@ func ScrapeRepoInfo(namespace, repository string) {
 				pageLock.Unlock()
 				// 第一页的结果别忘了存进来
 				repo.Tags = append(repo.Tags, tags.Results...)
+				// 存储tags
+				for i, _ := range tags.Results {
+					res, err = StoreTag__(namespace, repository, &tags.Results[i])
+					if err != nil {
+						fmt.Println("[ERROR] Insert into tags failed with: ", err)
+					}
+					if j, _ := res.RowsAffected(); j == 0 {
+						fmt.Printf("[WARN] Tag '%s' for repository '%s' already exist.\n", tags.Results[i].Name, namespace+"/"+repository)
+					} else {
+						fmt.Printf("[INFO] Insert tag '%s' for repository '%s' success.\n", tags.Results[i].Name, namespace+"/"+repository)
+					}
+				}
 			} else {
 				repo.Tags = append(repo.Tags, tags.Results...)
+				// 存储tags
+				for i, _ := range tags.Results {
+					res, err = StoreTag__(namespace, repository, &tags.Results[i])
+					if err != nil {
+						fmt.Println("[ERROR] Insert into tags failed with: ", err)
+					}
+					if j, _ := res.RowsAffected(); j == 0 {
+						fmt.Printf("[WARN] Tag '%s' for repository '%s' already exist.\n", tags.Results[i].Name, namespace+"/"+repository)
+					} else {
+						fmt.Printf("[INFO] Insert tag '%s' for repository '%s' success.\n", tags.Results[i].Name, namespace+"/"+repository)
+					}
+				}
 			}
 		}
 	}(chTags)
 	// 访问第一页
-	ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100"))
+	for err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")); err != nil; err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")) {
+		if errCnt == 0 {
+			if strings.Contains(err.Error(), "Not Found") {
+				fmt.Println("[-] Not Found tag list for repository: ", namespace, "/", repository, ", page: ", cur)
+				return
+			}
+		}
+
+		errCnt++
+		if errCnt > 11 {
+			fmt.Println("[ERROR] Getting tag list failed for repository: ", namespace, "/", repository, ", page: ", cur, "\nError: ", err)
+			return
+		}
+		if errCnt%3 == 0 {
+			cm.SetProxy(GetHTTPSProxy())
+		}
+	}
+	errCnt = 0
 
 	// 尝试获取锁，获取的一瞬间就可以关闭锁，做一次pages的同步
 	pageLock.Lock()
@@ -196,70 +275,70 @@ func ScrapeRepoInfo(namespace, repository string) {
 
 	// 获取全部tags
 	for cur = 2; cur <= pages; cur++ {
-		ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100"))
+		for err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")); err != nil; err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")) {
+			if errCnt == 0 {
+				if strings.Contains(err.Error(), "Not Found") {
+					fmt.Println("[-] Not Found tag list for repository: ", namespace, "/", repository, ", page: ", cur)
+					break
+				}
+			}
+
+			errCnt++
+			if errCnt > 11 {
+				fmt.Println("[ERROR] Getting tag list failed for repository: ", namespace, "/", repository, ", page: ", cur, "\nError: ", err)
+				break
+			}
+			if errCnt%3 == 0 {
+				cm.SetProxy(GetHTTPSProxy())
+			}
+		}
+		errCnt = 0
 	}
 	// 获取后关闭通道
 	close(chTags)
 
-	// 存储tags
-	for i, _ := range repo.Tags {
-		res, err := StoreTag__(namespace, repository, &repo.Tags[i])
-		if err != nil {
-			fmt.Println("[ERROR] Insert into tags failed with: ", err)
-		}
-		if j, _ := res.RowsAffected(); j == 0 {
-			fmt.Printf("[WARN] Tag '%s' for repository '%s' already exist.\n", repo.Tags[i].Name, namespace+"/"+repository)
-		} else {
-			fmt.Printf("Insert tag '%s' for repository '%s' success.\n", repo.Tags[i].Name, namespace+"/"+repository)
-		}
-	}
-
 	// 爬每个Tag的所有Arch History
-	// ToDo: 根据是否包含Proxy判断应该使用并发还是延迟
-	// 并发导致随机延时只能短暂延缓达到Rate-Limit的速度
-	//limit := make(chan struct{}, 5)
-	//wg := sync.WaitGroup{}
-	//for i, _ := range repo.Tags {
-	//	limit <- struct{}{}
-	//	wg.Add(1)
-	//	go func(i int) {
-	//		defer func() {
-	//			wg.Done()
-	//			<-limit
-	//		}()
-	//		// 引入随机延时，防止快速达到限制
-	//		rd := time.Duration(rand.Int63n(int64(5 * time.Second)))
-	//		time.Sleep(rd)
-	//		ca := GetImageHistoryCollector(&repo.Tags[i].Archs)
-	//		ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name))
-	//	}(i)
-	//}
-	//wg.Wait()
-
 	// 随机延时可以在某一刻忽然将Rate-Limit补满，对单IP有效
 	// Test显示71个tag用时142s
 	for i, _ := range repo.Tags {
-		// 引入随机延时，防止快速达到限制
-		rd := time.Duration(rand.Int63n(int64(5 * time.Second)))
-		time.Sleep(rd)
+		//// 引入随机延时，防止快速达到限制
+		//rd := time.Duration(rand.Int63n(int64(5 * time.Second)))
+		//time.Sleep(rd)
 		ca := GetImageHistoryCollector(&repo.Tags[i].Archs)
-		ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name))
-		// 存储tag下每个arch的image信息
-		for j, _ := range repo.Tags[i].Archs {
-			res, err := StoreArch__(namespace, repository, repo.Tags[i].Name, &repo.Tags[i].Archs[j])
-			if err != nil {
-				fmt.Println("[ERROR] Insert into images failed with: ", err)
+		// TODO: 检查下适配
+		for err = ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name)); err != nil; err = ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name)) {
+			if errCnt == 0 {
+				if strings.Contains(err.Error(), "Not Found") {
+					fmt.Println("[-] Not Found tag list for repository: ", namespace, "/", repository, ", page: ", cur)
+					break
+				}
 			}
-			if k, _ := res.RowsAffected(); k == 0 {
-				fmt.Printf("[WARN] Image '%s' already exist, digest: %s\n",
-					namespace+"/"+repository+":"+repo.Tags[i].Name, repo.Tags[i].Archs[j].Digest)
-			} else {
-				fmt.Printf("Insert image '%s' success, digest: %s\n",
-					namespace+"/"+repository+":"+repo.Tags[i].Name, repo.Tags[i].Archs[j].Digest)
+
+			errCnt++
+			if errCnt > 11 {
+				fmt.Println("[ERROR] Getting tag list failed for repository: ", namespace, "/", repository, ", page: ", cur, "\nError: ", err)
+				break
+			}
+			if errCnt%3 == 0 {
+				cm.SetProxy(GetHTTPSProxy())
 			}
 		}
+		errCnt = 0
 	}
-
+	// 存储tag下每个arch的image信息
+	for j, _ := range repo.Tags[i].Archs {
+		res, err := StoreArch__(namespace, repository, repo.Tags[i].Name, &repo.Tags[i].Archs[j])
+		if err != nil {
+			fmt.Println("[ERROR] Insert into images failed with: ", err)
+		}
+		if k, _ := res.RowsAffected(); k == 0 {
+			fmt.Printf("[WARN] Image '%s' already exist, digest: %s\n",
+				namespace+"/"+repository+":"+repo.Tags[i].Name, repo.Tags[i].Archs[j].Digest)
+		} else {
+			fmt.Printf("Insert image '%s' success, digest: %s\n",
+				namespace+"/"+repository+":"+repo.Tags[i].Name, repo.Tags[i].Archs[j].Digest)
+		}
+	}
 }
 
 // ScrapeRepoMetadata
