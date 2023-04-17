@@ -39,11 +39,18 @@ var LegalRuneMap = map[uint8]int{
 // flg: 当前字符count<9000为true，否则为false
 func GenerateNextKeyword(curr string, flg bool) string {
 	l := len(curr)
-	if l < 2 {
-		return ""
-	}
+	//if l < 2 {
+	//	return ""
+	//}
 	if flg {
 		if curr[l-1] == 'z' {
+			if l == 2 {
+				if curr[0] != 'z' {
+					return string(LegalRuneList[LegalRuneMap[curr[0]]+1]) + "-"
+				} else {
+					return ""
+				}
+			}
 			return GenerateNextKeyword(curr[:l-1], true)
 		} else {
 			return curr[:l-1] + string(LegalRuneList[LegalRuneMap[curr[l-1]]+1])
@@ -102,10 +109,10 @@ func KDLProxiesMaintainer() {
 	//fmt.Println("expire time: ", expireTime)
 
 	//设置ip白名单，参数类型为[]string
-	_, err = kdlClient.SetIPWhitelist([]string{"58.246.183.50"}, signtype.HmacSha1)
-	if err != nil {
-		log.Fatal("[ERROR] Kuaidaili SetIPWhitelist failed with: ", err)
-	}
+	//_, err = kdlClient.SetIPWhitelist([]string{"58.246.183.50"}, signtype.HmacSha1)
+	//if err != nil {
+	//	log.Fatal("[ERROR] Kuaidaili SetIPWhitelist failed with: ", err)
+	//}
 
 	// 每5秒钟检查一次Proxies.Addresses中的代理存活期，如果剩余存活时间不足10s，则发起请求更换为新的代理地址
 	for {
@@ -119,7 +126,7 @@ func KDLProxiesMaintainer() {
 func UpdateProxies(c *client.Client) {
 	// 记录总的需要更新的量
 	p := GetProxyList()
-	cnt := 10 - len(p) // 不为0表示正在初始化Proxies
+	cnt := 12 - len(p) // 不为0表示正在初始化Proxies
 
 	if cnt != 0 {
 		Proxies.Valid = make(map[string]bool)

@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 )
 
@@ -23,6 +24,8 @@ var (
 	chanKeyword = make(chan string)
 	// chanRegRepoList 用于传递拿到的仓库信封，方便核心调度器解开信封处理每个信封内容
 	chanRegRepoList chan RegisterRepoList__
+	chanRegLimit    = make(chan struct{}, runtime.NumCPU())
+	chanRegName     = make(chan string, runtime.NumCPU())
 	// chanDone 用于传递DockerCrawler结束信号，即keyword为""时
 	chanDone = make(chan struct{})
 )
@@ -35,6 +38,9 @@ func StartRecursive() {
 	// 启动核心调度器
 	go CoreScheduler()
 	fmt.Println("[+] CoreScheduler startup")
+	// 启动RepoInfo爬取调度器
+	go RepoScheduler()
+	fmt.Println("[+] RepoScheduler startup")
 	// 传入初始Keyword，启动整个爬取过程
 	cur, err := dockerDB.GetLastKeyword()
 	if err != nil && strings.Contains(err.Error(), "no rows in result set") {
@@ -79,15 +85,32 @@ func CoreScheduler() {
 			go func(rrl RegisterRepoList__) {
 				defer func() { <-chanLimitMainGoroutine }()
 				for _, s := range rrl.Summaries {
-					ns := strings.Split(s.Name, "/")
-					namespace, repository := ns[0], ns[1]
-					ScrapeRepoInfo(namespace, repository)
+					//ns := strings.Split(s.Name, "/")
+					//namespace, repository := ns[0], ns[1]
+					//ScrapeRepoInfo(namespace, repository)
+					chanRegName <- s.Name
 				}
 			}(rrl)
 			//case <-chanDone:
 			//	fmt.Println("[+] All Done")
 			//	fmt.Println("[+] DockerCrawler Exit")
 			//	return
+		}
+	}
+}
+
+// RepoScheduler 专用于处理repository，调用ScrapeRepoInfo，有的时候页数有限，没能充分发挥多线程的魅力
+func RepoScheduler() {
+	for {
+		select {
+		case s := <-chanRegName:
+			chanRegLimit <- struct{}{}
+			go func(rname string) {
+				defer func() { <-chanRegLimit }()
+				ns := strings.Split(rname, "/")
+				namespace, repository := ns[0], ns[1]
+				ScrapeRepoInfo(namespace, repository)
+			}(s)
 		}
 	}
 }

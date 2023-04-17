@@ -78,7 +78,7 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 		errCnt++
 		// 重试次数过多就退出
 		// TODO: 需要考虑是否需要在次数过多时退出？如果退出下一个keyword应该传什么？
-		if errCnt > 20 {
+		if errCnt > 11 {
 			fmt.Println("[ERROR] Getting first page failed for keyword: ", keyword, ", source: ", source, "\nError: ", err)
 
 			close(ch)
@@ -171,7 +171,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 		}
 
 		errCnt++
-		if errCnt > 20 {
+		if errCnt > 11 {
 			fmt.Println("[ERROR] Getting metadata failed for repository: ", namespace, "/", repository, "\nError: ", err)
 			return
 		}
@@ -189,8 +189,8 @@ func ScrapeRepoInfo(namespace, repository string) {
 	}
 	// TODO: 后面要添加update数据库需要对修改
 	if i, _ := res.RowsAffected(); i == 0 {
-		fmt.Printf("[WARN] Repository '%s' already exists, ignore its tags and images.\n", namespace+"/"+repository)
-		return
+		fmt.Printf("[WARN] Repository '%s' already exists.", namespace+"/"+repository)
+		//return
 	} else {
 		fmt.Printf("[INFO] Insert repository '%s' success.\n", namespace+"/"+repository)
 	}

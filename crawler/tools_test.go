@@ -1,6 +1,9 @@
 package crawler
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestGenerateNextKeyword(t *testing.T) {
 	if GenerateNextKeyword("000", true) != "001" {
@@ -28,4 +31,8 @@ func TestGenerateNextKeyword(t *testing.T) {
 
 func TestKDLProxiesMaintainer(t *testing.T) {
 	KDLProxiesMaintainer()
+}
+
+func TestGetHTTPSProxy(t *testing.T) {
+	fmt.Println(GenerateNextKeyword("1zzzzz", true))
 }
