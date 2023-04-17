@@ -328,7 +328,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 			for j, _ := range repo.Tags[i].Archs {
 				res, errS := StoreArch__(namespace, repository, repo.Tags[i].Name, &repo.Tags[i].Archs[j])
 				if errS != nil {
-					fmt.Println("[ERROR] Insert into images failed with: ", errS)
+					fmt.Println("[ERROR] Insert image ", namespace+"/"+repository+":"+repo.Tags[i].Name, " into images failed with: ", errS)
 				}
 				if k, _ := res.RowsAffected(); k == 0 {
 					fmt.Printf("[WARN] Image '%s' already exist, digest: %s\n",

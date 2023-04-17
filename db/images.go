@@ -21,7 +21,7 @@ func (d *DockerDB) InsertImage(namespace, repository, tag, architecture, feature
 	size int64, status, lastPulled, lastPushed, layers string) (sql.Result, error) {
 
 	insert := fmt.Sprintf(insertImage,
-		namespace, repository, tag, architecture, features, variant, digest, os, size, status,
+		namespace, repository, tag, architecture, EscapeString(features), EscapeString(variant), digest, os, size, status,
 		lastPulled, lastPushed, EscapeString(layers))
 
 	return d.db.Exec(insert)
