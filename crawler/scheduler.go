@@ -46,7 +46,8 @@ func StartRecursive() {
 	if err != nil && strings.Contains(err.Error(), "no rows in result set") {
 		cur = "--"
 	} else {
-		cur = GenerateNextKeyword(cur, true)
+		// 有时候崩溃导致当前cur下很多repository的tag和image没爬完，暂时不自动使用下一个了
+		//cur = GenerateNextKeyword(cur, true)
 	}
 	fmt.Println("[+] Current keyword: ", cur)
 	chanKeyword <- cur

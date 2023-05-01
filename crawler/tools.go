@@ -6,13 +6,19 @@ import (
 	"github.com/kuaidaili/golang-sdk/api-sdk/kdl/auth"
 	"github.com/kuaidaili/golang-sdk/api-sdk/kdl/client"
 	"github.com/kuaidaili/golang-sdk/api-sdk/kdl/signtype"
-	"log"
 	"math/rand"
 	"os"
 	"path"
 	"runtime"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
+)
+
+var (
+	fileProxies *os.File
+	lockProxies = sync.Mutex{}
 )
 
 // LegalRuneList 作为生成时参考的字符表
@@ -132,7 +138,7 @@ func UpdateProxies(c *client.Client) {
 		Proxies.Valid = make(map[string]bool)
 	}
 
-	// 尝试更新直到有10个验证有效的代理
+	// 尝试更新直到有12个验证有效的代理
 	for {
 		// 不是初始化，而是日常检查代理状态
 		if cnt == 0 {
@@ -140,7 +146,7 @@ func UpdateProxies(c *client.Client) {
 			// 检测私密代理有效性， 返回map[string]bool, ip:true/false
 			valids, err := c.CheckDpsValid(GetProxyList(), signtype.HmacSha1)
 			if err != nil {
-				log.Println("[ERROR] Kuaidaili CheckDpsValid failed with: ", err)
+				LogProxies(fmt.Sprintf("[ERROR] Kuaidaili CheckDpsValid failed with: %s", err))
 			}
 			for ip, valid := range valids {
 				if !valid {
@@ -153,13 +159,18 @@ func UpdateProxies(c *client.Client) {
 			// 获取私密代理剩余时间(单位为秒), 返回map[string]string, ip:seconds
 			seconds, err := c.GetDpsValidTime(GetProxyList(), signtype.Token)
 			if err != nil {
-				log.Println("[ERROR] Kuaidaili GetDpsValidTime failed with: ", err)
+				LogProxies(fmt.Sprintf("[ERROR] Kuaidaili GetDpsValidTime failed with: %s", err))
 			}
 			for ip, sec := range seconds {
 				if i, _ := strconv.Atoi(sec); i < 10 {
 					delete(Proxies.Valid, ip)
 					cnt++
 				}
+			}
+
+			// 有ip需要被更换时log一下
+			if cnt > 0 {
+				LogProxies(fmt.Sprintf("Validation: %s\nValid Time Remained: %s", valids, seconds))
 			}
 		}
 
@@ -175,10 +186,13 @@ func UpdateProxies(c *client.Client) {
 		params := map[string]interface{}{"format": "json"}
 		ips, err := c.GetDps(cnt, signtype.HmacSha1, params)
 		if err != nil {
-			log.Println(err)
-		}
-		for _, ip := range ips {
-			Proxies.Valid[ip] = true
+			LogProxies("[ERROR] GetDps from kuaidaili failed with: " + err.Error())
+		} else {
+			for _, ip := range ips {
+				Proxies.Valid[ip] = true
+			}
+			// 每次提取新的代理时log新提取的ip
+			LogProxies("[INFO] Get new ip from kuaidaili: " + strings.Join(ips, ","))
 		}
 
 		cnt = 0
@@ -188,11 +202,22 @@ func UpdateProxies(c *client.Client) {
 // GetProxyList 返回Proxies.Valid的键列表。
 // 仅对快代理部分有效
 func GetProxyList() []string {
-	proxies := make([]string, len(Proxies.Valid))
+	l := len(Proxies.Valid)
+	proxies := make([]string, l)
 	i := 0
 	for k, _ := range Proxies.Valid {
 		proxies[i] = k
 		i++
+		// 防止遇到delete时数组越界
+		if i >= l {
+			return proxies
+		}
 	}
 	return proxies
+}
+
+func LogProxies(s string) {
+	lockProxies.Lock()
+	defer lockProxies.Unlock()
+	fileProxies.WriteString(time.DateTime + " " + s + "\n")
 }

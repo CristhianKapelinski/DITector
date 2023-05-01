@@ -113,4 +113,11 @@ func init() {
 	} else {
 		fmt.Println("[+] Open file succeed: ", path.Join(ConfigCrawler.DataDir, "images.json"))
 	}
+	// 代理日志
+	fileProxies, err = os.OpenFile(path.Join(ConfigCrawler.DataDir, "proxies.json"), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0777)
+	if err != nil {
+		log.Fatalf("[ERROR] Open %s failed with: %s\n", path.Join(ConfigCrawler.DataDir, "proxies.json"), err)
+	} else {
+		fmt.Println("[+] Open file succeed: ", path.Join(ConfigCrawler.DataDir, "proxies.json"))
+	}
 }

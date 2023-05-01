@@ -23,7 +23,22 @@ var (
 func StoreRepository__ToFile(r *Repository__) (int, error) {
 	lockRepository.Lock()
 	defer lockRepository.Unlock()
-	b, err := json.Marshal(r)
+	tmp := struct {
+		User            string `json:"user"`
+		Name            string `json:"name"`
+		Namespace       string `json:"namespace"`
+		RepositoryType  string `json:"repository_type"`
+		Description     string `json:"description"`
+		IsPrivate       bool   `json:"is_private"`
+		IsAutomated     bool   `json:"is_automated"`
+		StarCount       int    `json:"star_count"`
+		PullCount       int64  `json:"pull_count"`
+		LastUpdated     string `json:"last_updated"`
+		DateRegistered  string `json:"date_registered"`
+		FullDescription string `json:"full_description,omitempty"`
+	}{r.User, r.Name, r.Namespace, r.RepositoryType, r.Description, r.IsPrivate,
+		r.IsAutomated, r.StarCount, r.PullCount, r.LastUpdated, r.DateRegistered, r.FullDescription}
+	b, err := json.Marshal(tmp)
 	if err != nil {
 		return 0, err
 	}
