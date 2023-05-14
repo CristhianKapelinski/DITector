@@ -1,7 +1,12 @@
 package buildgraph
 
+import (
+	"context"
+)
+
 func Build(format string) {
 	config(format)
+	defer mongoClient.Disconnect(context.Background())
 
 	switch format {
 	case "json":

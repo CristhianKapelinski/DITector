@@ -1,7 +1,6 @@
 package buildgraph
 
 import (
-	"fmt"
 	"runtime"
 )
 
@@ -14,8 +13,8 @@ var (
 
 var (
 	chanRepository     = make(chan *Repository, runtime.NumCPU())
-	chanTag            = make(chan *Tag, runtime.NumCPU())
-	chanImage          = make(chan *Image, runtime.NumCPU())
+	chanTag            = make(chan *TagSource, runtime.NumCPU())
+	chanImage          = make(chan *ImageSource, runtime.NumCPU())
 	chanDoneRepository = make(chan struct{})
 	chanDoneTag        = make(chan struct{})
 	chanDoneImage      = make(chan struct{})
@@ -25,30 +24,45 @@ var (
 func StartFromJSON() {
 	go StoreRepositoryScheduler()
 	ReadFileRepositoryByLine()
+	<-chanDoneRepository
+
 	go StoreTagScheduler()
 	ReadFileTagsByLine()
+	<-chanDoneTag
+
 	go StoreImageScheduler()
 	ReadFileImagesByLine()
-
-	<-chanDoneRepository
-	<-chanDoneTag
 	<-chanDoneImage
 }
 
 func StoreRepositoryScheduler() {
 	for repo := range chanRepository {
-		fmt.Println(repo.Namespace, repo.Name)
+		//fmt.Println(repo.Namespace, repo.RepositorySource, repo.Tags)
+		InsertRepositoryToMongo(repo)
+		//r, e := FindRepositoryFromMongoByName(repo.Namespace, repo.RepositorySource)
+		//if e != nil {
+		//	fmt.Println(e)
+		//} else {
+		//	fmt.Println("Find: ", *r)
+		//}
 	}
+	chanDoneRepository <- struct{}{}
 }
 
 func StoreTagScheduler() {
 	for tag := range chanTag {
-		fmt.Println(tag.Namespace, tag.Repository, tag.Name)
+		//fmt.Println(tag.Namespace, tag.RepositorySource, tag.TagSource)
+		InsertTagToMongo(tag)
+		//fmt.Sprintf(tag.Namespace)
 	}
+	chanDoneTag <- struct{}{}
 }
 
 func StoreImageScheduler() {
 	for image := range chanImage {
-		fmt.Println(image.Namespace, image.Repository, image.Arch.Digest)
+		//fmt.Println(image.Namespace, image.RepositorySource, image.ArchSource.Digest)
+		InsertImageToMongo(image)
+		//fmt.Sprintf(image.Tag)
 	}
+	chanDoneImage <- struct{}{}
 }

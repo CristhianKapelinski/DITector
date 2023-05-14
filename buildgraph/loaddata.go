@@ -20,21 +20,27 @@ var (
 func ReadFileRepositoryByLine() {
 	fmt.Println("[INFO] Begin to read fileRepository")
 
+	// 退出时结束占用的资源
+	defer func() {
+		fileRepository.Close()
+		close(chanRepository)
+	}()
+
+	// 逐行读取文件内容直到EOF或其他错误
 	scanner := bufio.NewReader(fileRepository)
 	for i := 0; i < 10; i++ {
 		b, err := scanner.ReadBytes('\n')
 		if err != nil {
 			// 读到fileRepository结尾，退出
 			if err == io.EOF {
-				fileRepository.Close()
 				fmt.Println("[INFO] Read fileRepository done")
-				close(chanRepository)
 				break
 			}
 			fmt.Println("[ERROR] Fail to ReadLine in ReadFileRepositoryByLine: Line ", i, ", err: ", err)
 			break
 		}
 
+		// 解析内容，发到管道，等待scheduler调度
 		var repo = new(Repository)
 		err = json.Unmarshal(b, repo)
 		if err != nil {
@@ -49,22 +55,28 @@ func ReadFileRepositoryByLine() {
 func ReadFileTagsByLine() {
 	fmt.Println("[INFO] Begin to read fileTags")
 
+	// 退出时结束占用的资源
+	defer func() {
+		fileTags.Close()
+		close(chanTag)
+	}()
+
+	// 逐行读取文件内容直到EOF或其他错误
 	scanner := bufio.NewReader(fileTags)
 	for i := 0; i < 10; i++ {
 		b, err := scanner.ReadBytes('\n')
 		if err != nil {
 			// 读到fileTags结尾，退出
 			if err == io.EOF {
-				fileTags.Close()
 				fmt.Println("[INFO] Read fileTags done")
-				close(chanTag)
 				break
 			}
 			fmt.Println("[ERROR] Fail to ReadLine in ReadFileTagsByLine: Line ", i, ", err: ", err)
 			break
 		}
 
-		var tag = new(Tag)
+		// 解析内容，发到管道，等待scheduler调度
+		var tag = new(TagSource)
 		err = json.Unmarshal(b, tag)
 		if err != nil {
 			fmt.Println("[ERROR] json.Unmarshal failed with: ", err)
@@ -78,22 +90,28 @@ func ReadFileTagsByLine() {
 func ReadFileImagesByLine() {
 	fmt.Println("[INFO] Begin to read fileImages")
 
+	// 退出时结束占用的资源
+	defer func() {
+		fileImages.Close()
+		close(chanImage)
+	}()
+
+	// 逐行读取文件内容直到EOF或其他错误
 	scanner := bufio.NewReader(fileImages)
 	for i := 0; i < 10; i++ {
 		b, err := scanner.ReadBytes('\n')
 		if err != nil {
 			// 读到文件结尾，退出
 			if err == io.EOF {
-				fileImages.Close()
 				fmt.Println("[INFO] Read fileImages done")
-				close(chanImage)
 				break
 			}
 			fmt.Println("[ERROR] Fail to ReadLine in ReadFileRepositoryByLine: Line ", i, ", err: ", err)
 			break
 		}
 
-		var image = new(Image)
+		// 解析内容，发到管道，等待scheduler调度
+		var image = new(ImageSource)
 		err = json.Unmarshal(b, image)
 		if err != nil {
 			fmt.Println("[ERROR] json.Unmarshal failed with: ", err)

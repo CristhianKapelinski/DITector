@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
@@ -18,6 +19,7 @@ var ConfigBuilder struct {
 	RepositoryFile string `json:"repository_file"`
 	TagsFile       string `json:"tags_file"`
 	ImagesFile     string `json:"images_file"`
+	BuilderLogFile string `json:"builder_log_file"`
 }
 
 func config(format string) {
@@ -59,7 +61,22 @@ func config(format string) {
 		log.Fatalln("[ERROR] Failed to ping MongoDB with err: ", err)
 	}
 	mongoRepositoryCollection = mongoClient.Database("dockerhub").Collection("repository")
+	// 建立唯一索引，防止插入重复数据
+	indexView := mongoRepositoryCollection.Indexes()
+	model := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "namespace", Value: 1},
+			{Key: "repository", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err = indexView.CreateOne(context.Background(), model)
+	if err != nil {
+		log.Fatalln("[ERROR] Create unique index on mongodb failed with:", err)
+	}
 	fmt.Println("[+] Connect to MongoDB succeed")
+
+	// TODO: 初始化neo4j connector，建立节点唯一索引，防止重复插入layerid
 
 	// 根据format连接数据源
 	switch format {
@@ -69,24 +86,35 @@ func config(format string) {
 		if err != nil {
 			log.Fatalf("[ERROR] Open %s failed with: %s\n", path.Join(ConfigBuilder.DataDir, "repository.json"), err)
 		} else {
-			fmt.Println("[+] Open file succeed: ", path.Join(ConfigBuilder.DataDir, ConfigBuilder.RepositoryFile))
+			fmt.Println("[+] Open source file succeed: ", path.Join(ConfigBuilder.DataDir, ConfigBuilder.RepositoryFile))
 		}
 		fileTags, err = os.Open(path.Join(ConfigBuilder.DataDir, ConfigBuilder.TagsFile))
 		if err != nil {
 			log.Fatalf("[ERROR] Open %s failed with: %s\n", path.Join(ConfigBuilder.DataDir, "tags.json"), err)
 		} else {
-			fmt.Println("[+] Open file succeed: ", path.Join(ConfigBuilder.DataDir, ConfigBuilder.TagsFile))
+			fmt.Println("[+] Open source file succeed: ", path.Join(ConfigBuilder.DataDir, ConfigBuilder.TagsFile))
 		}
 		fileImages, err = os.Open(path.Join(ConfigBuilder.DataDir, ConfigBuilder.ImagesFile))
 		if err != nil {
 			log.Fatalf("[ERROR] Open %s failed with: %s\n", path.Join(ConfigBuilder.DataDir, "images.json"), err)
 		} else {
-			fmt.Println("[+] Open file succeed: ", path.Join(ConfigBuilder.DataDir, ConfigBuilder.ImagesFile))
+			fmt.Println("[+] Open source file succeed: ", path.Join(ConfigBuilder.DataDir, ConfigBuilder.ImagesFile))
 		}
 	case "mysql":
 		// 初始化mysql connector
+	case "clear":
+		// 删除数据库中的数据
+		DropRepositoryCollectionFromMongo()
 	default:
 		fmt.Println("[ERROR] Invalid data source configured: ", format)
 		os.Exit(-2)
+	}
+
+	// 初始化日志文件fd
+	fileBuilderLogger, err = os.OpenFile(path.Join(ConfigBuilder.DataDir, ConfigBuilder.BuilderLogFile), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0777)
+	if err != nil {
+		log.Fatalf("[ERROR] Open %s failed with: %s\n", path.Join(ConfigBuilder.DataDir, ConfigBuilder.BuilderLogFile), err)
+	} else {
+		fmt.Println("[+] Open log file succeed: ", path.Join(ConfigBuilder.DataDir, ConfigBuilder.BuilderLogFile))
 	}
 }

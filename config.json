@@ -3,6 +3,7 @@
   "local_proxy": false,
   "proxy_file": "crawler/proxyaddr.json",
   "data_dir": "/mysql/json-files",
+  "builder_log_file": "builder.log",
   "repository_file": "library-repository.json",
   "tags_file": "library-tags.json",
   "images_file": "library-images.json"
