@@ -23,7 +23,7 @@ type Tag struct {
 	TagLastPushed       string `json:"tag_last_pushed"`
 	MediaType           string `json:"media_type"`
 	ContentType         string `json:"content_type"`
-	Images              []Image
+	Images              map[string]map[string]string
 }
 
 type Image struct {
@@ -31,7 +31,7 @@ type Image struct {
 	Features     string
 	Variant      string
 	Digest       string
-	Layers       []Layer // 只按序保存layer的digest
+	Layers       []Layer
 	OS           string
 	Size         int64
 	Status       string

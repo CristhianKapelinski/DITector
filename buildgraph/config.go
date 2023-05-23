@@ -67,19 +67,34 @@ func config(format string) {
 	if err != nil {
 		log.Fatalln("[ERROR] Ping MongoDB failed with err: ", err)
 	}
+	// mongoRepositoryCollection 用于存repository的元数据
 	mongoRepositoryCollection = mongoClient.Database("dockerhub").Collection("repository")
-	// 建立唯一索引，防止插入重复数据
-	indexView := mongoRepositoryCollection.Indexes()
-	model := mongo.IndexModel{
+	// 建立唯一索引，namespace-repository防止插入重复数据
+	repoIndexView := mongoRepositoryCollection.Indexes()
+	repoModel := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "namespace", Value: 1},
 			{Key: "repository", Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
 	}
-	_, err = indexView.CreateOne(context.Background(), model)
+	_, err = repoIndexView.CreateOne(context.Background(), repoModel)
 	if err != nil {
-		log.Fatalln("[ERROR] Create unique index on mongodb failed with:", err)
+		log.Fatalln("[ERROR] Create unique index on mongodb.dockerhub.repository failed with:", err)
+	}
+	// mongoImagesCollection 用于存image的层信息
+	mongoImagesCollection = mongoClient.Database("dockerhub").Collection("images")
+	// 建立唯一索引digest，防止插入重复数据
+	imageIndexView := mongoImagesCollection.Indexes()
+	imageModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "digest", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err = imageIndexView.CreateOne(context.Background(), imageModel)
+	if err != nil {
+		log.Fatalln("[ERROR] Create unique index on mongodb.dockerhub.images failed with:", err)
 	}
 	fmt.Println("[+] Connect to MongoDB succeed")
 
@@ -97,13 +112,19 @@ func config(format string) {
 	session.ExecuteWrite(context.Background(), func(tx neo4j.ManagedTransaction) (any, error) {
 		// 创建索引：基于节点id
 		tx.Run(context.Background(),
-			"CREATE INDEX layer_id_index FOR (l:Layer) ON (l.id)",
+			"CREATE INDEX layer_id_index IF NOT EXISTS FOR (l:Layer) ON (l.id)",
 			map[string]any{},
 		)
 
 		// 创建索引：基于节点layer-id
 		tx.Run(context.Background(),
-			"CREATE INDEX layer_digest_index FOR (l:layer) ON (l.digest)",
+			"CREATE INDEX layer_digest_index IF NOT EXISTS FOR (l:Layer) ON (l.digest)",
+			map[string]any{},
+		)
+
+		// 创建索引：基于节点layer-id
+		tx.Run(context.Background(),
+			"CREATE INDEX rawlayer_digest_index IF NOT EXISTS FOR (l:RawLayer) ON (l.digest)",
 			map[string]any{},
 		)
 

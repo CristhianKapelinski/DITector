@@ -12,6 +12,7 @@ import (
 
 var mongoClient *mongo.Client
 var mongoRepositoryCollection *mongo.Collection
+var mongoImagesCollection *mongo.Collection
 
 // InsertRepositoryToMongo 利用Insert将Repository作为文档存储到Mongo中
 func InsertRepositoryToMongo(repo *Repository) {
@@ -19,11 +20,11 @@ func InsertRepositoryToMongo(repo *Repository) {
 	_, err := mongoRepositoryCollection.InsertOne(context.Background(), repo)
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
-			fmt.Println("[WARN] Duplicate when inserting repository", repo.Namespace, repo.Repository, ", repository already exists")
+			//fmt.Println("[WARN] Mongo Duplicate when inserting repository", repo.Namespace, repo.Repository, ", repository already exists")
 			return
 		}
-		logBuilderString("[ERROR] Insert repository " + repo.Namespace + repo.Repository + " to Mongo failed with: " + err.Error())
-		fmt.Println("[ERROR] Insert repository "+repo.Namespace+repo.Repository+" to Mongo failed with: ", err)
+		logBuilderString("[ERROR] Mongo Insert repository " + repo.Namespace + repo.Repository + " to collection repository failed with: " + err.Error())
+		fmt.Println("[ERROR] Mongo Insert repository "+repo.Namespace+repo.Repository+" to collection repository failed with: ", err)
 		return
 	}
 	//fmt.Println("[INFO] Insert repository", repo.Namespace+"/"+repo.Repository, "succeed with ID", ret.InsertedID)
@@ -38,7 +39,7 @@ func InsertTagToMongo(tag *TagSource) {
 		TagLastPushed:       tag.TagLastPushed,
 		MediaType:           tag.MediaType,
 		ContentType:         tag.ContentType,
-		Images:              []Image{},
+		Images:              map[string]map[string]string{},
 	}
 	filter := bson.M{
 		"namespace":  tag.Namespace,
@@ -51,32 +52,61 @@ func InsertTagToMongo(tag *TagSource) {
 	}
 	_, err := mongoRepositoryCollection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
-		logBuilderString("[ERROR] Update tag " + tag.Namespace + "/" + tag.Repository + ":" + tag.Tag + " to Mongo failed with: " + err.Error())
-		fmt.Println("[ERROR] Update tag", tag.Namespace+"/"+tag.Repository+":"+tag.Tag, "failed with:", err)
+		logBuilderString("[ERROR] Mongo Update tag " + tag.Namespace + "/" + tag.Repository + ":" + tag.Tag + " failed with: " + err.Error())
+		fmt.Println("[ERROR] Mongo Update tag", tag.Namespace+"/"+tag.Repository+":"+tag.Tag, "failed with:", err)
 		return
 	}
 	//fmt.Println("[INFO] Insert tag", tag.Namespace+"/"+tag.Repository+":"+tag.Tag, "succeed with ID", ret.UpsertedID)
 }
 
-// InsertImageToMongo 利用Update将Image添加到Mongo中存储的对应的repository对应的tag中
+// InsertImageToMongo 将image存储到Mongo中
 func InsertImageToMongo(image *ImageSource) {
-	var i = image.Image
+	// 为tag添加不同架构下的镜像digest
+	AddImageToRepositoryMongo(image)
+	// 将特定镜像的元数据单独存放到images集合
+	InsertImageToImagesCollectionMongo(image)
+}
+
+// AddImageToRepositoryMongo 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
+func AddImageToRepositoryMongo(image *ImageSource) {
 	// Mongo文档的键中不能包含"."，所以将image.Tag中的"."替换为"$"
 	tagKey := strings.Replace(image.Tag, ".", "$", -1)
 	filter := bson.M{
 		"namespace":  image.Namespace,
 		"repository": image.Repository,
 	}
+	arch := image.Image.Architecture
+	variant := image.Image.Variant
+	// Mongo文档字典类型的键不能为空，将variant为""的修改为"null"
+	if variant == "" {
+		variant = "null"
+	}
 	update := bson.M{
-		"$push": bson.M{"tags." + tagKey + ".images": i},
+		"$set": bson.M{"tags." + tagKey + ".images." + arch + "." + variant: image.Image.Digest},
 	}
 	_, err := mongoRepositoryCollection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
-		logBuilderString("[ERROR] Update image " + image.Namespace + "/" + image.Repository + ":" + image.Tag + " to Mongo failed with: " + err.Error())
-		fmt.Println("[ERROR] Update image", image.Namespace+"/"+image.Repository+":"+image.Tag, "failed with:", err)
+		logBuilderString("[ERROR] Mongo Update image " + image.Namespace + "/" + image.Repository + ":" + image.Tag + " failed with: " + err.Error())
+		fmt.Println("[ERROR] Mongo Update image", image.Namespace+"/"+image.Repository+":"+image.Tag, "failed with:", err)
 		return
 	}
 	//fmt.Println("[INFO] Insert image", image.Namespace+"/"+image.Repository+":"+image.Tag, "succeed with ID", ret.UpsertedID)
+}
+
+// InsertImageToImagesCollectionMongo 将image元数据作为文档插入到images collection中
+func InsertImageToImagesCollectionMongo(image *ImageSource) {
+	i := image.Image
+	_, err := mongoImagesCollection.InsertOne(context.Background(), i)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			//fmt.Println("[WARN] Mongo Duplicate when inserting image", i.Digest, ", image already exists")
+			return
+		}
+		logBuilderString("[ERROR] Mongo Insert image " + i.Digest + " to collection images failed with: " + err.Error())
+		fmt.Println("[ERROR] Mongo Insert image", i.Digest, "to collection images failed with:", err)
+		return
+	}
+	//fmt.Println("[INFO] Insert image", i.Digest, "succeed with ID", ret.UpsertedID)
 }
 
 // FindRepositoryFromMongoByName 根据Namespace、Repository寻找MongoDB中存储的Repository
@@ -113,5 +143,7 @@ func CountDocumentsFromMongo() int {
 
 // DropRepositoryCollectionFromMongo 将repository collection从mongo删除
 func DropRepositoryCollectionFromMongo() error {
-	return mongoRepositoryCollection.Drop(context.TODO())
+	mongoRepositoryCollection.Drop(context.TODO())
+	mongoImagesCollection.Drop(context.TODO())
+	return nil
 }

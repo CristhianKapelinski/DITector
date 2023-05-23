@@ -37,7 +37,6 @@ func StartFromJSON() {
 
 func StoreRepositoryScheduler() {
 	for repo := range chanRepository {
-		//fmt.Println(repo.Namespace, repo.RepositorySource, repo.Tags)
 		InsertRepositoryToMongo(repo)
 	}
 	chanDoneRepository <- struct{}{}
@@ -45,19 +44,15 @@ func StoreRepositoryScheduler() {
 
 func StoreTagScheduler() {
 	for tag := range chanTag {
-		//fmt.Println(tag.Namespace, tag.RepositorySource, tag.TagSource)
 		InsertTagToMongo(tag)
-		//fmt.Sprintf(tag.Namespace)
 	}
 	chanDoneTag <- struct{}{}
 }
 
 func StoreImageScheduler() {
 	for image := range chanImage {
-		//fmt.Println(image.Namespace, image.RepositorySource, image.ArchSource.Digest)
 		InsertImageToMongo(image)
 		InsertImageToNeo4j(image)
-		//fmt.Sprintf(image.Tag)
 	}
 	chanDoneImage <- struct{}{}
 }

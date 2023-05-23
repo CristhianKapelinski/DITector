@@ -16,5 +16,5 @@ var (
 func logBuilderString(s string) {
 	lockFileBuilderLogger.Lock()
 	defer lockFileBuilderLogger.Unlock()
-	fileBuilderLogger.WriteString(time.Now().Local().Format(time.DateTime) + " " + s + "\n")
+	fileBuilderLogger.WriteString(time.Now().Add(8*time.Hour).Format(time.DateTime) + " " + s + "\n")
 }

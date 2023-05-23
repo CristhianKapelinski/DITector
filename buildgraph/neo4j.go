@@ -2,8 +2,6 @@ package buildgraph
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
@@ -20,13 +18,12 @@ func InsertImageToNeo4j(image *ImageSource) {
 	session := neo4jDriver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
-	// 用于堆1、1-2、1-2-5，方便直接计算hash
-	previousHash := ""
-	accumulateLayerID := ""
-	accumulateHash := ""
+	previousHash := ""      // 用于存上一个hash(1-2)
+	accumulateLayerID := "" // 用于堆1、1-2、1-2-5，方便直接计算hash
+	accumulateHash := ""    // =hash(accumulateLayerID)，用于存当前hash(1-2-5)
 
 	// 一些基本赋值
-	lastLayerIndex := 0
+	lastLayerIndex := 0 // 仍有文件内容的最顶层在Image.Layers中的index
 	imageName := image.Namespace + "/" + image.Repository + ":" + image.Tag
 
 	for i, _ := range image.Image.Layers {
@@ -65,20 +62,33 @@ func InsertImageToNeo4j(image *ImageSource) {
 
 // addNewLayerFunc 返回可用于session.ExecuteWrite的func，将Layer节点及节点间的边插入neo4j
 func addNewLayerFunc(ctx context.Context, previousHash, idHash string, layer Layer) neo4j.ManagedTransactionWork {
+	// 节点的两种label
+	// Layer:
+	// 		id: hash(1-2-5)
+	// 		digest: layer-ID
+	// 		images: [namespace1/repository1:tag1, ...]
+	// RawLayer:
+	// 		digest: layer-ID
+	// 		size: size
+	//		instruction: instruction
+	//		scanned: true/false
+	// 		file_added: []
+	//		file_deleted: []
+	//		vul: [[]]
+
 	// 当前层为镜像的第一层，只需要插入层信息即可
 	if previousHash == "" {
-		// label为Layer，包含信息:
-		// id: hash(1-2-5)
-		// digest: layer-ID
-		// size: size
-		// instruction: instruction
-		// images: [namespace1/repository1:tag1, ...]
 		return func(tx neo4j.ManagedTransaction) (any, error) {
 			var result, err = tx.Run(ctx,
 				"MERGE (l:Layer {id: $idHash}) "+
-					"ON CREATE SET l.digest=$digest, l.size=$size, l.instruction=$instruction, l.images=$images, l.scanned=$scanned",
-				map[string]any{"idHash": idHash, "digest": layer.Digest, "size": layer.Size, "instruction": layer.Instruction,
-					"images": []string{}, "scanned": false},
+					"ON CREATE SET l.digest=$digest, l.images=$images "+
+					"WITH l "+
+					"MERGE (rl:RawLayer {digest: $digest}) "+
+					"ON CREATE SET rl.size=$size, rl.instruction=$instruction, rl.scanned=$scanned, rl.file_added=$file_added, rl.file_deleted=$file_deleted, rl.vul=$vul "+
+					"WITH l,rl "+
+					"MERGE (l)-[:SAME]-(rl)",
+				map[string]any{"idHash": idHash, "digest": layer.Digest, "images": []string{},
+					"size": layer.Size, "instruction": layer.Instruction, "scanned": false, "file_added": []string{}, "file_deleted": []string{}, "vul": [][]string{}},
 			)
 
 			if err != nil {
@@ -91,11 +101,18 @@ func addNewLayerFunc(ctx context.Context, previousHash, idHash string, layer Lay
 		// 当前层非镜像第一层，需要插入层节点、边previous-->current
 		return func(tx neo4j.ManagedTransaction) (any, error) {
 			var result, err = tx.Run(ctx,
-				"MATCH (previous:Layer {id: $previousHash}) "+
-					"MERGE (l:Layer {id: $idHash}) "+
-					"ON CREATE SET l.digest=$digest, l.size=$size, l.instruction=$instruction, l.images=$images "+
+				"MERGE (l:Layer {id: $idHash}) "+
+					"ON CREATE SET l.digest=$digest, l.images=$images "+
+					"WITH l "+
+					"MERGE (rl:RawLayer {digest: $digest}) "+
+					"ON CREATE SET rl.size=$size, rl.instruction=$instruction, rl.scanned=$scanned, rl.file_added=$file_added, rl.file_deleted=$file_deleted, rl.vul=$vul "+
+					"WITH l,rl "+
+					"MERGE (l)-[:SAME]-(rl) "+
+					"WITH l "+
+					"MATCH (previous:Layer {id: $previousHash}) "+
 					"MERGE (previous)-[:IS_BASE_OF]->(l)",
-				map[string]any{"previousHash": previousHash, "idHash": idHash, "digest": layer.Digest, "size": layer.Size, "instruction": layer.Instruction, "images": []string{}},
+				map[string]any{"previousHash": previousHash, "idHash": idHash, "digest": layer.Digest, "images": []string{},
+					"size": layer.Size, "instruction": layer.Instruction, "scanned": false, "file_added": []string{}, "file_deleted": []string{}, "vul": [][]string{}},
 			)
 
 			if err != nil {
@@ -124,12 +141,6 @@ func addImageToLayerFunc(ctx context.Context, imageName, idHash string) neo4j.Ma
 
 		return result.Consume(ctx)
 	}
-}
-
-// calSha256 对字符串计算sha256，并返回string
-func calSha256(s string) string {
-	tmpHash := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(tmpHash[:])
 }
 
 // DropNodesAndRelationshipsFromNeo4j 将neo4j数据库清空
