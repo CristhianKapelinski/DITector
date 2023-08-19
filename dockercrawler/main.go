@@ -33,6 +33,7 @@ func main() {
 	} else if buildGraph {
 		buildgraph.Build(format)
 	} else if startServer {
+		// 10.10.21.122:23434
 		server.StartServer()
 	} else {
 		flag.Usage()

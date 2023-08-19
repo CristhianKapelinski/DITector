@@ -8,3 +8,7 @@ secret.json
 .secret
 
 test.json
+
+frontend/docker-scanner-frontend/.vscode/
+frontend/docker-scanner-frontend/node_modules/
+frontend/docker-scanner-frontend/dist/

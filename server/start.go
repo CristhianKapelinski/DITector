@@ -1,15 +1,18 @@
 package server
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"net/http"
+)
 
 func StartServer() {
-	r := gin.Default()
+	router := gin.Default()
 
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
+	router.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
 			"message": "pong",
 		})
 	})
 
-	r.Run()
+	router.Run(":23434")
 }
