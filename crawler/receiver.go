@@ -111,7 +111,7 @@ Tags: %v`,
 
 func (t Tag__) String() string {
 	return fmt.Sprintf(
-		`Tag----------------------------------------
+		`TagName----------------------------------------
 	Name: %s
 	LastUpdated: %s
 	LastUpdaterUsername: %s

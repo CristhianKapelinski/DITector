@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 	"strconv"
 )
 
@@ -62,7 +63,7 @@ func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(image *ImageSource) {
 
 	// 一些基本赋值
 	lastLayerIndex := 0 // 仍有文件内容的最顶层在Image.Layers中的index
-	imageName := image.Namespace + "/" + image.Repository + ":" + image.Tag
+	imageName := image.Namespace + "/" + image.RepositoryName + ":" + image.TagName
 
 	for i, _ := range image.Image.Layers {
 		// 跳过没有文件内容的层
@@ -77,7 +78,7 @@ func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(image *ImageSource) {
 		accumulateHash = CalSha256(accumulateLayerID)
 
 		// 插入层及层间的边
-		_, err := session.ExecuteWrite(ctx, AddNewLayerFunc(ctx, previousHash, accumulateHash, curLayer))
+		_, err := session.ExecuteWrite(ctx, addNewLayerFunc(ctx, previousHash, accumulateHash, curLayer))
 		if err != nil {
 			LogDockerCrawlerString(fmt.Sprintf("[ERROR] Insert "+imageName+" layer "+layerID+" to neo4j failed with: %s", err))
 			fmt.Printf("[ERROR] Insert "+imageName+" layer "+layerID+" to neo4j failed with: %s\n", err)
@@ -91,15 +92,15 @@ func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(image *ImageSource) {
 	}
 
 	// 需要将image信息加入到节点属性中
-	_, err := session.ExecuteWrite(ctx, AddImageToLayerFunc(ctx, imageName, accumulateHash))
+	_, err := session.ExecuteWrite(ctx, addImageToLayerFunc(ctx, imageName, accumulateHash))
 	if err != nil {
-		LogDockerCrawlerString(fmt.Sprintf("[ERROR] Insert image "+image.Namespace+"/"+image.Repository+":"+image.Tag+" of layer "+strconv.Itoa(lastLayerIndex)+" to neo4j failed with: %s", err))
-		fmt.Printf("[ERROR] Insert image "+image.Namespace+"/"+image.Repository+":"+image.Tag+" of layer "+strconv.Itoa(lastLayerIndex)+" to neo4j failed with: %s\n", err)
+		LogDockerCrawlerString(fmt.Sprintf("[ERROR] Insert image "+image.Namespace+"/"+image.RepositoryName+":"+image.TagName+" of layer "+strconv.Itoa(lastLayerIndex)+" to neo4j failed with: %s", err))
+		fmt.Printf("[ERROR] Insert image "+image.Namespace+"/"+image.RepositoryName+":"+image.TagName+" of layer "+strconv.Itoa(lastLayerIndex)+" to neo4j failed with: %s\n", err)
 	}
 }
 
-// AddNewLayerFunc 返回可用于session.ExecuteWrite的func，将Layer节点及节点间的边插入neo4j
-func AddNewLayerFunc(ctx context.Context, previousHash, idHash string, layer Layer) neo4j.ManagedTransactionWork {
+// addNewLayerFunc 返回可用于session.ExecuteWrite的func，将Layer节点及节点间的边插入neo4j
+func addNewLayerFunc(ctx context.Context, previousHash, idHash string, layer Layer) neo4j.ManagedTransactionWork {
 	// 节点的两种label
 	// Layer:
 	// 		id: hash(1-2-5)
@@ -162,8 +163,8 @@ func AddNewLayerFunc(ctx context.Context, previousHash, idHash string, layer Lay
 	}
 }
 
-// AddImageToLayerFunc 返回可用于session.ExecuteWrite的func，将image添加到最顶层
-func AddImageToLayerFunc(ctx context.Context, imageName, idHash string) neo4j.ManagedTransactionWork {
+// addImageToLayerFunc 返回可用于session.ExecuteWrite的func，将image添加到最顶层
+func addImageToLayerFunc(ctx context.Context, imageName, idHash string) neo4j.ManagedTransactionWork {
 
 	return func(tx neo4j.ManagedTransaction) (any, error) {
 		var result, err = tx.Run(ctx,
@@ -178,6 +179,93 @@ func AddImageToLayerFunc(ctx context.Context, imageName, idHash string) neo4j.Ma
 		}
 
 		return result.Consume(ctx)
+	}
+}
+
+// GetNodeProps 解析neo4j driver ExecuteRead返回*neo4j.Record节点属性
+func GetNodeProps(n *neo4j.Record) map[string]any {
+	keys := n.Keys
+	if len(keys) == 1 {
+		prop, _ := n.Get(keys[0])
+		return prop.(dbtype.Node).Props
+	}
+
+	return nil
+}
+
+// FindUpstreamLayerNodesByNodeId 根据hash(1-2-5)发现所有上游Layer节点
+func (neo4jDriver *MyNeo4j) FindUpstreamLayerNodesByNodeId(nodeId string) (any, error) {
+
+	ctx := context.TODO()
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	upNodes, err := session.ExecuteRead(ctx, findUpstreamNodesByNodeIdFunc(ctx, nodeId))
+	if err != nil {
+		LogDockerCrawlerString("[ERROR] Neo4j find upstream Layer nodes by node id", nodeId, "failed with:", err.Error())
+		return nil, err
+	}
+
+	return upNodes, nil
+}
+
+// findUpstreamNodesByNodeIdFunc 返回可用于session.ExecuteRead的func，find upstream Layer Nodes according to hash(1-2-5)
+func findUpstreamNodesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.ManagedTransactionWork {
+
+	return func(tx neo4j.ManagedTransaction) (any, error) {
+		var result, err = tx.Run(ctx,
+			"MATCH (l:Layer {id: $idHash}) "+
+				"WITH l "+
+				"MATCH (up:Layer)-[:IS_BASE_OF*]->(l) "+
+				"RETURN up",
+			map[string]any{"idHash": nodeId},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		records, err := result.Collect(ctx)
+
+		return records, err
+	}
+}
+
+// FindDownstreamLayerNodesByNodeId 根据hash(1-2-5)发现所有下游Layer节点
+func (neo4jDriver *MyNeo4j) FindDownstreamLayerNodesByNodeId(nodeId string) (any, error) {
+
+	ctx := context.TODO()
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	upNodes, err := session.ExecuteRead(ctx, findDownstreamNodesByNodeIdFunc(ctx, nodeId))
+	if err != nil {
+		LogDockerCrawlerString("[ERROR] Neo4j find downstream Layer nodes by node id", nodeId, "failed with:", err.Error())
+		return nil, err
+	}
+
+	return upNodes, nil
+}
+
+// findDownstreamNodesByNodeIdFunc 返回可用于session.ExecuteRead的func，find downstream Layer Nodes according to hash(1-2-5)
+func findDownstreamNodesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.ManagedTransactionWork {
+
+	return func(tx neo4j.ManagedTransaction) (any, error) {
+		var result, err = tx.Run(ctx,
+			"MATCH (l:Layer {id: $idHash}) "+
+				"WITH l "+
+				"MATCH (l)-[:IS_BASE_OF*]->(down:Layer) "+
+				"RETURN down",
+			map[string]any{"idHash": nodeId},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		records, err := result.Collect(ctx)
+
+		return records, err
 	}
 }
 

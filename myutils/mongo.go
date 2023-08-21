@@ -34,13 +34,15 @@ func ConfigMongoClient() (*MyMongo, error) {
 	repoModel := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "namespace", Value: 1},
-			{Key: "repository", Value: 1},
+			{Key: "name", Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
 	}
 	_, err = repoIndexView.CreateOne(context.Background(), repoModel)
 	if err != nil {
-		return mymongo, err
+		if !mongo.IsDuplicateKeyError(err) {
+			return mymongo, err
+		}
 	}
 	// mongoImagesCollection 用于存image的层信息
 	mymongo.ImagesCollection = mymongo.Client.Database("dockerhub").Collection("images")
@@ -54,7 +56,9 @@ func ConfigMongoClient() (*MyMongo, error) {
 	}
 	_, err = imageIndexView.CreateOne(context.Background(), imageModel)
 	if err != nil {
-		return mymongo, err
+		if !mongo.IsDuplicateKeyError(err) {
+			return mymongo, err
+		}
 	}
 
 	return mymongo, nil
@@ -79,8 +83,8 @@ func (mymongo *MyMongo) InsertTagToMongo(tag *TagSource) error {
 		Images:              map[string]map[string]string{},
 	}
 	filter := bson.M{
-		"namespace":  tag.Namespace,
-		"repository": tag.RepositoryName,
+		"namespace": tag.Namespace,
+		"name":      tag.RepositoryName,
 	}
 	// Mongo文档的键中不能包含"."，所以将tag.Tag中的"."替换为"$"
 	tagKey := strings.Replace(tag.Name, ".", "$", -1)
@@ -103,10 +107,10 @@ func (mymongo *MyMongo) InsertImageToMongo(image *ImageSource) error {
 // AddImageToRepositoryMongo 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
 func (mymongo *MyMongo) AddImageToRepositoryMongo(image *ImageSource) error {
 	// Mongo文档的键中不能包含"."，所以将image.Tag中的"."替换为"$"
-	tagKey := strings.Replace(image.Tag, ".", "$", -1)
+	tagKey := strings.Replace(image.TagName, ".", "$", -1)
 	filter := bson.M{
-		"namespace":  image.Namespace,
-		"repository": image.Repository,
+		"namespace": image.Namespace,
+		"name":      image.RepositoryName,
 	}
 	arch := image.Image.Architecture
 	variant := image.Image.Variant
@@ -160,8 +164,8 @@ func (mymongo *MyMongo) DropCollectionsFromMongo() error {
 	return nil
 }
 
-// FindRepositoryFromMongoByName 根据Namespace、Repository寻找mongo.dockerhub.repository中存储的Repository
-func (mymongo *MyMongo) FindRepositoryFromMongoByName(namespace, repository string) (*Repository, error) {
+// FindRepositoryByName 根据Namespace、Repository寻找mongo.dockerhub.repository中存储的Repository
+func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*Repository, error) {
 	var repo = new(Repository)
 
 	// 传入条件
@@ -181,8 +185,8 @@ func (mymongo *MyMongo) FindRepositoryFromMongoByName(namespace, repository stri
 	return repo, err
 }
 
-// FindImageFromMongoByDigest 根据Digest寻找mongo.dockerhub.images中存储的Image
-func (mymongo *MyMongo) FindImageFromMongoByDigest(digest string) (*Image, error) {
+// FindImageByDigest 根据Digest寻找mongo.dockerhub.images中存储的Image
+func (mymongo *MyMongo) FindImageByDigest(digest string) (*Image, error) {
 	var img = new(Image)
 
 	// 传入条件
@@ -196,5 +200,6 @@ func (mymongo *MyMongo) FindImageFromMongoByDigest(digest string) (*Image, error
 	if err != nil {
 		return &Image{}, err
 	}
-	return img, err
+
+	return img, nil
 }

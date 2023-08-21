@@ -18,10 +18,10 @@ package buildgraph
 //	LastUpdated     string `json:"last_updated"`
 //	DateRegistered  string `json:"date_registered"`
 //	FullDescription string `json:"full_description"`
-//	Tags            map[string]Tag
+//	Tags            map[string]TagName
 //}
 //
-//type Tag struct {
+//type TagName struct {
 //	LastUpdated         string `json:"last_updated"`
 //	LastUpdaterUsername string `json:"last_updater_username"`
 //	TagLastPulled       string `json:"tag_last_pulled"`
@@ -64,7 +64,7 @@ package buildgraph
 //type TagSource struct {
 //	Namespace           string `json:"namespace"`
 //	RepositoryName          string `json:"repository"`
-//	Tag                 string `json:"name"`
+//	TagName                 string `json:"name"`
 //	LastUpdated         string `json:"last_updated"`
 //	LastUpdaterUsername string `json:"last_updater_username"`
 //	TagLastPulled       string `json:"tag_last_pulled"`
@@ -76,7 +76,7 @@ package buildgraph
 //type ImageSource struct {
 //	Namespace  string `json:"namespace"`
 //	RepositoryName string `json:"repository"`
-//	Tag        string `json:"tag"`
+//	TagName        string `json:"tag"`
 //	Image      Image  `json:"arch"`
 //}
 //

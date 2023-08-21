@@ -14,7 +14,7 @@ func Build(format string) {
 	switch format {
 	case "json":
 		BuildFromJSON()
-		//r, _ := FindImageFromMongoByDigest("sha256:7c8b70990dad7e4325bf26142f59f77c969c51e079918f4631767ac8d49e22fb")
+		//r, _ := FindImageByDigest("sha256:7c8b70990dad7e4325bf26142f59f77c969c51e079918f4631767ac8d49e22fb")
 		//b, _ := json.Marshal(r)
 		//fmt.Println(string(b))
 	case "mysql":

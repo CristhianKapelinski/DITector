@@ -39,19 +39,32 @@ type Tag struct {
 }
 
 type Image struct {
-	Architecture string    `json:"architecture"`
-	Features     string    `json:"features"`
-	Variant      string    `json:"variant"`
-	Digest       string    `json:"digest"`
-	Layers       []Layer   `json:"layers"`
-	OS           string    `json:"os"`
-	OSFeatures   string    `json:"os_features"`
-	OSVersion    string    `json:"os_version"`
-	Size         int64     `json:"size"`
-	Status       string    `json:"status"`
-	LastPulled   time.Time `json:"last_pulled"`
-	LastPushed   time.Time `json:"last_pushed"`
+	Architecture string
+	Features     string
+	Variant      string
+	Digest       string
+	Layers       []Layer
+	OS           string
+	Size         int64
+	Status       string
+	LastPulled   string `json:"last_pulled"`
+	LastPushed   string `json:"last_pushed"`
 }
+
+//type Image struct {
+//	Architecture string    `json:"architecture"`
+//	Features     string    `json:"features"`
+//	Variant      string    `json:"variant"`
+//	Digest       string    `json:"digest"`
+//	Layers       []Layer   `json:"layers"`
+//	OS           string    `json:"os"`
+//	OSFeatures   string    `json:"os_features"`
+//	OSVersion    string    `json:"os_version"`
+//	Size         int64     `json:"size"`
+//	Status       string    `json:"status"`
+//	LastPulled   time.Time `json:"last_pulled"`
+//	LastPushed   time.Time `json:"last_pushed"`
+//}
 
 // 以Source结尾的struct用于从数据源中直接Unmarshal接收数据
 
@@ -95,10 +108,10 @@ type TagSource struct {
 }
 
 type ImageSource struct {
-	Namespace  string `json:"namespace"`
-	Repository string `json:"repository"`
-	Tag        string `json:"tag"`
-	Image      Image  `json:"arch"`
+	Namespace      string `json:"namespace"`
+	RepositoryName string `json:"repository"`
+	TagName        string `json:"tag"`
+	Image          Image  `json:"arch"`
 }
 
 type Layer struct {

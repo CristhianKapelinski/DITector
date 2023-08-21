@@ -252,7 +252,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 					//	fmt.Println("[ERROR] Insert into tags failed with: ", err)
 					//}
 					//if j, _ := res.RowsAffected(); j == 0 {
-					//	fmt.Printf("[WARN] Tag '%s' for repository '%s' already exist.\n", tags.Results[i].Name, namespace+"/"+repository)
+					//	fmt.Printf("[WARN] TagName '%s' for repository '%s' already exist.\n", tags.Results[i].Name, namespace+"/"+repository)
 					//} else {
 					//	fmt.Printf("[INFO] Insert tag '%s' for repository '%s' success.\n", tags.Results[i].Name, namespace+"/"+repository)
 					//}
@@ -278,7 +278,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 					//	fmt.Println("[ERROR] Insert into tags failed with: ", err)
 					//}
 					//if j, _ := res.RowsAffected(); j == 0 {
-					//	fmt.Printf("[WARN] Tag '%s' for repository '%s' already exist.\n", tags.Results[i].Name, namespace+"/"+repository)
+					//	fmt.Printf("[WARN] TagName '%s' for repository '%s' already exist.\n", tags.Results[i].Name, namespace+"/"+repository)
 					//} else {
 					//	fmt.Printf("[INFO] Insert tag '%s' for repository '%s' success.\n", tags.Results[i].Name, namespace+"/"+repository)
 					//}

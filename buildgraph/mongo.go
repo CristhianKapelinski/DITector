@@ -13,7 +13,7 @@ var mymongo *myutils.MyMongo
 
 //// InsertRepositoryToMongo 利用Insert将Repository作为文档存储到Mongo中
 //func InsertRepositoryToMongo(repo *myutils.RepositoryName) {
-//	repo.Tags = map[string]myutils.Tag{}
+//	repo.Tags = map[string]myutils.TagName{}
 //	_, err := InsertOne(context.Background(), repo)
 //	if err != nil {
 //		if mongo.IsDuplicateKeyError(err) {
@@ -29,7 +29,7 @@ var mymongo *myutils.MyMongo
 //
 //// InsertTagToMongo 利用Update将TagSource添加到Mongo中存储的对应的repository的tags中
 //func InsertTagToMongo(tag *myutils.TagSource) {
-//	var t = myutils.Tag{
+//	var t = myutils.TagName{
 //		LastUpdated:         tag.LastUpdated,
 //		LastUpdaterUsername: tag.LastUpdaterUsername,
 //		TagLastPulled:       tag.TagLastPulled,
@@ -53,7 +53,7 @@ var mymongo *myutils.MyMongo
 //		fmt.Println("[ERROR] Mongo Update tag", tag.Namespace+"/"+tag.RepositoryName+":"+tag.Name, "failed with:", err)
 //		return
 //	}
-//	//fmt.Println("[INFO] Insert tag", tag.Namespace+"/"+tag.RepositoryName+":"+tag.Tag, "succeed with ID", ret.UpsertedID)
+//	//fmt.Println("[INFO] Insert tag", tag.Namespace+"/"+tag.RepositoryName+":"+tag.TagName, "succeed with ID", ret.UpsertedID)
 //}
 //
 //// InsertImageToMongo 将image存储到Mongo中
@@ -67,7 +67,7 @@ var mymongo *myutils.MyMongo
 //// AddImageToRepositoryMongo 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
 //func AddImageToRepositoryMongo(image *myutils.ImageSource) {
 //	// Mongo文档的键中不能包含"."，所以将image.Tag中的"."替换为"$"
-//	tagKey := strings.Replace(image.Tag, ".", "$", -1)
+//	tagKey := strings.Replace(image.TagName, ".", "$", -1)
 //	filter := bson.M{
 //		"namespace":  image.Namespace,
 //		"repository": image.RepositoryName,
@@ -86,11 +86,11 @@ var mymongo *myutils.MyMongo
 //	}
 //	_, err := mongoRepositoriesCollection.UpdateOne(context.TODO(), filter, update)
 //	if err != nil {
-//		LogDockerCrawlerString("[ERROR] Mongo Update image " + image.Namespace + "/" + image.RepositoryName + ":" + image.Tag + " failed with: " + err.Error())
-//		fmt.Println("[ERROR] Mongo Update image", image.Namespace+"/"+image.RepositoryName+":"+image.Tag, "failed with:", err)
+//		LogDockerCrawlerString("[ERROR] Mongo Update image " + image.Namespace + "/" + image.RepositoryName + ":" + image.TagName + " failed with: " + err.Error())
+//		fmt.Println("[ERROR] Mongo Update image", image.Namespace+"/"+image.RepositoryName+":"+image.TagName, "failed with:", err)
 //		return
 //	}
-//	//fmt.Println("[INFO] Insert image", image.Namespace+"/"+image.RepositoryName+":"+image.Tag, "succeed with ID", ret.UpsertedID)
+//	//fmt.Println("[INFO] Insert image", image.Namespace+"/"+image.RepositoryName+":"+image.TagName, "succeed with ID", ret.UpsertedID)
 //}
 //
 //// InsertImageToImagesCollectionMongo 将image元数据作为文档插入到images collection中
