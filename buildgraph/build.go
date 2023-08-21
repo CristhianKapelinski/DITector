@@ -7,8 +7,8 @@ import (
 func Build(format string) {
 	config(format)
 	defer func() {
-		mongoClient.Disconnect(context.Background())
-		neo4jDriver.Close(context.Background())
+		mymongo.Client.Disconnect(context.Background())
+		myNeo4jDriver.Driver.Close(context.Background())
 	}()
 
 	switch format {

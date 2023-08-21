@@ -52,6 +52,7 @@ func TestFindDownstreamNodesByNodeId(t *testing.T) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	// library/debian:buster-20210621
 	upNodes, err := neo4jDriver.FindDownstreamLayerNodesByNodeId("5fa6942eb5292e363c9c3c4e7546fb8e4f78f7606fdd1ecbabe19dc2e1298c66")
 	if err != nil {
 		log.Fatalln(err)
@@ -62,4 +63,31 @@ func TestFindDownstreamNodesByNodeId(t *testing.T) {
 		fmt.Println(prop)
 	}
 
+}
+
+func TestMyNeo4j_FindUpstreamImagesByNodeId(t *testing.T) {
+	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	upImages, err := neo4jDriver.FindUpstreamImagesByNodeId("8248ea9ed48c3c1f8acc38ae91f46f759cc4d795561dd8e89e405236b9e913f4")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	fmt.Println(upImages)
+}
+
+func TestMyNeo4j_FindDownstreamImagesByNodeId(t *testing.T) {
+	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	// library/debian:buster-20210621
+	downImages, err := neo4jDriver.FindDownstreamImagesByNodeId("5fa6942eb5292e363c9c3c4e7546fb8e4f78f7606fdd1ecbabe19dc2e1298c66")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	fmt.Println(downImages)
 }

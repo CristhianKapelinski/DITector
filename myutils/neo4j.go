@@ -80,7 +80,7 @@ func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(image *ImageSource) {
 		// 插入层及层间的边
 		_, err := session.ExecuteWrite(ctx, addNewLayerFunc(ctx, previousHash, accumulateHash, curLayer))
 		if err != nil {
-			LogDockerCrawlerString(fmt.Sprintf("[ERROR] Insert "+imageName+" layer "+layerID+" to neo4j failed with: %s", err))
+			LogDockerCrawlerString(LogLevel.Error, "Insert", imageName, "layer", layerID, "to neo4j failed with:", err.Error())
 			fmt.Printf("[ERROR] Insert "+imageName+" layer "+layerID+" to neo4j failed with: %s\n", err)
 			break
 		}
@@ -180,6 +180,60 @@ func addImageToLayerFunc(ctx context.Context, imageName, idHash string) neo4j.Ma
 
 		return result.Consume(ctx)
 	}
+}
+
+// FindUpstreamImagesByNodeId 根据hash(1-2-5)发现Layer节点的上游镜像，组织为[]string并返回
+func (neo4jDriver *MyNeo4j) FindUpstreamImagesByNodeId(nodeId string) ([]string, error) {
+	result := make([]string, 0)
+	imageSet := make(map[string]struct{})
+
+	upNodes, err := neo4jDriver.FindUpstreamLayerNodesByNodeId(nodeId)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, upNode := range upNodes.([]*neo4j.Record) {
+		prop := GetNodeProps(upNode)
+		if imagesList, ok := prop["images"]; ok && len(imagesList.([]interface{})) > 0 {
+			for _, imageName := range imagesList.([]interface{}) {
+				strName := imageName.(string)
+				imageSet[strName] = struct{}{}
+			}
+		}
+	}
+
+	for k, _ := range imageSet {
+		result = append(result, k)
+	}
+
+	return result, nil
+}
+
+// FindDownstreamImagesByNodeId 根据hash(1-2-5)发现Layer节点的下游镜像，组织为[]string并返回
+func (neo4jDriver *MyNeo4j) FindDownstreamImagesByNodeId(nodeId string) ([]string, error) {
+	result := make([]string, 0)
+	imageSet := make(map[string]struct{})
+
+	downNodes, err := neo4jDriver.FindDownstreamLayerNodesByNodeId(nodeId)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, downNode := range downNodes.([]*neo4j.Record) {
+		prop := GetNodeProps(downNode)
+		if imagesList, ok := prop["images"]; ok && len(imagesList.([]interface{})) > 0 {
+			for _, imageName := range imagesList.([]interface{}) {
+				strName := imageName.(string)
+				imageSet[strName] = struct{}{}
+			}
+		}
+	}
+
+	for k, _ := range imageSet {
+		result = append(result, k)
+	}
+
+	return result, nil
 }
 
 // GetNodeProps 解析neo4j driver ExecuteRead返回*neo4j.Record节点属性
