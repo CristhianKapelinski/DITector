@@ -54,7 +54,7 @@ func config(format string) {
 
 	// 初始化数据库connector
 	// Mongo
-	mymongo, err = myutils.ConfigMongoClient()
+	myMongo, err = myutils.ConfigMongoClient(false)
 	if err != nil {
 		log.Fatalln("[ERROR] connect to and config MongoDB failed with err: ", err)
 	}
@@ -108,7 +108,7 @@ func config(format string) {
 	case "count":
 		// 统计数据库信息并打印
 		fmt.Println("[+] get statistics of MongoDB and Neo4j")
-		statistics, err := mymongo.CountDocumentsFromMongo()
+		statistics, err := myMongo.CountDocumentsFromMongo()
 		if err != nil {
 			fmt.Println("[-] get document statistics failed with err:", err)
 		} else {
@@ -120,7 +120,7 @@ func config(format string) {
 		}
 	case "clear":
 		// 删除数据库中的数据
-		mymongo.DropCollectionsFromMongo()
+		myMongo.DropCollectionsFromMongo()
 		myNeo4jDriver.DropNodesAndRelationshipsFromNeo4j()
 		fmt.Println("[-] clean data from MongoDB and Neo4j")
 		myutils.LogDockerCrawlerString("[WARN] Clean Database Mongo and Neo4j")

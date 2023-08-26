@@ -39,7 +39,7 @@ func StartFromJSON() {
 
 func StoreRepositoryScheduler() {
 	for repo := range chanRepository {
-		err := mymongo.InsertRepositoryToMongo(repo)
+		err := myMongo.InsertRepositoryToMongo(repo)
 		if err != nil {
 			if mongo.IsDuplicateKeyError(err) {
 				//fmt.Println("[WARN] Mongo Duplicate when inserting repository", repo.Namespace, repo.RepositoryName, ", repository already exists")
@@ -53,7 +53,7 @@ func StoreRepositoryScheduler() {
 
 func StoreTagScheduler() {
 	for tag := range chanTag {
-		err := mymongo.InsertTagToMongo(tag)
+		err := myMongo.InsertTagToMongo(tag)
 		if err != nil {
 			myutils.LogDockerCrawlerString("[ERROR] Mongo insert tag", tag.Namespace+"/"+tag.RepositoryName+"/"+tag.Name, "failed with err:", err.Error())
 		}
@@ -63,7 +63,7 @@ func StoreTagScheduler() {
 
 func StoreImageScheduler() {
 	for image := range chanImage {
-		err := mymongo.InsertImageToMongo(image)
+		err := myMongo.InsertImageToMongo(image)
 		if err != nil {
 			if mongo.IsDuplicateKeyError(err) {
 				//fmt.Println("[WARN] Mongo Duplicate when inserting repository", repo.Namespace, repo.RepositoryName, ", repository already exists")

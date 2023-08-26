@@ -7,7 +7,7 @@ import (
 func Build(format string) {
 	config(format)
 	defer func() {
-		mymongo.Client.Disconnect(context.Background())
+		myMongo.Client.Disconnect(context.Background())
 		myNeo4jDriver.Driver.Close(context.Background())
 	}()
 

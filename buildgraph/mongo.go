@@ -6,7 +6,7 @@ import (
 
 // mongo.go 用于操作mongodb
 
-var mymongo *myutils.MyMongo
+var myMongo *myutils.MyMongo
 
 // --------------------------------------------------------------------
 // Deprecated: 已迁移myutils/mongo.go中实现
