@@ -84,15 +84,15 @@ func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
 	return mymongo, nil
 }
 
-// InsertRepositoryToMongo 利用Insert将Repository作为文档存储到Mongo中
-func (mymongo *MyMongo) InsertRepositoryToMongo(repo *Repository) error {
+// InsertRepository 利用Insert将Repository作为文档存储到Mongo中
+func (mymongo *MyMongo) InsertRepository(repo *Repository) error {
 	repo.Tags = map[string]Tag{}
 	_, err := mymongo.RepositoriesCollection.InsertOne(context.Background(), repo)
 	return err
 }
 
-// InsertTagToMongo 利用Update将TagSource添加到Mongo中存储的对应的repository的tags中
-func (mymongo *MyMongo) InsertTagToMongo(tag *TagSource) error {
+// InsertTag 利用Update将TagSource添加到Mongo中存储的对应的repository的tags中
+func (mymongo *MyMongo) InsertTag(tag *TagSource) error {
 	var t = Tag{
 		LastUpdated:         tag.LastUpdated,
 		LastUpdaterUsername: tag.LastUpdaterUsername,
@@ -115,17 +115,17 @@ func (mymongo *MyMongo) InsertTagToMongo(tag *TagSource) error {
 	return err
 }
 
-// InsertImageToMongo 将image存储到Mongo中
-func (mymongo *MyMongo) InsertImageToMongo(image *ImageSource) error {
+// InsertImage 将image存储到Mongo中
+func (mymongo *MyMongo) InsertImage(image *ImageSource) error {
 	// 为tag添加不同架构下的镜像digest
-	err := mymongo.AddImageToRepositoryMongo(image)
+	err := mymongo.AddImageToRepositoriesCollection(image)
 	// 将特定镜像的元数据单独存放到images集合
 	err = mymongo.InsertImageToImagesCollection(image)
 	return err
 }
 
-// AddImageToRepositoryMongo 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
-func (mymongo *MyMongo) AddImageToRepositoryMongo(image *ImageSource) error {
+// AddImageToRepositoriesCollection 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
+func (mymongo *MyMongo) AddImageToRepositoriesCollection(image *ImageSource) error {
 	// Mongo文档的键中不能包含"."，所以将image.Tag中的"."替换为"$"
 	tagKey := strings.Replace(image.TagName, ".", "$", -1)
 	filter := bson.M{
@@ -155,8 +155,8 @@ func (mymongo *MyMongo) InsertImageToImagesCollection(image *ImageSource) error 
 	return err
 }
 
-// CountDocumentsFromMongo 统计已经存入的文档数量（repository数量）
-func (mymongo *MyMongo) CountDocumentsFromMongo() (map[string]int64, error) {
+// GetDocumentsCountFromMongo 统计已经存入的文档数量（repository数量）
+func (mymongo *MyMongo) GetDocumentsCountFromMongo() (map[string]int64, error) {
 	res := make(map[string]int64)
 	filter := bson.M{}
 
@@ -177,8 +177,8 @@ func (mymongo *MyMongo) CountDocumentsFromMongo() (map[string]int64, error) {
 	return res, nil
 }
 
-// DropCollectionsFromMongo 将repository collection从mongo删除
-func (mymongo *MyMongo) DropCollectionsFromMongo() error {
+// DropAllDocuments 将repository collection从mongo删除
+func (mymongo *MyMongo) DropAllDocuments() error {
 	mymongo.RepositoriesCollection.Drop(context.TODO())
 	mymongo.ImagesCollection.Drop(context.TODO())
 	return nil

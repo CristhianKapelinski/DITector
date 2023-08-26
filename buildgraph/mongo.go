@@ -11,8 +11,8 @@ var myMongo *myutils.MyMongo
 // --------------------------------------------------------------------
 // Deprecated: 已迁移myutils/mongo.go中实现
 
-//// InsertRepositoryToMongo 利用Insert将Repository作为文档存储到Mongo中
-//func InsertRepositoryToMongo(repo *myutils.RepositoryName) {
+//// InsertRepository 利用Insert将Repository作为文档存储到Mongo中
+//func InsertRepository(repo *myutils.RepositoryName) {
 //	repo.Tags = map[string]myutils.TagName{}
 //	_, err := InsertOne(context.Background(), repo)
 //	if err != nil {
@@ -27,8 +27,8 @@ var myMongo *myutils.MyMongo
 //	//fmt.Println("[INFO] Insert repository", repo.Namespace+"/"+repo.RepositoryName, "succeed with ID", ret.InsertedID)
 //}
 //
-//// InsertTagToMongo 利用Update将TagSource添加到Mongo中存储的对应的repository的tags中
-//func InsertTagToMongo(tag *myutils.TagSource) {
+//// InsertTag 利用Update将TagSource添加到Mongo中存储的对应的repository的tags中
+//func InsertTag(tag *myutils.TagSource) {
 //	var t = myutils.TagName{
 //		LastUpdated:         tag.LastUpdated,
 //		LastUpdaterUsername: tag.LastUpdaterUsername,
@@ -56,16 +56,16 @@ var myMongo *myutils.MyMongo
 //	//fmt.Println("[INFO] Insert tag", tag.Namespace+"/"+tag.RepositoryName+":"+tag.TagName, "succeed with ID", ret.UpsertedID)
 //}
 //
-//// InsertImageToMongo 将image存储到Mongo中
-//func InsertImageToMongo(image *myutils.ImageSource) error {
+//// InsertImage 将image存储到Mongo中
+//func InsertImage(image *myutils.ImageSource) error {
 //	// 为tag添加不同架构下的镜像digest
-//	AddImageToRepositoryMongo(image)
+//	AddImageToRepositoriesCollection(image)
 //	// 将特定镜像的元数据单独存放到images集合
 //	InsertImageToImagesCollectionMongo(image)
 //}
 //
-//// AddImageToRepositoryMongo 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
-//func AddImageToRepositoryMongo(image *myutils.ImageSource) {
+//// AddImageToRepositoriesCollection 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
+//func AddImageToRepositoriesCollection(image *myutils.ImageSource) {
 //	// Mongo文档的键中不能包含"."，所以将image.Tag中的"."替换为"$"
 //	tagKey := strings.Replace(image.TagName, ".", "$", -1)
 //	filter := bson.M{
@@ -109,8 +109,8 @@ var myMongo *myutils.MyMongo
 //	//fmt.Println("[INFO] Insert image", i.Digest, "succeed with ID", ret.UpsertedID)
 //}
 //
-//// CountDocumentsFromMongo 统计已经存入的文档数量（repository数量）
-//func CountDocumentsFromMongo() (map[string]int64, error) {
+//// GetDocumentsCountFromMongo 统计已经存入的文档数量（repository数量）
+//func GetDocumentsCountFromMongo() (map[string]int64, error) {
 //	res := make(map[string]int64)
 //	filter := bson.M{}
 //
@@ -133,8 +133,8 @@ var myMongo *myutils.MyMongo
 //	return res, nil
 //}
 //
-//// DropCollectionsFromMongo 将repository collection从mongo删除
-//func DropCollectionsFromMongo() error {
+//// DropAllDocuments 将repository collection从mongo删除
+//func DropAllDocuments() error {
 //	mongoRepositoriesCollection.Drop(context.TODO())
 //	mongoImagesCollection.Drop(context.TODO())
 //	LogDockerCrawlerString("[WARN] drop collections: repository, images from MongoDB")

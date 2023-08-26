@@ -10,7 +10,9 @@ secret.json
 test.json
 *.log
 
+# ==========================
 # used for frontend project
+# ==========================
 .vite-ssg-temp
 
 node_modules
@@ -23,3 +25,8 @@ dist-ssr
 yarn.lock
 package-lock.json
 pnpm-lock.yaml
+
+# ==========================
+# used for scripts
+# ==========================
+#scripts

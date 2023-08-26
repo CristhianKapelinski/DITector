@@ -108,7 +108,7 @@ func config(format string) {
 	case "count":
 		// 统计数据库信息并打印
 		fmt.Println("[+] get statistics of MongoDB and Neo4j")
-		statistics, err := myMongo.CountDocumentsFromMongo()
+		statistics, err := myMongo.GetDocumentsCountFromMongo()
 		if err != nil {
 			fmt.Println("[-] get document statistics failed with err:", err)
 		} else {
@@ -120,7 +120,7 @@ func config(format string) {
 		}
 	case "clear":
 		// 删除数据库中的数据
-		myMongo.DropCollectionsFromMongo()
+		myMongo.DropAllDocuments()
 		myNeo4jDriver.DropNodesAndRelationshipsFromNeo4j()
 		fmt.Println("[-] clean data from MongoDB and Neo4j")
 		myutils.LogDockerCrawlerString("[WARN] Clean Database Mongo and Neo4j")

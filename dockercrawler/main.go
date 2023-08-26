@@ -5,6 +5,7 @@ import (
 	"crawler"
 	"flag"
 	"os"
+	"scripts"
 	"server"
 )
 
@@ -16,6 +17,7 @@ func main() {
 		buildGraph  bool   // 是否要建信息库
 		format      string // 爬虫存储格式/信息库从什么格式中取内容，json、mysql
 		startServer bool   // 启动前端服务器
+		execScript  bool   // 执行特制脚本
 	)
 
 	flag.BoolVar(&crawl, "crawl", false, "crawl images metadata if not nil")
@@ -24,6 +26,7 @@ func main() {
 	flag.BoolVar(&buildGraph, "build-graph", false, "true for building graph based on crawler results")
 	flag.StringVar(&format, "format", "json", "format for crawling or building graph, e.g. json, mysql, clear")
 	flag.BoolVar(&startServer, "start-server", false, "true for building graph based on crawler results")
+	flag.BoolVar(&execScript, "exec_script", false, "true for specific script execution")
 	flag.Parse()
 
 	if crawl {
@@ -35,6 +38,8 @@ func main() {
 	} else if startServer {
 		// 10.10.21.122:23434
 		server.StartServer()
+	} else if execScript {
+		scripts.CalculateRepositoriesDependentWeights()
 	} else {
 		flag.Usage()
 		os.Exit(-1)
