@@ -2,6 +2,7 @@ package myutils
 
 import (
 	"context"
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -14,7 +15,9 @@ type MyMongo struct {
 	ImagesCollection       *mongo.Collection
 }
 
-func ConfigMongoClient() (*MyMongo, error) {
+// ConfigMongoClient returns a mongo client configured
+// for the project
+func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
 	var mymongo = new(MyMongo)
 	var err error
 
@@ -23,41 +26,58 @@ func ConfigMongoClient() (*MyMongo, error) {
 	if err != nil {
 		return mymongo, err
 	}
+
 	err = mymongo.Client.Ping(context.TODO(), nil)
 	if err != nil {
 		return mymongo, err
 	}
 	// mongoRepositoriesCollection 用于存repository的元数据
 	mymongo.RepositoriesCollection = mymongo.Client.Database("dockerhub").Collection("repositories")
-	// 建立唯一索引，namespace-repository防止插入重复数据
-	repoIndexView := mymongo.RepositoriesCollection.Indexes()
-	repoModel := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "namespace", Value: 1},
-			{Key: "name", Value: 1},
-		},
-		Options: options.Index().SetUnique(true),
-	}
-	_, err = repoIndexView.CreateOne(context.Background(), repoModel)
-	if err != nil {
-		if !mongo.IsDuplicateKeyError(err) {
-			return mymongo, err
-		}
-	}
 	// mongoImagesCollection 用于存image的层信息
 	mymongo.ImagesCollection = mymongo.Client.Database("dockerhub").Collection("images")
-	// 建立唯一索引digest，防止插入重复数据
-	imageIndexView := mymongo.ImagesCollection.Indexes()
-	imageModel := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "digest", Value: 1},
-		},
-		Options: options.Index().SetUnique(true),
-	}
-	_, err = imageIndexView.CreateOne(context.Background(), imageModel)
-	if err != nil {
-		if !mongo.IsDuplicateKeyError(err) {
-			return mymongo, err
+
+	if initFlag {
+
+		// 建立唯一索引，namespace-repository防止插入重复数据
+		repoIndexView := mymongo.RepositoriesCollection.Indexes()
+		repoModel := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "namespace", Value: 1},
+				{Key: "name", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		}
+		_, err = repoIndexView.CreateOne(context.Background(), repoModel)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
+		}
+		// 建立唯一索引digest，防止插入重复数据
+		imageIndexView := mymongo.ImagesCollection.Indexes()
+		imageModel := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "digest", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		}
+		_, err = imageIndexView.CreateOne(context.Background(), imageModel)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
+		}
+		// create text index on digest for search
+		imageModel2 := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "digest", Value: "text"},
+			},
+		}
+		_, err = imageIndexView.CreateOne(context.TODO(), imageModel2)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
 		}
 	}
 
@@ -183,6 +203,48 @@ func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*Rep
 		return &Repository{}, err
 	}
 	return repo, err
+}
+
+// GetImagesCountByDigestText calculate total count of documents
+// searched by digest, used for el-table page division
+func (mymongo *MyMongo) GetImagesCountByDigestText(digest string) (int64, error) {
+	filter := bson.D{}
+	if digest != "" {
+		filter = bson.D{
+			{"$text", bson.D{{"$search", digest}}},
+		}
+	}
+
+	return mymongo.ImagesCollection.CountDocuments(context.TODO(), filter)
+}
+
+// FindImagesByText search image in collection mongo.dockerhub.images,
+// now searched by digest (text index)
+func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([]*Image, error) {
+	var res = make([]*Image, 0)
+
+	filter := bson.D{}
+	if search != "" {
+		if !StrAllLetterNumber(search) {
+			return nil, fmt.Errorf("invalid search keywords")
+		}
+		filter = bson.D{
+			{"$text", bson.D{{"$search", search}}},
+		}
+	}
+
+	optLimit := options.Find().SetSkip((page - 1) * pageSize).SetLimit(pageSize)
+
+	cursor, err := mymongo.ImagesCollection.Find(context.TODO(), filter, optLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cursor.All(context.TODO(), &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 // FindImageByDigest 根据Digest寻找mongo.dockerhub.images中存储的Image

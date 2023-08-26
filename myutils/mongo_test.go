@@ -2,6 +2,7 @@ package myutils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"log"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestChangeMongoDocumentField(t *testing.T) {
-	mymongo, _ := ConfigMongoClient()
+	mymongo, _ := ConfigMongoClient(false)
 	filter := bson.M{}
 	update := bson.M{
 		"$rename": bson.M{"repository": "name"},
@@ -21,15 +22,37 @@ func TestChangeMongoDocumentField(t *testing.T) {
 }
 
 func TestConfigMongoClient(t *testing.T) {
-	mymongo, err := ConfigMongoClient()
+	mymongo, err := ConfigMongoClient(false)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	fmt.Println(mymongo.ImagesCollection.Name())
 }
 
+func TestMyMongo_GetImagesCountByDigestText(t *testing.T) {
+	mymongo, _ := ConfigMongoClient(false)
+	cnt, err := mymongo.GetImagesCountByDigestText("")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println(cnt)
+}
+
+func TestMyMongo_FindImagesByDigestText(t *testing.T) {
+	mymongo, _ := ConfigMongoClient(false)
+	results, err := mymongo.FindImagesByText("", 1, 10)
+	if err != nil {
+		log.Fatalln("[ERROR] find images by digest text failed with err:", err)
+	}
+	fmt.Println(len(results))
+	for _, result := range results {
+		res, _ := json.Marshal(result)
+		fmt.Println(string(res))
+	}
+}
+
 func TestFindImageByDigest(t *testing.T) {
-	mymongo, _ := ConfigMongoClient()
+	mymongo, _ := ConfigMongoClient(false)
 	//fmt.Println(mymongo.Client.Database("dockerhub").Collection("images").FindOne(context.TODO(), bson.M{}))
 	tmpImage, err := mymongo.FindImageByDigest("sha256:7209d3b2285c9ca5a28051a5d8658e64e40888154d753bbd8a22eee214132a81")
 	if err != nil {
