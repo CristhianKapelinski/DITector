@@ -26,7 +26,7 @@ func main() {
 	flag.BoolVar(&buildGraph, "build-graph", false, "true for building graph based on crawler results")
 	flag.StringVar(&format, "format", "json", "format for crawling or building graph, e.g. json, mysql, clear")
 	flag.BoolVar(&startServer, "start-server", false, "true for building graph based on crawler results")
-	flag.BoolVar(&execScript, "exec_script", false, "true for specific script execution")
+	flag.BoolVar(&execScript, "exec-script", false, "true for specific script execution")
 	flag.Parse()
 
 	if crawl {

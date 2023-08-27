@@ -1,9 +1,5 @@
 package myutils
 
-import (
-	"time"
-)
-
 // 用于json marshal和unmarshal的接收器模板
 
 type Repository struct {
@@ -29,26 +25,26 @@ type Permissions struct {
 }
 
 type Tag struct {
-	LastUpdated         time.Time `json:"last_updated"`
-	LastUpdaterUsername string    `json:"last_updater_username"`
-	TagLastPulled       time.Time `json:"tag_last_pulled"`
-	TagLastPushed       time.Time `json:"tag_last_pushed"`
-	MediaType           string    `json:"media_type"`
-	ContentType         string    `json:"content_type"`
+	LastUpdated         string `json:"last_updated"`
+	LastUpdaterUsername string `json:"last_updater_username"`
+	TagLastPulled       string `json:"tag_last_pulled"`
+	TagLastPushed       string `json:"tag_last_pushed"`
+	MediaType           string `json:"media_type"`
+	ContentType         string `json:"content_type"`
 	Images              map[string]map[string]string
 }
 
 type Image struct {
-	Architecture string
-	Features     string
-	Variant      string
-	Digest       string
-	Layers       []Layer
-	OS           string
-	Size         int64
-	Status       string
-	LastPulled   string `json:"last_pulled"`
-	LastPushed   string `json:"last_pushed"`
+	Architecture string  `json:"architecture"`
+	Features     string  `json:"features"`
+	Variant      string  `json:"variant"`
+	Digest       string  `json:"digest"`
+	Layers       []Layer `json:"layers"`
+	OS           string  `json:"os"`
+	Size         int64   `json:"size"`
+	Status       string  `json:"status"`
+	LastPulled   string  `json:"last_pulled"`
+	LastPushed   string  `json:"last_pushed"`
 }
 
 //type Image struct {
@@ -80,8 +76,8 @@ type RepositorySource struct {
 	IsAutomated       bool        `json:"is_automated"`
 	StarCount         int         `json:"star_count"`
 	PullCount         int64       `json:"pull_count"`
-	LastUpdated       time.Time   `json:"last_updated"`
-	DateRegistered    time.Time   `json:"date_registered"`
+	LastUpdated       string      `json:"last_updated"`
+	DateRegistered    string      `json:"date_registered"`
 	FullDescription   string      `json:"full_description"`
 	Permissions       Permissions `json:"permissions"`
 	MediaTypes        []string    `json:"media_types"`
@@ -89,22 +85,22 @@ type RepositorySource struct {
 }
 
 type TagSource struct {
-	Namespace           string    `json:"namespace"`
-	RepositoryName      string    `json:"repository"`
-	Creator             int       `json:"creator"`
-	Id                  int       `json:"id"`
-	LastUpdated         time.Time `json:"last_updated"`
-	LastUpdater         int       `json:"last_updater"`
-	LastUpdaterUsername string    `json:"last_updater_username"`
-	Name                string    `json:"name"`
-	FullSize            int64     `json:"full_size"`
-	V2                  bool      `json:"v2"`
-	TagStatus           string    `json:"tag_status"`
-	TagLastPulled       time.Time `json:"tag_last_pulled"`
-	TagLastPushed       time.Time `json:"tag_last_pushed"`
-	MediaType           string    `json:"media_type"`
-	ContentType         string    `json:"content_type"`
-	Digest              string    `json:"digest"`
+	Namespace           string `json:"namespace"`
+	RepositoryName      string `json:"repository"`
+	Creator             int    `json:"creator"`
+	Id                  int    `json:"id"`
+	LastUpdated         string `json:"last_updated"`
+	LastUpdater         int    `json:"last_updater"`
+	LastUpdaterUsername string `json:"last_updater_username"`
+	Name                string `json:"name"`
+	FullSize            int64  `json:"full_size"`
+	V2                  bool   `json:"v2"`
+	TagStatus           string `json:"tag_status"`
+	TagLastPulled       string `json:"tag_last_pulled"`
+	TagLastPushed       string `json:"tag_last_pushed"`
+	MediaType           string `json:"media_type"`
+	ContentType         string `json:"content_type"`
+	Digest              string `json:"digest"`
 }
 
 type ImageSource struct {

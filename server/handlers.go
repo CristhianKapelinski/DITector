@@ -10,7 +10,12 @@ import (
 // search API exported by gin framework
 //
 // URI arguments:
-// search: keyword
+// search: keyword for searching images from MongoDB,
+//
+//	now only searching according to digest
+//
+// page: page of current view
+// page_size: page size of current view
 func handleImageSearch() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		search := c.DefaultQuery("search", "")
@@ -37,6 +42,7 @@ func handleImageSearch() func(c *gin.Context) {
 				"msg": err.Error(),
 			})
 		} else {
+			c.Header("Access-Control-Allow-Origin", "*")
 			c.JSON(http.StatusOK, gin.H{
 				"page":      page,
 				"page_size": pageSize,

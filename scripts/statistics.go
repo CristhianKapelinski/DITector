@@ -47,6 +47,7 @@ func CalculateRepositoriesDependentWeights() {
 		curRepo := new(myutils.Repository)
 		err := cursor.Decode(curRepo)
 		if err != nil {
+			myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
 			continue
 		}
 
@@ -55,6 +56,7 @@ func CalculateRepositoriesDependentWeights() {
 				for _, imageDigest := range arch {
 					imageMeta, err := myMongo.FindImageByDigest(imageDigest)
 					if err != nil {
+						myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
 						continue
 					}
 
@@ -71,16 +73,24 @@ func CalculateRepositoriesDependentWeights() {
 					// calculate upstream and downstream images
 					upImages, err := myNeo4jDriver.FindUpstreamImagesByNodeId(accumulateHash)
 					if err != nil {
+						myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
 						upImages = []string{}
 					}
 					downImages, err := myNeo4jDriver.FindDownstreamImagesByNodeId(accumulateHash)
 					if err != nil {
+						myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
 						downImages = []string{}
 					}
 
 					// write results to result file
-					upImagesStr, _ := json.Marshal(upImages)
-					downImagesStr, _ := json.Marshal(downImages)
+					upImagesStr, err := json.Marshal(upImages)
+					if err != nil {
+						myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
+					}
+					downImagesStr, err := json.Marshal(downImages)
+					if err != nil {
+						myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
+					}
 					resultFile.WriteString(curRepo.Namespace + "," + curRepo.Name + "," + tagName + "," + imageDigest +
 						"," + strconv.Itoa(len(upImages)) + "," + strconv.Itoa(len(downImages)) + "," +
 						string(upImagesStr) + "," + string(downImagesStr) + "\n")

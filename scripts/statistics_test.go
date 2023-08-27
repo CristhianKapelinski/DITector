@@ -90,3 +90,23 @@ func TestCalculateRepositoriesDependentWeights(t *testing.T) {
 		}
 	}
 }
+
+func TestCountTraverseRepositories(t *testing.T) {
+	myMongo, err := myutils.ConfigMongoClient(false)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	cnt := 0
+
+	// traverse all namespace/repository:tag to find amd64 image digest
+	cursor, err := myMongo.RepositoriesCollection.Find(context.TODO(), bson.D{})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	for cursor.Next(context.TODO()) {
+		cnt++
+		if cnt%200 == 0 {
+			fmt.Println(cnt)
+		}
+	}
+}
