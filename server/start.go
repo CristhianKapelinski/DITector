@@ -17,6 +17,7 @@ func StartServer() {
 	})
 
 	router.GET("/images", handleImageSearch())
+	router.GET("/repositories", handleRepositoriesSearch())
 
 	router.Run(":23434")
 }

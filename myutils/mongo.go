@@ -53,6 +53,54 @@ func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
 				return mymongo, err
 			}
 		}
+		// create index on namespace
+		repoModel2 := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "namespace", Value: 1},
+			},
+			Options: options.Index().SetUnique(false),
+		}
+		_, err = repoIndexView.CreateOne(context.Background(), repoModel2)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
+		}
+		// create index on name
+		repoModel3 := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "name", Value: 1},
+			},
+			Options: options.Index().SetUnique(false),
+		}
+		_, err = repoIndexView.CreateOne(context.Background(), repoModel3)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
+		}
+
+		// create text index on namespace, name, description, full_description with weights
+		repoModelText := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "namespace", Value: "text"},
+				{Key: "name", Value: "text"},
+				{Key: "description", Value: "text"},
+				{Key: "full_description", Value: "text"},
+			},
+			Options: options.Index().SetWeights(bson.D{
+				{"namespace", 12},
+				{"name", 18},
+				{"description", 6},
+				{"full_description", 1},
+			}),
+		}
+		_, err = repoIndexView.CreateOne(context.Background(), repoModelText)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
+		}
 		// 建立唯一索引digest，防止插入重复数据
 		imageIndexView := mymongo.ImagesCollection.Indexes()
 		imageModel := mongo.IndexModel{
@@ -68,12 +116,12 @@ func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
 			}
 		}
 		// create text index on digest for search
-		imageModel2 := mongo.IndexModel{
+		imageModelText := mongo.IndexModel{
 			Keys: bson.D{
 				{Key: "digest", Value: "text"},
 			},
 		}
-		_, err = imageIndexView.CreateOne(context.TODO(), imageModel2)
+		_, err = imageIndexView.CreateOne(context.TODO(), imageModelText)
 		if err != nil {
 			if !mongo.IsDuplicateKeyError(err) {
 				return mymongo, err
@@ -135,7 +183,7 @@ func (mymongo *MyMongo) AddImageToRepositoriesCollection(image *ImageSource) err
 	arch := image.Image.Architecture
 	variant := image.Image.Variant
 	// Mongo文档字典类型的键不能为空，将arch, variant为""的修改为"null"
-	if arch == " " {
+	if arch == "" {
 		arch = "null"
 	}
 	if variant == "" {
@@ -184,6 +232,49 @@ func (mymongo *MyMongo) DropAllDocuments() error {
 	return nil
 }
 
+// GetRepositoriesCountByText calculate total count of documents
+// in repositories collection searched by keyword, used for el-table page division
+func (mymongo *MyMongo) GetRepositoriesCountByText(keyword string) (int64, error) {
+	filter := bson.D{}
+	if keyword != "" {
+		filter = bson.D{
+			{"$text", bson.D{{"$search", keyword}}},
+		}
+	}
+
+	return mymongo.RepositoriesCollection.CountDocuments(context.TODO(), filter)
+}
+
+// FindRepositoriesByText search repository in collection mongo.dockerhub.repositories,
+// now searched by namespace, name, description, full_description (text index)
+func (mymongo *MyMongo) FindRepositoriesByText(search string, page, pageSize int64) ([]*Repository, error) {
+	var res = make([]*Repository, 0)
+
+	filter := bson.D{}
+	if search != "" {
+		if !StrLegalForMongo(search) {
+			return nil, fmt.Errorf("invalid search parameters")
+		}
+		filter = bson.D{
+			{"$text", bson.D{{"$search", search}}},
+		}
+	}
+
+	optLimit := options.Find().SetSkip((page - 1) * pageSize).SetLimit(pageSize)
+
+	cursor, err := mymongo.RepositoriesCollection.Find(context.TODO(), filter, optLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	if err = cursor.All(context.TODO(), &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 // FindRepositoryByName 根据Namespace、Repository寻找mongo.dockerhub.repository中存储的Repository
 func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*Repository, error) {
 	var repo = new(Repository)
@@ -205,13 +296,13 @@ func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*Rep
 	return repo, err
 }
 
-// GetImagesCountByDigestText calculate total count of documents
-// searched by digest, used for el-table page division
-func (mymongo *MyMongo) GetImagesCountByDigestText(digest string) (int64, error) {
+// GetImagesCountByText calculate total count of documents
+// in images collection searched by keyword (digest), used for el-table page division
+func (mymongo *MyMongo) GetImagesCountByText(keyword string) (int64, error) {
 	filter := bson.D{}
-	if digest != "" {
+	if keyword != "" {
 		filter = bson.D{
-			{"$text", bson.D{{"$search", digest}}},
+			{"$text", bson.D{{"$search", keyword}}},
 		}
 	}
 
@@ -225,7 +316,7 @@ func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([
 
 	filter := bson.D{}
 	if search != "" {
-		if !StrAllLetterNumber(search) {
+		if !StrLegalForMongo(search) {
 			return nil, fmt.Errorf("invalid search keywords")
 		}
 		filter = bson.D{
@@ -239,6 +330,7 @@ func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close(context.TODO())
 
 	if err = cursor.All(context.TODO(), &res); err != nil {
 		return nil, err

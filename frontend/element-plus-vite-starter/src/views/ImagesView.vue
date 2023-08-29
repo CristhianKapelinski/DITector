@@ -2,7 +2,7 @@
     <div class="input-with-search">
         <el-input id="input-1" v-model="searchKeyword" placeholder="image digest" clearable>
             <template #append>
-                <el-button id="search-1" type="primary" @click="handleSearch">Search</el-button>
+                <el-button id="search-1" type="primary" @click="handleSearchImages">Search</el-button>
             </template>
         </el-input>
     </div>
@@ -33,7 +33,7 @@
                 </div>
             </template>
         </el-table-column>
-        <el-table-column fixed prop="digest" label="Digest" width="650" />
+        <el-table-column fixed prop="digest" label="Digest" show-overflow-tooltip width="650" />
         <el-table-column prop="architecture" label="Architecture" align="center" width="120" />
         <el-table-column prop="features" label="Features" align="center" width="100" />
         <el-table-column prop="variant" label="Variant" align="center" width="100" />
@@ -59,10 +59,10 @@ const pageSize = ref(20);
 const searchKeyword = ref('');
 const imagesData = ref([]);
 
-function handleSearch() {
+function handleSearchImages() {
   console.log("button clicked");
+  // reset to page 1 before every search
   page.value = 1;
-  // reset to page 1 after every search
   getImagesData(searchKeyword.value, page.value, pageSize.value);
 }
 
@@ -74,8 +74,7 @@ function getImagesData(search, page, pageSize) {
           page: page,
           page_size: pageSize
       }
-  })
-  .then(response => {
+  }).then(response => {
       imagesData.value = response.data['results'];
       // console.log(imagesData.value);
       // console.log(response.data);

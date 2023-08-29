@@ -12,8 +12,8 @@ func CalSha256(s string) string {
 	return hex.EncodeToString(tmpHash[:])
 }
 
-// StrAllLetterNumber check whether string s is
-func StrAllLetterNumber(s string) bool {
+// StrLegalForMongo check whether string s is
+func StrLegalForMongo(s string) bool {
 	match, _ := regexp.MatchString("^[a-zA-Z0-9:]*$", s)
 	return match
 }

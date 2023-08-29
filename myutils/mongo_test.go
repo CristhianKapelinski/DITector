@@ -22,23 +22,36 @@ func TestChangeMongoDocumentField(t *testing.T) {
 }
 
 func TestConfigMongoClient(t *testing.T) {
-	mymongo, err := ConfigMongoClient(false)
+	mymongo, err := ConfigMongoClient(true)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	fmt.Println(mymongo.ImagesCollection.Name())
 }
 
-func TestMyMongo_GetImagesCountByDigestText(t *testing.T) {
+func TestMyMongo_FindRepositoriesByText(t *testing.T) {
 	mymongo, _ := ConfigMongoClient(false)
-	cnt, err := mymongo.GetImagesCountByDigestText("")
+	results, err := mymongo.FindRepositoriesByText("library/mongo", 1, 10)
+	if err != nil {
+		log.Fatalln("[ERROR] find repositories by text failed with err:", err)
+	}
+	fmt.Println(len(results))
+	for _, result := range results {
+		res, _ := json.Marshal(result)
+		fmt.Println(string(res))
+	}
+}
+
+func TestMyMongo_GetImagesCountByText(t *testing.T) {
+	mymongo, _ := ConfigMongoClient(false)
+	cnt, err := mymongo.GetImagesCountByText("")
 	if err != nil {
 		log.Fatalln(err)
 	}
 	fmt.Println(cnt)
 }
 
-func TestMyMongo_FindImagesByDigestText(t *testing.T) {
+func TestMyMongo_FindImagesByText(t *testing.T) {
 	mymongo, _ := ConfigMongoClient(false)
 	results, err := mymongo.FindImagesByText("", 1, 10)
 	if err != nil {
