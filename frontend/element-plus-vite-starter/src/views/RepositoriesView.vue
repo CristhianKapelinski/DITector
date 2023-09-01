@@ -66,6 +66,18 @@
         <el-table-column prop="last_updated" label="Last Updated" align="center" width="240" />
         <el-table-column prop="full_description" label="Full Description" show-overflow-tooltip width="600" />
     </el-table>
+    <div class="pagination-bottom">
+        <el-pagination
+            :currentPage="currentPage"
+            :page-sizes="[10, 15, 20]"
+            :page-size="pageSize"
+            layout=" prev, pager, next, jumper, sizes, total, "
+            :total="totalPages"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+            align="center"
+        />
+    </div>
 </template>
 
 <script lang="ts" setup>
@@ -76,16 +88,18 @@ const tableRowClassName = ({row, rowIndex}) => {
     row.colId = rowIndex + 1;
 };
 
-const page = ref(1);
+const currentPage = ref(1);
 const pageSize = ref(20);
+const totalCnt = ref(0);    // total count of documents in response
+const totalPages = ref(0);  // total count of pages (totalCnt/pageSize + 1)
 const searchKeyword = ref('');
 const repositoriesData = ref([]);
 
 function handleSearchRepositories() {
-    console.log('search repositories');
+    // console.log('search repositories');
     // reset to page 1 before every search
-    page.value = 1;
-    getRepositoriesData(searchKeyword.value, page.value, pageSize.value);
+    currentPage.value = 1;
+    fetchRepositoriesData();
 }
 
 function getRepositoriesData(search, page, pageSize) {
@@ -106,12 +120,48 @@ function getRepositoriesData(search, page, pageSize) {
     });
 }
 
-getRepositoriesData(searchKeyword.value, page.value, pageSize.value);
+function handleCurrentChange(val: number) {
+    currentPage.value = val;
+    console.log(currentPage.value);
+    fetchRepositoriesData();
+}
+
+function handleSizeChange(val: number) {
+    currentPage.value = 1;
+    // change pageSize
+    pageSize.value = val;
+    // recalculate totalPages
+    recalculateTotalPages();
+    console.log(pageSize.value);
+    fetchRepositoriesData();
+}
+
+// recalculate TotalPages after totalCnt or pageSize changed
+function recalculateTotalPages() {
+    if (totalCnt.value === 0) {
+        totalPages.value = 0;
+    } else {
+        totalPages.value = Math.floor(totalCnt.value / pageSize.value + 1);
+    }
+}
+
+// fetch repositories data from backend with searchKeyword, currentPage and pageSize
+function fetchRepositoriesData() {
+    getRepositoriesData(searchKeyword.value, currentPage.value, pageSize.value);
+}
+
+fetchRepositoriesData();
 </script>
 
 <style scoped>
 .input-with-search {
     float: right;
     width: 45%;
+}
+
+.pagination-bottom {
+    margin-top: 20;
+    display: flex;
+    justify-content: center;
 }
 </style>

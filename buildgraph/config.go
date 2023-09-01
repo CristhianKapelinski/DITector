@@ -108,7 +108,7 @@ func config(format string) {
 	case "count":
 		// 统计数据库信息并打印
 		fmt.Println("[+] get statistics of MongoDB and Neo4j")
-		statistics, err := myMongo.GetDocumentsCountFromMongo()
+		statistics, err := myMongo.GetAllDocumentsCount()
 		if err != nil {
 			fmt.Println("[-] get document statistics failed with err:", err)
 		} else {

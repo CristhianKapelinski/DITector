@@ -10,9 +10,12 @@ type Rules struct {
 }
 
 type ConfigSecret struct {
-	Name  string `yaml:"name"`
-	Part  string `yaml:"part"`
-	Regex string `yaml:"regex"`
+	Name          string  `yaml:"name"`
+	Part          string  `yaml:"part"`
+	Regex         string  `yaml:"regex"`
+	RegexType     string  `yaml:"regex_type,omitempty"`
+	Severity      string  `yaml:"severity"`
+	SeverityScore float64 `yaml:"severity_score"`
 }
 
 func (rs *Rules) LoadRulesFromYAMLFile(path string) error {

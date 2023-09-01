@@ -18,6 +18,8 @@ func main() {
 		format      string // 爬虫存储格式/信息库从什么格式中取内容，json、mysql
 		startServer bool   // 启动前端服务器
 		execScript  bool   // 执行特制脚本
+		rulePath    string // filepath of rules
+
 	)
 
 	flag.BoolVar(&crawl, "crawl", false, "crawl images metadata if not nil")
@@ -27,6 +29,7 @@ func main() {
 	flag.StringVar(&format, "format", "json", "format for crawling or building graph, e.g. json, mysql, clear")
 	flag.BoolVar(&startServer, "start-server", false, "true for building graph based on crawler results")
 	flag.BoolVar(&execScript, "exec-script", false, "true for specific script execution")
+	flag.StringVar(&rulePath, "rule-path", "rules.yaml", "yaml file path storing rules")
 	flag.Parse()
 
 	if crawl {

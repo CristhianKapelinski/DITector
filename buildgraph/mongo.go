@@ -109,8 +109,8 @@ var myMongo *myutils.MyMongo
 //	//fmt.Println("[INFO] Insert image", i.Digest, "succeed with ID", ret.UpsertedID)
 //}
 //
-//// GetDocumentsCountFromMongo 统计已经存入的文档数量（repository数量）
-//func GetDocumentsCountFromMongo() (map[string]int64, error) {
+//// GetAllDocumentsCount 统计已经存入的文档数量（repository数量）
+//func GetAllDocumentsCount() (map[string]int64, error) {
 //	res := make(map[string]int64)
 //	filter := bson.M{}
 //

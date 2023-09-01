@@ -13,6 +13,7 @@ type MyMongo struct {
 	Client                 *mongo.Client
 	RepositoriesCollection *mongo.Collection
 	ImagesCollection       *mongo.Collection
+	ResultsCollection      *mongo.Collection
 }
 
 // ConfigMongoClient returns a mongo client configured
@@ -35,6 +36,8 @@ func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
 	mymongo.RepositoriesCollection = mymongo.Client.Database("dockerhub").Collection("repositories")
 	// mongoImagesCollection 用于存image的层信息
 	mymongo.ImagesCollection = mymongo.Client.Database("dockerhub").Collection("images")
+	// mongoResultsCollection is used to store analysis results of images, indexed by digest
+	mymongo.ResultsCollection = mymongo.Client.Database("dockerhub").Collection("results")
 
 	if initFlag {
 
@@ -127,6 +130,41 @@ func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
 				return mymongo, err
 			}
 		}
+		// 建立唯一索引digest，防止插入重复数据
+		resultsIndexView := mymongo.ResultsCollection.Indexes()
+		resultsModel := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "digest", Value: 1},
+			},
+			Options: options.Index().SetUnique(true),
+		}
+		_, err = resultsIndexView.CreateOne(context.Background(), resultsModel)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
+		}
+		// create text index on digest for search
+		resultsModelText := mongo.IndexModel{
+			Keys: bson.D{
+				{Key: "results.name", Value: "text"},
+				{Key: "results.type", Value: "text"},
+				{Key: "results.path", Value: "text"},
+				{Key: "results.match", Value: "text"},
+			},
+			Options: options.Index().SetWeights(bson.D{
+				{Key: "results.name", Value: 2},
+				{Key: "results.type", Value: 2},
+				{Key: "results.path", Value: 1},
+				{Key: "results.match", Value: 1},
+			}),
+		}
+		_, err = resultsIndexView.CreateOne(context.TODO(), resultsModelText)
+		if err != nil {
+			if !mongo.IsDuplicateKeyError(err) {
+				return mymongo, err
+			}
+		}
 	}
 
 	return mymongo, nil
@@ -203,8 +241,14 @@ func (mymongo *MyMongo) InsertImageToImagesCollection(image *ImageSource) error 
 	return err
 }
 
-// GetDocumentsCountFromMongo 统计已经存入的文档数量（repository数量）
-func (mymongo *MyMongo) GetDocumentsCountFromMongo() (map[string]int64, error) {
+// InsertResult insert result to collection results
+func (mymongo *MyMongo) InsertResult(image *ImageResult) error {
+	_, err := mymongo.ResultsCollection.InsertOne(context.TODO(), image)
+	return err
+}
+
+// GetAllDocumentsCount 统计已经存入的文档数量（repository数量）
+func (mymongo *MyMongo) GetAllDocumentsCount() (map[string]int64, error) {
 	res := make(map[string]int64)
 	filter := bson.M{}
 

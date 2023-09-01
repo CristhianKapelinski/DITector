@@ -45,15 +45,18 @@
         <el-table-column prop="last_pulled" label="Last Pulled" align="center" width="240" />
         <el-table-column prop="last_pushed" label="Last Pushed" align="center" width="240" />
     </el-table>
-    <el-pagination
-            :currentPage="currentPage"
-            :page-sizes="[10, 20, 50]"
-            :page-size="pageSize"
-            layout=" prev, pager, next, jumper, sizes, total, "
-            :total="totalPages"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-    />
+    <div class="pagination-bottom">
+      <el-pagination
+              :currentPage="currentPage"
+              :page-sizes="[10, 20, 50]"
+              :page-size="pageSize"
+              layout=" prev, pager, next, jumper, sizes, total, "
+              :total="totalPages"
+              @size-change="handleSizeChange"
+              @current-change="handleCurrentChange"
+              align="center"
+      />
+    </div>
 </template>
 
 <script lang="ts" setup>
@@ -73,7 +76,7 @@ const searchKeyword = ref('');
 const imagesData = ref([]);
 
 function handleSearchImages() {
-  console.log("button clicked");
+  // console.log("button clicked");
   // reset to page 1 before every search
   currentPage.value = 1;
   fetchImagesData();
@@ -106,6 +109,7 @@ function handleCurrentChange(val: number) {
 }
 
 function handleSizeChange(val: number) {
+    currentPage.value = 1;
     // change pageSize
     pageSize.value = val;
     // recalculate totalPages
@@ -138,8 +142,10 @@ fetchImagesData();
     width: 45%;
 }
 
-#search-1 {
-
+.pagination-bottom {
+    margin-top: 20;
+    display: flex;
+    justify-content: center;
 }
 
 </style>
