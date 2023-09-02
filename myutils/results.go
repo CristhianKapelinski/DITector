@@ -2,9 +2,9 @@ package myutils
 
 // ImageResult is used to store analysis result
 type ImageResult struct {
-	Digest       string   `json:"digest"`
-	LastAnalyzed string   `json:"last_analyzed"`
-	Results      []Result `json:"results"`
+	Digest       string    `json:"digest"`
+	LastAnalyzed string    `json:"last_analyzed"`
+	Results      []*Result `json:"results"`
 }
 
 type Result struct {

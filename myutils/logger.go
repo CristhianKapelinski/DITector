@@ -26,9 +26,13 @@ var LogLevel = struct {
 	"[DEBUG]",
 }
 
+func GetLocalNowTime() string {
+	return time.Now().Add(8 * time.Hour).Format(time.DateTime)
+}
+
 func LogDockerCrawlerString(s ...string) {
 	lockFileLogger.Lock()
 	defer lockFileLogger.Unlock()
 	tmp := strings.Join(s, " ")
-	fileLogger.WriteString(time.Now().Add(8*time.Hour).Format(time.DateTime) + " " + tmp + "\n")
+	fileLogger.WriteString(GetLocalNowTime() + " " + tmp + "\n")
 }

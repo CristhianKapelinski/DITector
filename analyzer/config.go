@@ -1,27 +1,21 @@
 package analyzer
 
-import (
-	"fmt"
-	"log"
-	"myutils"
-)
-
-func config(initFlag bool, ruleFilePath string) {
-	err := rules.LoadRulesFromYAMLFile(ruleFilePath)
+func (imageAnalyzer *ImageAnalyzer) config(initFlag bool, ruleFilePath string) error {
+	err := imageAnalyzer.rules.LoadRulesFromYAMLFile(ruleFilePath)
 	if err != nil {
-		myutils.LogDockerCrawlerString(myutils.LogLevel.Error, "load rules from yaml file failed with:", err.Error())
-		log.Fatalln("[ERROR] load rules from yaml file failed with:", err)
+		return err
 	}
+	return nil
+}
 
-	myMongo, err = myutils.ConfigMongoClient(initFlag)
-	if err != nil {
-		log.Fatalln("[ERROR] connect to and config MongoDB failed with err: ", err)
-	}
-	fmt.Println("[+] Connect to MongoDB succeed")
+func NewImageAnalyzer(ruleFilePath string) (*ImageAnalyzer, error) {
+	imageAnalyzer := new(ImageAnalyzer)
 
-	myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	err := imageAnalyzer.config(false, ruleFilePath)
 	if err != nil {
-		log.Fatalln("[ERROR] Connect to neo4j failed with:", err)
+		return nil, err
 	}
-	fmt.Println("[+] Connect to Neo4j succeed")
+	imageAnalyzer.rules.CompileSecretsRegex()
+
+	return imageAnalyzer, nil
 }

@@ -119,7 +119,7 @@ secrets:
 #    regex: 'hawk\.[0-9A-Za-z\-_]{20}\.[0-9A-Za-z\-_]{20}'
 #    regextype: 'large'
   - part: 'contents'
-    name: 'Contains a private key'
+    name: 'Contains Private Key'
     regex: '-----BEGIN (?:EC|RSA|DSA|OPENSSH|PGP) PRIVATE KEY'
 #  - part: 'contents'
 #    name: 'WP-Config'

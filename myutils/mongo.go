@@ -401,3 +401,21 @@ func (mymongo *MyMongo) FindImageByDigest(digest string) (*Image, error) {
 
 	return img, nil
 }
+
+func (mymongo *MyMongo) FindResultByDigest(digest string) (*ImageResult, error) {
+	var imgres = new(ImageResult)
+
+	// 传入条件
+	filter := bson.M{}
+	if digest != "" {
+		filter["digest"] = digest
+	}
+
+	// 查询并返回结果
+	err := mymongo.ImagesCollection.FindOne(context.Background(), filter).Decode(imgres)
+	if err != nil {
+		return nil, err
+	}
+
+	return imgres, nil
+}

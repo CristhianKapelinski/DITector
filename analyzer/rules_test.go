@@ -14,3 +14,13 @@ func TestRules_LoadRulesFromYAMLFile(t *testing.T) {
 	}
 	fmt.Println(rs.Secrets)
 }
+
+func TestRules_CompileSecretsRegex(t *testing.T) {
+	rs := Rules{}
+	err := rs.LoadRulesFromYAMLFile("../rules.yaml")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	rs.CompileSecretsRegex()
+	fmt.Println(rs.Secrets)
+}

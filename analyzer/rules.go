@@ -3,17 +3,19 @@ package analyzer
 import (
 	"gopkg.in/yaml.v3"
 	"os"
+	"regexp"
 )
 
 type Rules struct {
-	Secrets []ConfigSecret `yaml:"secrets"`
+	Secrets []*ConfigSecret `yaml:"secrets"`
 }
 
 type ConfigSecret struct {
-	Name          string  `yaml:"name"`
-	Part          string  `yaml:"part"`
-	Regex         string  `yaml:"regex"`
-	RegexType     string  `yaml:"regex_type,omitempty"`
+	Name          string `yaml:"name"`
+	Part          string `yaml:"part"`
+	Regex         string `yaml:"regex"`
+	RegexType     string `yaml:"regex_type,omitempty"`
+	CompiledRegex *regexp.Regexp
 	Severity      string  `yaml:"severity"`
 	SeverityScore float64 `yaml:"severity_score"`
 }
@@ -29,4 +31,10 @@ func (rs *Rules) LoadRulesFromYAMLFile(path string) error {
 	}
 
 	return nil
+}
+
+func (rs *Rules) CompileSecretsRegex() {
+	for _, secret := range rs.Secrets {
+		secret.CompiledRegex, _ = regexp.Compile(secret.Regex)
+	}
 }

@@ -82,3 +82,11 @@ func TestFindImageByDigest(t *testing.T) {
 	}
 	fmt.Println(tmpImage.Digest)
 }
+
+func TestMyMongo_InsertResult(t *testing.T) {
+
+}
+
+func TestMyMongo_FindResultByDigest(t *testing.T) {
+
+}
