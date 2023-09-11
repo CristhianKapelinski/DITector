@@ -184,10 +184,10 @@ func CalculateRepositoriesDependentWeights() {
 // calculate total, average and top 100 records according to upstream and downstream counts
 // =======================================================================
 
-var chanRecord = make(chan *Record, runtime.NumCPU())
+var chanRecord = make(chan *RecordWithNodeID, runtime.NumCPU())
 
 // RecordUpSlice used to store top 100 record according to upstream
-type RecordUpSlice []*Record
+type RecordUpSlice []*RecordWithNodeID
 
 func (rs RecordUpSlice) Len() int { return len(rs) }
 func (rs RecordUpSlice) Less(i, j int) bool {
@@ -195,10 +195,10 @@ func (rs RecordUpSlice) Less(i, j int) bool {
 }
 func (rs RecordUpSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
 
-// CheckDigest checks whether an image with digest is unique in RecordSlice
-func (rs RecordUpSlice) CheckDigest(digest string) bool {
+// CheckNodeId checks whether an image with digest is unique in RecordSlice
+func (rs RecordUpSlice) CheckNodeId(nodeId string) bool {
 	for _, record := range rs {
-		if digest == record.ImageDigest {
+		if nodeId == record.NodeId {
 			return true
 		}
 	}
@@ -206,7 +206,7 @@ func (rs RecordUpSlice) CheckDigest(digest string) bool {
 }
 
 // RecordDownSlice used to store top 100 record according to downstream
-type RecordDownSlice []*Record
+type RecordDownSlice []*RecordWithNodeID
 
 func (rs RecordDownSlice) Len() int { return len(rs) }
 func (rs RecordDownSlice) Less(i, j int) bool {
@@ -214,21 +214,36 @@ func (rs RecordDownSlice) Less(i, j int) bool {
 }
 func (rs RecordDownSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
 
-// CheckDigest checks whether an image with digest is unique in RecordSlice
-func (rs RecordDownSlice) CheckDigest(digest string) bool {
+// CheckNodeId checks whether an image with digest is unique in RecordSlice
+func (rs RecordDownSlice) CheckNodeId(nodeId string) bool {
 	for _, record := range rs {
-		if digest == record.ImageDigest {
+		if nodeId == record.NodeId {
 			return true
 		}
 	}
 	return false
 }
 
+type RecordWithNodeID struct {
+	Namespace            string `json:"namespace"`
+	RepositoryName       string `json:"repository_name"`
+	TagName              string `json:"tag_name"`
+	ImageDigest          string `json:"image_digest"`
+	NodeId               string
+	UpstreamImageCount   int      `json:"upstream_image_count"`
+	UpstreamImageList    []string `json:"upstream_image_list"`
+	DownstreamImageCount int      `json:"downstream_image_count"`
+	DownstreamImageList  []string `json:"downstream_image_list"`
+}
+
 // StatisticRepositoriesDependentWeights calculates
 // dependent weight statistics of each repository
-// by read and process file /data/docker-crawler/results/dependent-weights.txt
+// by read and process file /data/docker-crawler/results/dependent-weights/dependent-weights.txt
 func StatisticRepositoriesDependentWeights() {
-	resultFile, _ := os.OpenFile("/data/docker-crawler/results/dependent-weights-top100.txt", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
+	mymongo, _ := myutils.ConfigMongoClient(false)
+
+	upstreamFile, _ := os.OpenFile("/data/docker-crawler/results/dependent-weights/dependent-weights-upstream-top100.txt", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
+	downstreamFile, _ := os.OpenFile("/data/docker-crawler/results/dependent-weights/dependent-weights-downstream-top100.txt", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
 
 	go readDependentWeightFileByLine()
 
@@ -237,12 +252,12 @@ func StatisticRepositoriesDependentWeights() {
 	var top100Up = make(RecordUpSlice, 100, 100)
 	// assign initial value for each element
 	for i := range top100Up {
-		top100Up[i] = &Record{}
+		top100Up[i] = &RecordWithNodeID{}
 	}
 	var totalDown int64 = 0
 	var top100Down = make(RecordDownSlice, 100, 100)
 	for i := range top100Down {
-		top100Down[i] = &Record{}
+		top100Down[i] = &RecordWithNodeID{}
 	}
 
 	fmt.Println(top100Up[0].UpstreamImageCount)
@@ -252,14 +267,21 @@ func StatisticRepositoriesDependentWeights() {
 		totalUp += int64(record.UpstreamImageCount)
 		totalDown += int64(record.DownstreamImageCount)
 
+		image, err := mymongo.FindImageByDigest(record.ImageDigest)
+		if err != nil {
+			myutils.LogDockerCrawlerString(myutils.LogLevel.Error, "mongo find image by digest failed with:", err.Error())
+			continue
+		}
+		record.NodeId = myutils.CalculateImageNodeId(image)
+
 		// recalculate top 100 up
-		if !top100Up.CheckDigest(record.ImageDigest) {
+		if !top100Up.CheckNodeId(record.NodeId) {
 			top100Up = append(top100Up, record)
 			sort.Sort(top100Up)
 			top100Up = top100Up[:100]
 		}
 
-		if !top100Down.CheckDigest(record.ImageDigest) {
+		if !top100Down.CheckNodeId(record.NodeId) {
 			top100Down = append(top100Down, record)
 			sort.Sort(top100Down)
 			top100Down = top100Down[:100]
@@ -281,27 +303,25 @@ func StatisticRepositoriesDependentWeights() {
 	averageUp := totalUp / total
 	averageDown := totalDown / total
 
-	resultFile.WriteString(fmt.Sprintf("total upstream cnt: %d, average upstream cnt: %d\n", totalUp, averageUp))
-	resultFile.WriteString(fmt.Sprintf("total downstream cnt: %d, average downstream cnt: %d\n", totalDown, averageDown))
+	fmt.Printf("max upstream cnt: %d, average upstream cnt: %d\n", top100Up[0].UpstreamImageCount, averageUp)
+	fmt.Printf("max downstream cnt: %d, average downstream cnt: %d\n", top100Down[0].DownstreamImageCount, averageDown)
 
-	resultFile.WriteString("\n================Top100 Up================\n")
 	for _, upRecord := range top100Up {
 		recordBytes, err := json.Marshal(upRecord)
 		if err != nil {
 			myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
 		}
-		resultFile.Write(recordBytes)
-		resultFile.WriteString("\n")
+		upstreamFile.Write(recordBytes)
+		upstreamFile.WriteString("\n")
 	}
 
-	resultFile.WriteString("\n================Top100 Down================\n")
 	for _, downRecord := range top100Down {
 		recordBytes, err := json.Marshal(downRecord)
 		if err != nil {
 			myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())
 		}
-		resultFile.Write(recordBytes)
-		resultFile.WriteString("\n")
+		downstreamFile.Write(recordBytes)
+		downstreamFile.WriteString("\n")
 	}
 
 }
@@ -310,7 +330,7 @@ func StatisticRepositoriesDependentWeights() {
 // the results of dependent weights of each repository
 // by line.
 func readDependentWeightFileByLine() {
-	fileDependentWeights, err := os.Open("/data/docker-crawler/results/dependent-weights.txt")
+	fileDependentWeights, err := os.Open("/data/docker-crawler/results/dependent-weights/dependent-weights.txt")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -340,7 +360,7 @@ func readDependentWeightFileByLine() {
 		}
 
 		// 解析内容，发到管道，等待scheduler调度
-		var record = new(Record)
+		var record = new(RecordWithNodeID)
 		err = json.Unmarshal(b, record)
 		if err != nil {
 			fmt.Println("[ERROR] json.Unmarshal failed with:", err)

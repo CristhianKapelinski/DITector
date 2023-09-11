@@ -42,7 +42,8 @@ func main() {
 		// 10.10.21.122:23434
 		server.StartServer()
 	} else if execScript {
-		scripts.StatisticRepositoriesDependentWeights()
+		scripts.ScanTop100DownstreamImagesVul()
+		//scripts.StatisticRepositoriesDependentWeights()
 		//scripts.ScanAllSecretsInImageMetadata()
 		//scripts.CalculateRepositoriesDependentWeights()
 	} else {

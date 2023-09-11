@@ -340,3 +340,18 @@ func (neo4jDriver *MyNeo4j) DropNodesAndRelationshipsFromNeo4j() {
 		return nil, nil
 	})
 }
+
+// CalculateImageNodeId calculates node-id of top layer
+// (with real file contents) in the image layer-to-layer chain.
+func CalculateImageNodeId(image *Image) string {
+	accumulateLayerID := ""
+	for _, layer := range image.Layers {
+		if layer.Size == 0 {
+			continue
+		}
+		accumulateLayerID += layer.Digest[7:]
+	}
+	accumulateHash := CalSha256(accumulateLayerID)
+
+	return accumulateHash
+}
