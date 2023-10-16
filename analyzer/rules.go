@@ -20,7 +20,7 @@ type ConfigSecret struct {
 	SeverityScore float64 `yaml:"severity_score"`
 }
 
-func (rs *Rules) LoadRulesFromYAMLFile(path string) error {
+func (rs *Rules) LoadSecretsFromYAMLFile(path string) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err

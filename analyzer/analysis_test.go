@@ -8,7 +8,7 @@ import (
 
 func TestAnalyzeImageMetadata(t *testing.T) {
 	mymongo, _ := myutils.ConfigMongoClient(false)
-	imageAnalyzer, _ := NewImageAnalyzer("../rules.yaml")
+	imageAnalyzer, _ := NewImageAnalyzer("../rules/rules.yaml")
 
 	targetImages, _ := mymongo.FindImagesByText("", 1, 10)
 	targetImages = append(targetImages, &myutils.Image{
@@ -27,7 +27,7 @@ func TestAnalyzeImageMetadata(t *testing.T) {
 
 func TestScanSecretsInString(t *testing.T) {
 	imageAnalyzer := new(ImageAnalyzer)
-	imageAnalyzer.config(false, "../rules.yaml")
+	imageAnalyzer.config(false, "../rules/rules.yaml")
 	imageAnalyzer.rules.CompileSecretsRegex()
 
 	secrets, _ := imageAnalyzer.scanSecretsInString("-----BEGIN RSA PRIVATE KEYsk_test_000011112222333344445555", "contents")

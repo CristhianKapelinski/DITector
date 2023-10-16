@@ -10,6 +10,8 @@ secret.json
 test.json
 *.log
 
+pkg/
+
 # ==========================
 # used for frontend project
 # ==========================

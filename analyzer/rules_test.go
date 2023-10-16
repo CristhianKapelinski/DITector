@@ -8,7 +8,7 @@ import (
 
 func TestRules_LoadRulesFromYAMLFile(t *testing.T) {
 	rs := Rules{}
-	err := rs.LoadRulesFromYAMLFile("../rules.yaml")
+	err := rs.LoadSecretsFromYAMLFile("../rules.yaml")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -17,7 +17,7 @@ func TestRules_LoadRulesFromYAMLFile(t *testing.T) {
 
 func TestRules_CompileSecretsRegex(t *testing.T) {
 	rs := Rules{}
-	err := rs.LoadRulesFromYAMLFile("../rules.yaml")
+	err := rs.LoadSecretsFromYAMLFile("../rules.yaml")
 	if err != nil {
 		log.Fatalln(err)
 	}

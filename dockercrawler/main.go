@@ -19,6 +19,9 @@ func main() {
 		startServer bool   // 启动前端服务器
 		execScript  bool   // 执行特制脚本
 		rulePath    string // filepath of rules
+		scan        bool   // 是否要扫描镜像
+		image       string // 待扫描镜像名称
+		file        string // 待扫描镜像文件
 
 	)
 
@@ -29,7 +32,10 @@ func main() {
 	flag.StringVar(&format, "format", "json", "format for crawling or building graph, e.g. json, mysql, clear")
 	flag.BoolVar(&startServer, "start-server", false, "true for building graph based on crawler results")
 	flag.BoolVar(&execScript, "exec-script", false, "true for specific script execution")
-	flag.StringVar(&rulePath, "rule-path", "rules.yaml", "yaml file path storing rules")
+	flag.StringVar(&rulePath, "rule-path", "rules/rules.yaml", "yaml file path storing rules")
+	flag.BoolVar(&scan, "scan", false, "true for scanning image")
+	flag.StringVar(&image, "image", "", "image name to be scanned, e.g. ")
+	flag.StringVar(&file, "file", "", "image file to be scanned, formatted like file from `docker save`")
 	flag.Parse()
 
 	if crawl {
@@ -41,6 +47,8 @@ func main() {
 	} else if startServer {
 		// 10.10.21.122:23434
 		server.StartServer()
+	} else if scan {
+
 	} else if execScript {
 		scripts.ScanTop100DownstreamImagesVul()
 		//scripts.StatisticRepositoriesDependentWeights()

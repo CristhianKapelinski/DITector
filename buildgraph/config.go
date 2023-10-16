@@ -118,12 +118,13 @@ func config(format string) {
 				fmt.Println("\t", k, ":", v)
 			}
 		}
-	case "clear":
-		// 删除数据库中的数据
-		myMongo.DropAllDocuments()
-		myNeo4jDriver.DropNodesAndRelationshipsFromNeo4j()
-		fmt.Println("[-] clean data from MongoDB and Neo4j")
-		myutils.LogDockerCrawlerString("[WARN] Clean Database Mongo and Neo4j")
+	// 数据已成规模，禁用clear
+	//case "clear":
+	//	// 删除数据库中的数据
+	//	myMongo.DropAllDocuments()
+	//	myNeo4jDriver.DropNodesAndRelationshipsFromNeo4j()
+	//	fmt.Println("[-] clean data from MongoDB and Neo4j")
+	//	myutils.LogDockerCrawlerString("[WARN] Clean Database Mongo and Neo4j")
 	default:
 		fmt.Println("[ERROR] Invalid data source configured: ", format)
 		os.Exit(-2)
