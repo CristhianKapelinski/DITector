@@ -7,7 +7,7 @@ import (
 var myMongo, _ = myutils.ConfigMongoClient(false)
 var myNeo4jDriver, _ = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
 
-func AnalyzeImage(name, digest, secretRuleFilePath string) (*myutils.ImageResult, error) {
+func AnalyzeImage(name, secretRuleFilePath string) (*myutils.ImageResult, error) {
 	res := new(myutils.ImageResult)
 
 	analyzer, err := NewImageAnalyzer(secretRuleFilePath)
