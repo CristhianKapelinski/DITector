@@ -42,7 +42,7 @@ func ScanAllSecretsInImageMetadata() {
 		cnt++
 		logself(myutils.LogLevel.Debug, "begin to scan", strconv.Itoa(cnt))
 
-		targetImage := new(myutils.Image)
+		targetImage := new(myutils.ImageOld)
 		err := cursor.Decode(targetImage)
 		if err != nil {
 			logself(myutils.LogLevel.Error, "decode image failed with:", err.Error())

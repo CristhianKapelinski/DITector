@@ -70,7 +70,7 @@ func TestCalculateRepositoriesDependentWeights(t *testing.T) {
 
 		cnt++
 
-		curRepo := new(myutils.Repository)
+		curRepo := new(myutils.RepositoryOld)
 		err := cursor.Decode(curRepo)
 		if err != nil {
 			fmt.Println(err)

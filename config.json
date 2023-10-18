@@ -1,15 +1,19 @@
 {
   "max_thread": 0,
-  "data_dir": "/mysql/json-files",
-  "repository_file": "repository.json",
-  "tags_file": "tags.json",
-  "images_file": "images.json",
-  "crawler": {
+  "repositories_file": "/mysql/json-files/repositories.json",
+  "tags_file": "/mysql/json-files/tags.json",
+  "images_file": "/mysql/json-files/images.json",
+  "log_file": "docker-crawler.log",
+  "crawler_config": {
     "local_proxy": false,
     "proxy_file": "crawler/proxyaddr.json",
     "mysql_dsn": "docker:docker@/dockerhub"
   },
-  "builder": {
+  "mongo_config": {
+    "uri": "mongodb://localhost:27017",
+    "database": "dockerhub"
+  },
+  "neo4j_config": {
     "neo4j_uri": "neo4j://localhost:7687",
     "neo4j_username": "neo4j",
     "neo4j_password": "qazwsxedc"

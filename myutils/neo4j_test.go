@@ -30,7 +30,7 @@ func TestFindUpstreamNodesByNodeId(t *testing.T) {
 	accumulateHash := CalSha256(accumulateLayerID)
 	fmt.Println(accumulateHash)
 
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -48,7 +48,7 @@ func TestFindUpstreamNodesByNodeId(t *testing.T) {
 }
 
 func TestFindDownstreamNodesByNodeId(t *testing.T) {
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -66,7 +66,7 @@ func TestFindDownstreamNodesByNodeId(t *testing.T) {
 }
 
 func TestMyNeo4j_FindUpstreamImagesByNodeId(t *testing.T) {
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -79,7 +79,7 @@ func TestMyNeo4j_FindUpstreamImagesByNodeId(t *testing.T) {
 }
 
 func TestMyNeo4j_FindDownstreamImagesByNodeId(t *testing.T) {
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}

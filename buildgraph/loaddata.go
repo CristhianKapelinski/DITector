@@ -46,7 +46,7 @@ func ReadFileRepositoryByLine() {
 		}
 
 		// 解析内容，发到管道，等待scheduler调度
-		var repo = new(myutils.Repository)
+		var repo = new(myutils.RepositoryOld)
 		err = json.Unmarshal(b, repo)
 		if err != nil {
 			fmt.Println("[ERROR] json.Unmarshal failed with: ", err)

@@ -41,7 +41,7 @@ func CalculateRepositoriesDependentWeights() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	myNeo4jDriver, err := myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	myNeo4jDriver, err := myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -71,7 +71,7 @@ func CalculateRepositoriesDependentWeights() {
 			if err != nil {
 				log.Fatalln(err)
 			}
-			myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+			myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -96,7 +96,7 @@ func CalculateRepositoriesDependentWeights() {
 		//if cnt%10 == 0 {
 		//	fmt.Println(cnt)
 		//}
-		curRepo := new(myutils.Repository)
+		curRepo := new(myutils.RepositoryOld)
 		err := cursor.Decode(curRepo)
 		if err != nil {
 			myutils.LogDockerCrawlerString(myutils.LogLevel.Error, err.Error())

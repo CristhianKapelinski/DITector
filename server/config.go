@@ -26,7 +26,7 @@ func configServer(initFlag bool) {
 	}
 	fmt.Println("[+] Connect to MongoDB succeed")
 
-	myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln("[ERROR] Connect to neo4j failed with:", err)
 	}

@@ -175,15 +175,15 @@ func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
 }
 
 // InsertRepository 利用Insert将Repository作为文档存储到Mongo中
-func (mymongo *MyMongo) InsertRepository(repo *Repository) error {
-	repo.Tags = map[string]Tag{}
+func (mymongo *MyMongo) InsertRepository(repo *RepositoryOld) error {
+	repo.Tags = map[string]TagOld{}
 	_, err := mymongo.RepositoriesCollection.InsertOne(context.Background(), repo)
 	return err
 }
 
 // InsertTag 利用Update将TagSource添加到Mongo中存储的对应的repository的tags中
 func (mymongo *MyMongo) InsertTag(tag *TagSource) error {
-	var t = Tag{
+	var t = TagOld{
 		LastUpdated:         tag.LastUpdated,
 		LastUpdaterUsername: tag.LastUpdaterUsername,
 		TagLastPulled:       tag.TagLastPulled,
@@ -295,8 +295,8 @@ func (mymongo *MyMongo) GetRepositoriesCountByText(keyword string) (int64, error
 
 // FindRepositoriesByText search repository in collection mongo.dockerhub.repositories,
 // now searched by namespace, name, description, full_description (text index)
-func (mymongo *MyMongo) FindRepositoriesByText(search string, page, pageSize int64) ([]*Repository, error) {
-	var res = make([]*Repository, 0)
+func (mymongo *MyMongo) FindRepositoriesByText(search string, page, pageSize int64) ([]*RepositoryOld, error) {
+	var res = make([]*RepositoryOld, 0)
 
 	filter := bson.D{}
 	if search != "" {
@@ -324,8 +324,8 @@ func (mymongo *MyMongo) FindRepositoriesByText(search string, page, pageSize int
 }
 
 // FindRepositoryByName 根据Namespace、Repository寻找mongo.dockerhub.repository中存储的Repository
-func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*Repository, error) {
-	var repo = new(Repository)
+func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*RepositoryOld, error) {
+	var repo = new(RepositoryOld)
 
 	// 传入条件
 	filter := bson.M{}
@@ -339,7 +339,7 @@ func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*Rep
 	// 查询并返回结果
 	err := mymongo.RepositoriesCollection.FindOne(context.Background(), filter).Decode(repo)
 	if err != nil {
-		return &Repository{}, err
+		return &RepositoryOld{}, err
 	}
 	return repo, err
 }
@@ -359,8 +359,8 @@ func (mymongo *MyMongo) GetImagesCountByText(keyword string) (int64, error) {
 
 // FindImagesByText search image in collection mongo.dockerhub.images,
 // now searched by digest (text index)
-func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([]*Image, error) {
-	var res = make([]*Image, 0)
+func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([]*ImageOld, error) {
+	var res = make([]*ImageOld, 0)
 
 	filter := bson.D{}
 	if search != "" {
@@ -388,8 +388,8 @@ func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([
 }
 
 // FindImageByDigest 根据Digest寻找mongo.dockerhub.images中存储的Image
-func (mymongo *MyMongo) FindImageByDigest(digest string) (*Image, error) {
-	var img = new(Image)
+func (mymongo *MyMongo) FindImageByDigest(digest string) (*ImageOld, error) {
+	var img = new(ImageOld)
 
 	// 传入条件
 	filter := bson.M{}
@@ -400,7 +400,7 @@ func (mymongo *MyMongo) FindImageByDigest(digest string) (*Image, error) {
 	// 查询并返回结果
 	err := mymongo.ImagesCollection.FindOne(context.Background(), filter).Decode(img)
 	if err != nil {
-		return &Image{}, err
+		return &ImageOld{}, err
 	}
 
 	return img, nil

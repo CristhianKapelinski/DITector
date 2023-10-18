@@ -4,7 +4,7 @@ import (
 	"myutils"
 )
 
-// mongo.go 用于操作mongodb
+// mongo_old.go 用于操作mongodb
 
 var myMongo *myutils.MyMongo
 
@@ -72,8 +72,8 @@ var myMongo *myutils.MyMongo
 //		"namespace":  image.Namespace,
 //		"repository": image.RepositoryName,
 //	}
-//	arch := image.Image.Architecture
-//	variant := image.Image.Variant
+//	arch := image.ImageOld.Architecture
+//	variant := image.ImageOld.Variant
 //	// Mongo文档字典类型的键不能为空，将arch, variant为""的修改为"null"
 //	if arch == " " {
 //		arch = "null"
@@ -82,7 +82,7 @@ var myMongo *myutils.MyMongo
 //		variant = "null"
 //	}
 //	update := bson.M{
-//		"$set": bson.M{"tags." + tagKey + ".images." + arch + "." + variant: image.Image.Digest},
+//		"$set": bson.M{"tags." + tagKey + ".images." + arch + "." + variant: image.ImageOld.Digest},
 //	}
 //	_, err := mongoRepositoriesCollection.UpdateOne(context.TODO(), filter, update)
 //	if err != nil {
@@ -95,7 +95,7 @@ var myMongo *myutils.MyMongo
 //
 //// InsertImageToImagesCollectionMongo 将image元数据作为文档插入到images collection中
 //func InsertImageToImagesCollectionMongo(image *myutils.ImageSource) {
-//	i := image.Image
+//	i := image.ImageOld
 //	_, err := mongoImagesCollection.InsertOne(context.Background(), i)
 //	if err != nil {
 //		if mongo.IsDuplicateKeyError(err) {

@@ -50,7 +50,7 @@ type ImageForServer struct {
 	Digest       string `json:"digest"`
 }
 
-func RepositoriesToForServer(repos []*myutils.Repository) []*RepositoryForServer {
+func RepositoriesToForServer(repos []*myutils.RepositoryOld) []*RepositoryForServer {
 	var res = make([]*RepositoryForServer, 0)
 
 	for _, repo := range repos {
@@ -165,7 +165,7 @@ type LayerWithResults struct {
 	Results     string `json:"results"`
 }
 
-func ImagesToWithResults(imgs []*myutils.Image) []*ImageWithResults {
+func ImagesToWithResults(imgs []*myutils.ImageOld) []*ImageWithResults {
 	imgWithRes := make([]*ImageWithResults, 0)
 
 	for _, img := range imgs {
@@ -181,7 +181,7 @@ func ImagesToWithResults(imgs []*myutils.Image) []*ImageWithResults {
 	return imgWithRes
 }
 
-func combineImageAndResult(img *myutils.Image, res *myutils.ImageResult) *ImageWithResults {
+func combineImageAndResult(img *myutils.ImageOld, res *myutils.ImageResult) *ImageWithResults {
 	imgres := &ImageWithResults{
 		Architecture: img.Architecture, Features: img.Features, Variant: img.Variant,
 		Digest: img.Digest, OS: img.OS, Size: img.Size, Status: img.Status,

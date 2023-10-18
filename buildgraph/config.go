@@ -65,6 +65,7 @@ func config(format string) {
 		ConfigBuilder.Builder.Neo4jURI,
 		ConfigBuilder.Builder.Neo4jUsername,
 		ConfigBuilder.Builder.Neo4jPassword,
+		false,
 	)
 	if err != nil {
 		log.Fatalln("[ERROR] Connect to neo4j failed with:", err)

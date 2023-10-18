@@ -6,17 +6,29 @@ import (
 )
 
 type ImageAnalyzer struct {
-	Registry          string
-	Namespace         string
-	Repository        string
-	Tag               string
-	Digest            string
-	LayerLocalFileMap map[string]string
-	rules             Rules
+	DockerClient
+	Mongo       *myutils.MyMongo
+	Neo4jDriver *myutils.MyNeo4j
+	rules       Rules
+	CurrentImage
+}
+
+type CurrentImage struct {
+	Registry           string
+	Namespace          string
+	Repository         string
+	RepositoryMetadata *myutils.Repository
+	Tag                string
+	Digest             string
+	LayerLocalFileMap  map[string]string
+}
+
+func (imageAnalyzer *ImageAnalyzer) AnalyzeImageByName(name string) {
+
 }
 
 // AnalyzeImageMetadata analyze instruction of layers to
-func (imageAnalyzer *ImageAnalyzer) AnalyzeImageMetadata(image *myutils.Image) ([]*myutils.Result, error) {
+func (imageAnalyzer *ImageAnalyzer) AnalyzeImageMetadata(image *myutils.ImageOld) ([]*myutils.Result, error) {
 	res := make([]*myutils.Result, 0)
 
 	for index, layer := range image.Layers {

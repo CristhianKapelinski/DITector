@@ -26,6 +26,13 @@ var LogLevel = struct {
 	"[DEBUG]",
 }
 
+// configLogger 用于初始化日志模块，打开日志文件
+func configLogger(logFilepath string) error {
+	var err error
+	fileLogger, err = os.OpenFile(logFilepath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
+	return err
+}
+
 func GetLocalNowTime() string {
 	return time.Now().Add(8 * time.Hour).Format(time.DateTime)
 }

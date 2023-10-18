@@ -14,7 +14,7 @@ var (
 )
 
 var (
-	chanRepository     = make(chan *myutils.Repository, runtime.NumCPU())
+	chanRepository     = make(chan *myutils.RepositoryOld, runtime.NumCPU())
 	chanTag            = make(chan *myutils.TagSource, runtime.NumCPU())
 	chanImage          = make(chan *myutils.ImageSource, runtime.NumCPU())
 	chanDoneRepository = make(chan struct{})
