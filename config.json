@@ -11,11 +11,20 @@
   },
   "mongo_config": {
     "uri": "mongodb://localhost:27017",
-    "database": "dockerhub"
+    "database": "dockerhub",
+    "collections": {
+      "repositories": "repositories",
+      "tags": "tags",
+      "images": "images",
+      "results": "results"
+    }
   },
   "neo4j_config": {
     "neo4j_uri": "neo4j://localhost:7687",
     "neo4j_username": "neo4j",
     "neo4j_password": "qazwsxedc"
+  },
+  "rules_config": {
+    "secret_rules_file": "rules/secret_rules.yaml"
   }
 }

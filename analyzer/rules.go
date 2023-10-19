@@ -7,17 +7,16 @@ import (
 )
 
 type Rules struct {
-	Secrets []*ConfigSecret `yaml:"secrets"`
+	Secrets []*SecretConfig `yaml:"secrets"`
 }
 
-type ConfigSecret struct {
-	Name          string `yaml:"name"`
-	Part          string `yaml:"part"`
-	Regex         string `yaml:"regex"`
-	RegexType     string `yaml:"regex_type,omitempty"`
-	CompiledRegex *regexp.Regexp
-	Severity      string  `yaml:"severity"`
-	SeverityScore float64 `yaml:"severity_score"`
+type SecretConfig struct {
+	Name          string         `yaml:"name" json:"name"`
+	Regex         string         `yaml:"regex" json:"regex"`
+	RegexType     string         `yaml:"regex_type"`
+	CompiledRegex *regexp.Regexp `yaml:"-" json:"-"`
+	Severity      string         `yaml:"severity"`
+	SeverityScore float64        `yaml:"severity_score"`
 }
 
 func (rs *Rules) LoadSecretsFromYAMLFile(path string) error {

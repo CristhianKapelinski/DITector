@@ -2,14 +2,18 @@ package main
 
 import (
 	"buildgraph"
+	"context"
 	"crawler"
 	"flag"
+	"log"
+	"myutils"
 	"os"
 	"scripts"
 	"server"
 )
 
 func main() {
+	// 命令行参数定义与绑定
 	var (
 		crawl       bool   // 是否要爬镜像仓库数据
 		registry    string // 指定要爬的镜像仓库，比如dockerhub
@@ -22,7 +26,6 @@ func main() {
 		scan        bool   // 是否要扫描镜像
 		image       string // 待扫描镜像名称
 		file        string // 待扫描镜像文件
-
 	)
 
 	flag.BoolVar(&crawl, "crawl", false, "crawl images metadata if not nil")
@@ -32,11 +35,34 @@ func main() {
 	flag.StringVar(&format, "format", "json", "format for crawling or building graph, e.g. json, mysql, clear")
 	flag.BoolVar(&startServer, "start-server", false, "true for building graph based on crawler results")
 	flag.BoolVar(&execScript, "exec-script", false, "true for specific script execution")
-	flag.StringVar(&rulePath, "rule-path", "rules/rules.yaml", "yaml file path storing rules")
+	flag.StringVar(&rulePath, "rule-path", "rules/secret_rules.yaml", "yaml file path storing rules")
 	flag.BoolVar(&scan, "scan", false, "true for scanning image")
 	flag.StringVar(&image, "image", "", "image name to be scanned, e.g. ")
 	flag.StringVar(&file, "file", "", "image file to be scanned, formatted like file from `docker save`")
 	flag.Parse()
+
+	// 主函数退出前清理工作（最后一个执行的defer函数）
+	defer func() {
+
+		// disconnect MongoDB
+		if myutils.GlobalDBClient.MongoFlag {
+			if err := myutils.GlobalDBClient.Mongo.Client.Disconnect(context.TODO()); err != nil {
+				myutils.LogDockerCrawlerString(myutils.LogLevel.Error, "disconnect MongoDB client failed with:", err.Error())
+			}
+		}
+
+		// close Neo4j
+		if myutils.GlobalDBClient.Neo4jFlag {
+			if err := myutils.GlobalDBClient.Neo4j.Driver.Close(context.TODO()); err != nil {
+				myutils.LogDockerCrawlerString(myutils.LogLevel.Error, "close Neo4j driver failed with:", err.Error())
+			}
+		}
+
+		// close logger file
+		if err := myutils.CloseLogger(); err != nil {
+			log.Fatalln(myutils.LogLevel.Error, "close log file", myutils.GlobalConfig.LogFile, "failed with:", err.Error())
+		}
+	}()
 
 	if crawl {
 		if registry == "dockerhub" {

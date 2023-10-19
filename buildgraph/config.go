@@ -54,7 +54,7 @@ func config(format string) {
 
 	// 初始化数据库connector
 	// Mongo
-	myMongo, err = myutils.ConfigMongoClient(false)
+	myMongo, err = myutils.NewMongoClient(false)
 	if err != nil {
 		log.Fatalln("[ERROR] connect to and config MongoDB failed with err: ", err)
 	}

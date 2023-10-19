@@ -43,3 +43,7 @@ func LogDockerCrawlerString(s ...string) {
 	tmp := strings.Join(s, " ")
 	fileLogger.WriteString(GetLocalNowTime() + " " + tmp + "\n")
 }
+
+func CloseLogger() error {
+	return fileLogger.Close()
+}

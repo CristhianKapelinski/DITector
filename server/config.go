@@ -20,7 +20,7 @@ var (
 
 func configServer(initFlag bool) {
 	var err error
-	myMongo, err = myutils.ConfigMongoClient(initFlag)
+	myMongo, err = myutils.NewMongoClient(initFlag)
 	if err != nil {
 		log.Fatalln("[ERROR] connect to and config MongoDB failed with err: ", err)
 	}

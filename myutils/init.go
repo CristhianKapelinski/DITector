@@ -19,6 +19,7 @@ var GlobalConfig struct {
 	CrawlerConfig    CrawlerConfig `json:"crawler_config"`
 	MongoConfig      MongoConfig   `json:"mongo_config"`
 	Neo4jConfig      Neo4jConfig   `json:"neo4j_config"`
+	RulesConfig      RulesConfig   `json:"rules_config"`
 }
 
 type CrawlerConfig struct {
@@ -28,14 +29,34 @@ type CrawlerConfig struct {
 }
 
 type MongoConfig struct {
-	URI      string `json:"uri"`
-	Database string `json:"database"`
+	URI         string           `json:"uri"`
+	Database    string           `json:"database"`
+	Collections MongoCollections `json:"collections"`
+}
+
+type MongoCollections struct {
+	Repositories string `json:"repositories"`
+	Tags         string `json:"tags"`
+	Images       string `json:"images"`
+	Results      string `json:"results"`
 }
 
 type Neo4jConfig struct {
 	Neo4jURI      string `json:"neo4j_uri"`
 	Neo4jUsername string `json:"neo4j_username"`
 	Neo4jPassword string `json:"neo4j_password"`
+}
+
+type RulesConfig struct {
+	SecretRulesFile string `json:"secret_rules_file"`
+}
+
+// GlobalDBClient 用于维护全局所有模块的数据库client连接
+var GlobalDBClient struct {
+	Mongo     *MyMongo
+	MongoFlag bool // 标识Mongo是否成功连接
+	Neo4j     *MyNeo4j
+	Neo4jFlag bool // 标识Neo4j是否成功连接
 }
 
 func init() {

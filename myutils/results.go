@@ -18,12 +18,13 @@ type LayerResult struct {
 	AnalyzedFiles []string `json:"analyzed_files"`
 }
 
-// Result TODO: 需要考虑怎么统一所有检测的结果
+// Result 表示一条发现的问题
+// TODO: 需要考虑怎么统一所有检测的结果
 type Result struct {
-	RuleName      string  `json:"rule_name"`
 	Type          string  `json:"type"`
+	Part          string  `json:"part"`
 	Path          string  `json:"path"`
-	PartToMatch   string  `json:"part_to_match"`
+	Rule          any     `json:"rule"`
 	Match         string  `json:"match"`
 	Severity      string  `json:"severity"`
 	SeverityScore float64 `json:"severity_score"`

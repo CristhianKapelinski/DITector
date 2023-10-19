@@ -16,9 +16,9 @@ type MyMongo struct {
 	ResultsCollection      *mongo.Collection
 }
 
-// ConfigMongoClient returns a mongo client configured
+// NewMongoClient returns a mongo client configured
 // for the project
-func ConfigMongoClient(initFlag bool) (*MyMongo, error) {
+func NewMongoClient(uri, database, string, initFlag bool) (*MyMongo, error) {
 	var mymongo = new(MyMongo)
 	var err error
 

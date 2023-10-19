@@ -8,7 +8,9 @@ import (
 type ImageAnalyzer struct {
 	DockerClient
 	Mongo       *myutils.MyMongo
+	MongoFlag   bool
 	Neo4jDriver *myutils.MyNeo4j
+	Neo4jFlag   bool
 	rules       Rules
 	CurrentImage
 }
@@ -21,6 +23,31 @@ type CurrentImage struct {
 	Tag                string
 	Digest             string
 	LayerLocalFileMap  map[string]string
+}
+
+func NewImageAnalyzer(secretRuleFilePath string) (*ImageAnalyzer, error) {
+	imageAnalyzer := new(ImageAnalyzer)
+
+	// 配置隐私泄露、敏感参数检测规则
+	err := imageAnalyzer.loadRules(false, secretRuleFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return imageAnalyzer, nil
+}
+
+func (imageAnalyzer *ImageAnalyzer) loadRules(initFlag bool, secretRuleFilePath string) error {
+	// 加载隐私泄露检测规则文件
+	err := imageAnalyzer.rules.LoadSecretsFromYAMLFile(secretRuleFilePath)
+	if err != nil {
+		return err
+	}
+
+	// 编译用于隐私泄露检测的正则表达式
+	imageAnalyzer.rules.CompileSecretsRegex()
+
+	return nil
 }
 
 func (imageAnalyzer *ImageAnalyzer) AnalyzeImageByName(name string) {
@@ -61,7 +88,7 @@ func (imageAnalyzer *ImageAnalyzer) scanSecretsInString(s, part string) ([]*myut
 			for _, match := range matches {
 				tmp := &myutils.Result{
 					RuleName:      secret.Name,
-					PartToMatch:   secret.Part,
+					Part:          secret.Part,
 					Match:         match,
 					Severity:      secret.Severity,
 					SeverityScore: secret.SeverityScore,

@@ -10,7 +10,7 @@ import (
 // TestFindMiddleSharedLayers 尝试发现从中间层开始交叉的两条image链，并将其打印出来
 
 func TestFindUpstreamNodesByNodeId(t *testing.T) {
-	mymongo, _ := ConfigMongoClient(false)
+	mymongo, _ := NewMongoClient(false)
 	tmpImage, err := mymongo.FindImageByDigest("sha256:7209d3b2285c9ca5a28051a5d8658e64e40888154d753bbd8a22eee214132a81")
 	if err != nil {
 		log.Fatalln(err)
