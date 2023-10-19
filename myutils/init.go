@@ -1,6 +1,7 @@
 package myutils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -80,7 +81,52 @@ func init() {
 	if err = configLogger(logFilepath); err != nil {
 		log.Fatalf("[ERROR] Open %s failed with: %s\n", logFilepath, err)
 	} else {
-		fmt.Println("[+] Open log file succeed: ", logFilepath)
+		fmt.Println("[+] Open log file: ", logFilepath)
 	}
 
+	// 连接MongoDB
+	if GlobalDBClient.Mongo, err = NewMongo(GlobalConfig.MongoConfig.URI, GlobalConfig.MongoConfig.Database,
+		GlobalConfig.MongoConfig.Collections.Repositories, GlobalConfig.MongoConfig.Collections.Tags,
+		GlobalConfig.MongoConfig.Collections.Images, GlobalConfig.MongoConfig.Collections.Results,
+		false); err != nil {
+		GlobalDBClient.MongoFlag = false
+		LogDockerCrawlerString(LogLevel.Error, "connect to MongoDB failed with:", err.Error())
+		fmt.Println("[-] Connect to MongoDB failed")
+	} else {
+		GlobalDBClient.MongoFlag = true
+		fmt.Println("[+] Connect to MongoDB")
+	}
+
+	// 连接Neo4j
+	if GlobalDBClient.Neo4j, err = NewNeo4jDriver(GlobalConfig.Neo4jConfig.Neo4jURI, GlobalConfig.Neo4jConfig.Neo4jUsername,
+		GlobalConfig.Neo4jConfig.Neo4jPassword, false); err != nil {
+		GlobalDBClient.Neo4jFlag = false
+		LogDockerCrawlerString(LogLevel.Error, "connect to Neo4j failed with:", err.Error())
+		fmt.Println("[-] Connect to Neo4j failed")
+	} else {
+		GlobalDBClient.Neo4jFlag = true
+		fmt.Println("[+] Connect to Neo4j")
+	}
+}
+
+// CloseAllConnections 用于在主函数退出前关闭所有占用的资源
+func CloseAllConnections() {
+	// disconnect MongoDB
+	if GlobalDBClient.MongoFlag {
+		if err := GlobalDBClient.Mongo.Client.Disconnect(context.TODO()); err != nil {
+			LogDockerCrawlerString(LogLevel.Error, "disconnect MongoDB client failed with:", err.Error())
+		}
+	}
+
+	// close Neo4j
+	if GlobalDBClient.Neo4jFlag {
+		if err := GlobalDBClient.Neo4j.Driver.Close(context.TODO()); err != nil {
+			LogDockerCrawlerString(LogLevel.Error, "close Neo4j driver failed with:", err.Error())
+		}
+	}
+
+	// close logger file
+	if err := CloseLogger(); err != nil {
+		log.Fatalln(LogLevel.Error, "close log file", GlobalConfig.LogFile, "failed with:", err.Error())
+	}
 }

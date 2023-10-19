@@ -2,10 +2,8 @@ package main
 
 import (
 	"buildgraph"
-	"context"
 	"crawler"
 	"flag"
-	"log"
 	"myutils"
 	"os"
 	"scripts"
@@ -42,27 +40,7 @@ func main() {
 	flag.Parse()
 
 	// 主函数退出前清理工作（最后一个执行的defer函数）
-	defer func() {
-
-		// disconnect MongoDB
-		if myutils.GlobalDBClient.MongoFlag {
-			if err := myutils.GlobalDBClient.Mongo.Client.Disconnect(context.TODO()); err != nil {
-				myutils.LogDockerCrawlerString(myutils.LogLevel.Error, "disconnect MongoDB client failed with:", err.Error())
-			}
-		}
-
-		// close Neo4j
-		if myutils.GlobalDBClient.Neo4jFlag {
-			if err := myutils.GlobalDBClient.Neo4j.Driver.Close(context.TODO()); err != nil {
-				myutils.LogDockerCrawlerString(myutils.LogLevel.Error, "close Neo4j driver failed with:", err.Error())
-			}
-		}
-
-		// close logger file
-		if err := myutils.CloseLogger(); err != nil {
-			log.Fatalln(myutils.LogLevel.Error, "close log file", myutils.GlobalConfig.LogFile, "failed with:", err.Error())
-		}
-	}()
+	defer myutils.CloseAllConnections()
 
 	if crawl {
 		if registry == "dockerhub" {

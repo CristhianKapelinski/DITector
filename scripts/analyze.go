@@ -23,7 +23,7 @@ import (
 // log to file
 // /data/docker-crawler/results/secrets-in-image-metadata.log
 func ScanAllSecretsInImageMetadata() {
-	mymongo, _ := myutils.NewMongoClient(false)
+	mymongo, _ := myutils.ConfigMongoClient(false)
 	imageAnalyzer, err := analyzer.NewImageAnalyzer("rules/secret_rules.yaml")
 	if err != nil {
 		logself(myutils.LogLevel.Error, "load yaml rules failed with:", err.Error())

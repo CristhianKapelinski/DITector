@@ -54,14 +54,14 @@ func config(format string) {
 
 	// 初始化数据库connector
 	// Mongo
-	myMongo, err = myutils.NewMongoClient(false)
+	myMongo, err = myutils.ConfigMongoClient(false)
 	if err != nil {
 		log.Fatalln("[ERROR] connect to and config MongoDB failed with err: ", err)
 	}
 	fmt.Println("[+] Connect to MongoDB succeed")
 
 	// Neo4j
-	myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext(
+	myNeo4jDriver, err = myutils.NewNeo4jDriver(
 		ConfigBuilder.Builder.Neo4jURI,
 		ConfigBuilder.Builder.Neo4jUsername,
 		ConfigBuilder.Builder.Neo4jPassword,

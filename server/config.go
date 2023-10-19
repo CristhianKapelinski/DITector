@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	myMongo       *myutils.MyMongo
+	myMongo       *myutils.MyMongoOld
 	myNeo4jDriver *myutils.MyNeo4j
 
 	// totalCnt is the number of documents in each collection,
@@ -20,13 +20,13 @@ var (
 
 func configServer(initFlag bool) {
 	var err error
-	myMongo, err = myutils.NewMongoClient(initFlag)
+	myMongo, err = myutils.ConfigMongoClient(initFlag)
 	if err != nil {
 		log.Fatalln("[ERROR] connect to and config MongoDB failed with err: ", err)
 	}
 	fmt.Println("[+] Connect to MongoDB succeed")
 
-	myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
+	myNeo4jDriver, err = myutils.NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln("[ERROR] Connect to neo4j failed with:", err)
 	}

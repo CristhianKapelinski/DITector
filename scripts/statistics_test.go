@@ -15,11 +15,11 @@ import (
 // namespace/repository:tag and writes results to file
 // /data/docker-crawler/results/dependent-weights.txt
 func TestCalculateRepositoriesDependentWeights(t *testing.T) {
-	myMongo, err := myutils.NewMongoClient(false)
+	myMongo, err := myutils.ConfigMongoClient(false)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	myNeo4jDriver, err := myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+	myNeo4jDriver, err := myutils.NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -44,11 +44,11 @@ func TestCalculateRepositoriesDependentWeights(t *testing.T) {
 			myMongo.Client.Disconnect(context.TODO())
 			myNeo4jDriver.Driver.Close(context.TODO())
 
-			myMongo, err = myutils.NewMongoClient(false)
+			myMongo, err = myutils.ConfigMongoClient(false)
 			if err != nil {
 				log.Fatalln(err)
 			}
-			myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc")
+			myNeo4jDriver, err = myutils.NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc")
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -122,7 +122,7 @@ func TestCalculateRepositoriesDependentWeights(t *testing.T) {
 }
 
 func TestCountTraverseRepositories(t *testing.T) {
-	myMongo, err := myutils.NewMongoClient(false)
+	myMongo, err := myutils.ConfigMongoClient(false)
 	if err != nil {
 		log.Fatalln(err)
 	}

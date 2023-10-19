@@ -29,8 +29,9 @@ type Permissions struct {
 }
 
 type Tag struct {
-	RepositoryNamespace string       `json:"repository_namespace"`
-	RepositoryName      string       `json:"repository_name"`
+	RepositoryNamespace string `json:"repositories_namespace"`
+	RepositoryName      string `json:"repositories_name"`
+
 	Creator             int          `json:"creator"`
 	Id                  int          `json:"id"`
 	Images              []ImageInTag `json:"images"`

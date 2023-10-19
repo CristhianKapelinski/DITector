@@ -9,17 +9,16 @@ import (
 	"strings"
 )
 
-type MyMongo struct {
+type MyMongoOld struct {
 	Client                 *mongo.Client
 	RepositoriesCollection *mongo.Collection
 	ImagesCollection       *mongo.Collection
 	ResultsCollection      *mongo.Collection
 }
 
-// NewMongoClient returns a mongo client configured
-// for the project
-func NewMongoClient(uri, database, string, initFlag bool) (*MyMongo, error) {
-	var mymongo = new(MyMongo)
+// ConfigMongoClient returns a mongo client configured for the project
+func ConfigMongoClient(initFlag bool) (*MyMongoOld, error) {
+	var mymongo = new(MyMongoOld)
 	var err error
 
 	mongoOptions := options.Client().ApplyURI("mongodb://localhost:27017")
@@ -175,14 +174,14 @@ func NewMongoClient(uri, database, string, initFlag bool) (*MyMongo, error) {
 }
 
 // InsertRepository 利用Insert将Repository作为文档存储到Mongo中
-func (mymongo *MyMongo) InsertRepository(repo *RepositoryOld) error {
+func (mymongo *MyMongoOld) InsertRepository(repo *RepositoryOld) error {
 	repo.Tags = map[string]TagOld{}
 	_, err := mymongo.RepositoriesCollection.InsertOne(context.Background(), repo)
 	return err
 }
 
 // InsertTag 利用Update将TagSource添加到Mongo中存储的对应的repository的tags中
-func (mymongo *MyMongo) InsertTag(tag *TagSource) error {
+func (mymongo *MyMongoOld) InsertTag(tag *TagSource) error {
 	var t = TagOld{
 		LastUpdated:         tag.LastUpdated,
 		LastUpdaterUsername: tag.LastUpdaterUsername,
@@ -206,7 +205,7 @@ func (mymongo *MyMongo) InsertTag(tag *TagSource) error {
 }
 
 // InsertImage 将image存储到Mongo中
-func (mymongo *MyMongo) InsertImage(image *ImageSource) error {
+func (mymongo *MyMongoOld) InsertImage(image *ImageSource) error {
 	// 为tag添加不同架构下的镜像digest
 	err := mymongo.AddImageToRepositoriesCollection(image)
 	// 将特定镜像的元数据单独存放到images集合
@@ -215,7 +214,7 @@ func (mymongo *MyMongo) InsertImage(image *ImageSource) error {
 }
 
 // AddImageToRepositoriesCollection 利用update $set，将image的digest添加到<namespace>/<repository>.tags.<tag>.images.<arch>.<variant>
-func (mymongo *MyMongo) AddImageToRepositoriesCollection(image *ImageSource) error {
+func (mymongo *MyMongoOld) AddImageToRepositoriesCollection(image *ImageSource) error {
 	// Mongo文档的键中不能包含"."，所以将image.Tag中的"."替换为"$"
 	tagKey := strings.Replace(image.TagName, ".", "$", -1)
 	filter := bson.M{
@@ -239,20 +238,20 @@ func (mymongo *MyMongo) AddImageToRepositoriesCollection(image *ImageSource) err
 }
 
 // InsertImageToImagesCollection 将image元数据作为文档插入到images collection中
-func (mymongo *MyMongo) InsertImageToImagesCollection(image *ImageSource) error {
+func (mymongo *MyMongoOld) InsertImageToImagesCollection(image *ImageSource) error {
 	i := image.Image
 	_, err := mymongo.ImagesCollection.InsertOne(context.Background(), i)
 	return err
 }
 
 // InsertResult insert result to collection results
-func (mymongo *MyMongo) InsertResult(image *ImageResult) error {
+func (mymongo *MyMongoOld) InsertResult(image *ImageResult) error {
 	_, err := mymongo.ResultsCollection.InsertOne(context.TODO(), image)
 	return err
 }
 
 // GetAllDocumentsCount 统计已经存入的文档数量（repository数量）
-func (mymongo *MyMongo) GetAllDocumentsCount() (map[string]int64, error) {
+func (mymongo *MyMongoOld) GetAllDocumentsCount() (map[string]int64, error) {
 	res := make(map[string]int64)
 	filter := bson.M{}
 
@@ -274,7 +273,7 @@ func (mymongo *MyMongo) GetAllDocumentsCount() (map[string]int64, error) {
 }
 
 // DropAllDocuments 将repository collection从mongo删除
-func (mymongo *MyMongo) DropAllDocuments() error {
+func (mymongo *MyMongoOld) DropAllDocuments() error {
 	mymongo.RepositoriesCollection.Drop(context.TODO())
 	mymongo.ImagesCollection.Drop(context.TODO())
 	return nil
@@ -282,7 +281,7 @@ func (mymongo *MyMongo) DropAllDocuments() error {
 
 // GetRepositoriesCountByText calculate total count of documents
 // in repositories collection searched by keyword
-func (mymongo *MyMongo) GetRepositoriesCountByText(keyword string) (int64, error) {
+func (mymongo *MyMongoOld) GetRepositoriesCountByText(keyword string) (int64, error) {
 	filter := bson.D{}
 	if keyword != "" {
 		filter = bson.D{
@@ -295,7 +294,7 @@ func (mymongo *MyMongo) GetRepositoriesCountByText(keyword string) (int64, error
 
 // FindRepositoriesByText search repository in collection mongo.dockerhub.repositories,
 // now searched by namespace, name, description, full_description (text index)
-func (mymongo *MyMongo) FindRepositoriesByText(search string, page, pageSize int64) ([]*RepositoryOld, error) {
+func (mymongo *MyMongoOld) FindRepositoriesByText(search string, page, pageSize int64) ([]*RepositoryOld, error) {
 	var res = make([]*RepositoryOld, 0)
 
 	filter := bson.D{}
@@ -324,7 +323,7 @@ func (mymongo *MyMongo) FindRepositoriesByText(search string, page, pageSize int
 }
 
 // FindRepositoryByName 根据Namespace、Repository寻找mongo.dockerhub.repository中存储的Repository
-func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*RepositoryOld, error) {
+func (mymongo *MyMongoOld) FindRepositoryByName(namespace, repository string) (*RepositoryOld, error) {
 	var repo = new(RepositoryOld)
 
 	// 传入条件
@@ -346,7 +345,7 @@ func (mymongo *MyMongo) FindRepositoryByName(namespace, repository string) (*Rep
 
 // GetImagesCountByText calculate total count of documents
 // in images collection searched by keyword (digest)
-func (mymongo *MyMongo) GetImagesCountByText(keyword string) (int64, error) {
+func (mymongo *MyMongoOld) GetImagesCountByText(keyword string) (int64, error) {
 	filter := bson.D{}
 	if keyword != "" {
 		filter = bson.D{
@@ -359,7 +358,7 @@ func (mymongo *MyMongo) GetImagesCountByText(keyword string) (int64, error) {
 
 // FindImagesByText search image in collection mongo.dockerhub.images,
 // now searched by digest (text index)
-func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([]*ImageOld, error) {
+func (mymongo *MyMongoOld) FindImagesByText(search string, page, pageSize int64) ([]*ImageOld, error) {
 	var res = make([]*ImageOld, 0)
 
 	filter := bson.D{}
@@ -388,7 +387,7 @@ func (mymongo *MyMongo) FindImagesByText(search string, page, pageSize int64) ([
 }
 
 // FindImageByDigest 根据Digest寻找mongo.dockerhub.images中存储的Image
-func (mymongo *MyMongo) FindImageByDigest(digest string) (*ImageOld, error) {
+func (mymongo *MyMongoOld) FindImageByDigest(digest string) (*ImageOld, error) {
 	var img = new(ImageOld)
 
 	// 传入条件
@@ -408,7 +407,7 @@ func (mymongo *MyMongo) FindImageByDigest(digest string) (*ImageOld, error) {
 
 // GetResultsCountByText calculate total count of documents
 // in results collection searched by keyword
-func (mymongo *MyMongo) GetResultsCountByText(keyword string) (int64, error) {
+func (mymongo *MyMongoOld) GetResultsCountByText(keyword string) (int64, error) {
 	filter := bson.D{}
 	if keyword != "" {
 		filter = bson.D{
@@ -419,7 +418,7 @@ func (mymongo *MyMongo) GetResultsCountByText(keyword string) (int64, error) {
 	return mymongo.ResultsCollection.CountDocuments(context.TODO(), filter)
 }
 
-func (mymongo *MyMongo) FindResultsByText(search string, page, pageSize int64) ([]*ImageResult, error) {
+func (mymongo *MyMongoOld) FindResultsByText(search string, page, pageSize int64) ([]*ImageResult, error) {
 	var res = make([]*ImageResult, 0)
 
 	filter := bson.D{}
@@ -448,7 +447,7 @@ func (mymongo *MyMongo) FindResultsByText(search string, page, pageSize int64) (
 	return res, nil
 }
 
-func (mymongo *MyMongo) FindResultByDigest(digest string) (*ImageResult, error) {
+func (mymongo *MyMongoOld) FindResultByDigest(digest string) (*ImageResult, error) {
 	var imgres = new(ImageResult)
 
 	// 传入条件

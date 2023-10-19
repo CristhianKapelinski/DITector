@@ -1,55 +1,62 @@
 package analyzer
 
 import (
+	"github.com/docker/docker/client"
 	"myutils"
 	"strconv"
 )
 
 type ImageAnalyzer struct {
-	DockerClient
-	Mongo       *myutils.MyMongo
-	MongoFlag   bool
-	Neo4jDriver *myutils.MyNeo4j
-	Neo4jFlag   bool
-	rules       Rules
+	DockerClient *client.Client
+	rules        Rules
 	CurrentImage
 }
 
 type CurrentImage struct {
-	Registry           string
-	Namespace          string
-	Repository         string
-	RepositoryMetadata *myutils.Repository
-	Tag                string
-	Digest             string
-	LayerLocalFileMap  map[string]string
+	Registry           string              `json:"registry"`
+	Namespace          string              `json:"namespace"`
+	RepositoryName     string              `json:"repository_name"`
+	RepositoryMetadata *myutils.Repository `json:"repository_metadata"`
+	TagName            string              `json:"tag_name"`
+	TagMetadata        *myutils.Tag        `json:"tag_metadata"`
+	ImageMetadata      *myutils.Image      `json:"image_metadata"`
+	Digest             string              `json:"digest"`
+	LayerLocalFileMap  map[string]string   `json:"layer_local_file_map"`
 }
 
 func NewImageAnalyzer(secretRuleFilePath string) (*ImageAnalyzer, error) {
-	imageAnalyzer := new(ImageAnalyzer)
+	analyzer := new(ImageAnalyzer)
+	var err error
 
-	// 配置隐私泄露、敏感参数检测规则
-	err := imageAnalyzer.loadRules(false, secretRuleFilePath)
+	// 连接本地Docker环境
+	analyzer.DockerClient, err = client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return nil, err
 	}
 
-	return imageAnalyzer, nil
+	// 配置隐私泄露、敏感参数检测规则
+	err = analyzer.loadRules(false, secretRuleFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return analyzer, nil
 }
 
 func (imageAnalyzer *ImageAnalyzer) loadRules(initFlag bool, secretRuleFilePath string) error {
 	// 加载隐私泄露检测规则文件
-	err := imageAnalyzer.rules.LoadSecretsFromYAMLFile(secretRuleFilePath)
+	err := imageAnalyzer.rules.loadSecretsFromYAMLFile(secretRuleFilePath)
 	if err != nil {
 		return err
 	}
 
 	// 编译用于隐私泄露检测的正则表达式
-	imageAnalyzer.rules.CompileSecretsRegex()
+	imageAnalyzer.rules.compileSecretsRegex()
 
 	return nil
 }
 
+// AnalyzeImageByName
 func (imageAnalyzer *ImageAnalyzer) AnalyzeImageByName(name string) {
 
 }
@@ -81,7 +88,7 @@ func (imageAnalyzer *ImageAnalyzer) AnalyzeImageMetadata(image *myutils.ImageOld
 func (imageAnalyzer *ImageAnalyzer) scanSecretsInString(s, part string) ([]*myutils.Result, error) {
 	res := make([]*myutils.Result, 0)
 
-	for _, secret := range imageAnalyzer.rules.Secrets {
+	for _, secret := range imageAnalyzer.rules.SecretRules {
 		// diff parts like contents, extension, filename, and ...
 		if secret.Part == part {
 			matches := secret.CompiledRegex.FindAllString(s, -1)

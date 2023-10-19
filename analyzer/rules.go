@@ -7,10 +7,10 @@ import (
 )
 
 type Rules struct {
-	Secrets []*SecretConfig `yaml:"secrets"`
+	SecretRules []*SecretRule `yaml:"secrets"`
 }
 
-type SecretConfig struct {
+type SecretRule struct {
 	Name          string         `yaml:"name" json:"name"`
 	Regex         string         `yaml:"regex" json:"regex"`
 	RegexType     string         `yaml:"regex_type"`
@@ -19,7 +19,7 @@ type SecretConfig struct {
 	SeverityScore float64        `yaml:"severity_score"`
 }
 
-func (rs *Rules) LoadSecretsFromYAMLFile(path string) error {
+func (rs *Rules) loadSecretsFromYAMLFile(path string) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -32,8 +32,8 @@ func (rs *Rules) LoadSecretsFromYAMLFile(path string) error {
 	return nil
 }
 
-func (rs *Rules) CompileSecretsRegex() {
-	for _, secret := range rs.Secrets {
+func (rs *Rules) compileSecretsRegex() {
+	for _, secret := range rs.SecretRules {
 		secret.CompiledRegex, _ = regexp.Compile(secret.Regex)
 	}
 }

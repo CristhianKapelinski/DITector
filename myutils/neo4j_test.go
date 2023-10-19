@@ -10,7 +10,7 @@ import (
 // TestFindMiddleSharedLayers 尝试发现从中间层开始交叉的两条image链，并将其打印出来
 
 func TestFindUpstreamNodesByNodeId(t *testing.T) {
-	mymongo, _ := NewMongoClient(false)
+	mymongo, _ := ConfigMongoClient(false)
 	tmpImage, err := mymongo.FindImageByDigest("sha256:7209d3b2285c9ca5a28051a5d8658e64e40888154d753bbd8a22eee214132a81")
 	if err != nil {
 		log.Fatalln(err)
@@ -30,7 +30,7 @@ func TestFindUpstreamNodesByNodeId(t *testing.T) {
 	accumulateHash := CalSha256(accumulateLayerID)
 	fmt.Println(accumulateHash)
 
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
+	neo4jDriver, err := NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -48,7 +48,7 @@ func TestFindUpstreamNodesByNodeId(t *testing.T) {
 }
 
 func TestFindDownstreamNodesByNodeId(t *testing.T) {
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
+	neo4jDriver, err := NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -66,7 +66,7 @@ func TestFindDownstreamNodesByNodeId(t *testing.T) {
 }
 
 func TestMyNeo4j_FindUpstreamImagesByNodeId(t *testing.T) {
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
+	neo4jDriver, err := NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -79,7 +79,7 @@ func TestMyNeo4j_FindUpstreamImagesByNodeId(t *testing.T) {
 }
 
 func TestMyNeo4j_FindDownstreamImagesByNodeId(t *testing.T) {
-	neo4jDriver, err := ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
+	neo4jDriver, err := NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}

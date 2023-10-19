@@ -37,11 +37,11 @@ type Record struct {
 // namespace/repository:tag and writes results to file
 // /data/docker-crawler/results/dependent-weights.txt
 func CalculateRepositoriesDependentWeights() {
-	myMongo, err := myutils.NewMongoClient(false)
+	myMongo, err := myutils.ConfigMongoClient(false)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	myNeo4jDriver, err := myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
+	myNeo4jDriver, err := myutils.NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -67,11 +67,11 @@ func CalculateRepositoriesDependentWeights() {
 			myMongo.Client.Disconnect(context.TODO())
 			myNeo4jDriver.Driver.Close(context.TODO())
 
-			myMongo, err = myutils.NewMongoClient(false)
+			myMongo, err = myutils.ConfigMongoClient(false)
 			if err != nil {
 				log.Fatalln(err)
 			}
-			myNeo4jDriver, err = myutils.ConfigNewNeo4jDriverWithContext("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
+			myNeo4jDriver, err = myutils.NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -240,7 +240,7 @@ type RecordWithNodeID struct {
 // dependent weight statistics of each repository
 // by read and process file /data/docker-crawler/results/dependent-weights/dependent-weights.txt
 func StatisticRepositoriesDependentWeights() {
-	mymongo, _ := myutils.NewMongoClient(false)
+	mymongo, _ := myutils.ConfigMongoClient(false)
 
 	upstreamFile, _ := os.OpenFile("/data/docker-crawler/results/dependent-weights/dependent-weights-upstream-top100.txt", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
 	downstreamFile, _ := os.OpenFile("/data/docker-crawler/results/dependent-weights/dependent-weights-downstream-top100.txt", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
