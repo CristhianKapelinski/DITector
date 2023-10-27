@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gocolly/colly"
+	"myutils"
 	"net/http"
 	"strconv"
 	"testing"
@@ -58,12 +59,12 @@ func TestSetProxy(t *testing.T) {
 		fmt.Println("Tags count: ", tagr.Count)
 	})
 
-	testurl := GetRepoTagsURL("library", "mongo", "1", "4")
+	testurl := myutils.GetRepoTagsURL("library", "mongo", "1", "4")
 
 	fmt.Println(testurl)
 
 	for i := 1; i < 10; i++ {
-		for err := c.Visit(GetRepoTagsURL("library", "mongo", strconv.Itoa(i), "4")); err != nil; err = c.Visit(GetRepoTagsURL("library", "mongo", strconv.Itoa(i), "4")) {
+		for err := c.Visit(myutils.GetRepoTagsURL("library", "mongo", strconv.Itoa(i), "4")); err != nil; err = c.Visit(myutils.GetRepoTagsURL("library", "mongo", strconv.Itoa(i), "4")) {
 			fmt.Println("[ERROR] Colly visit failed with: ", err)
 		}
 	}

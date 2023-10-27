@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"fmt"
+	"myutils"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,7 +55,7 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 
 	// 第一页爬取主动进行，直到爬取成功
 	i := 1
-	for err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil; err = c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")) {
+	for err := c.Visit(myutils.GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil; err = c.Visit(myutils.GetRegURL(keyword, source, strconv.Itoa(i), "100")) {
 		// keyword不存在对应的任何镜像，直接退出
 		if errCnt == 0 {
 			if strings.Contains(err.Error(), "Not Found") {
@@ -109,7 +110,7 @@ func ScrapeRegRepoListRecursive(keyword, source string) {
 	// 所以每一个goroutine的OnRequest都瞬间调用了，然后Delay，然后实际进行HTTP请求，然后HandleOnResponse。
 	// 导致在输出上只有多个Visit的OnResponse间间隔了预设的Delay时间。
 	for i = 2; i <= pages; i++ {
-		for err := c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil; err = c.Visit(GetRegURL(keyword, source, strconv.Itoa(i), "100")) {
+		for err := c.Visit(myutils.GetRegURL(keyword, source, strconv.Itoa(i), "100")); err != nil; err = c.Visit(myutils.GetRegURL(keyword, source, strconv.Itoa(i), "100")) {
 			// 页码不存在
 			if errCnt == 0 {
 				if strings.Contains(err.Error(), "Not Found") {
@@ -162,7 +163,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 
 	// 爬取Metadata
 	cm := GetRepoMetadataCollector(&repo)
-	for err := cm.Visit(GetRepoMetaURL(namespace, repository)); err != nil; err = cm.Visit(GetRepoMetaURL(namespace, repository)) {
+	for err := cm.Visit(myutils.GetRepositoryMetadataURL(namespace, repository)); err != nil; err = cm.Visit(myutils.GetRepositoryMetadataURL(namespace, repository)) {
 		if errCnt == 0 {
 			if strings.Contains(err.Error(), "Not Found") {
 				fmt.Println("[-] Not Found repository: ", namespace, "/", repository)
@@ -287,7 +288,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 		}
 	}(chTags)
 	// 访问第一页
-	for err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")); err != nil; err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")) {
+	for err = ct.Visit(myutils.GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")); err != nil; err = ct.Visit(myutils.GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")) {
 		if errCnt == 0 {
 			if strings.Contains(err.Error(), "Not Found") {
 				fmt.Println("[-] Not Found tag list for repository: ", namespace, "/", repository, ", page: ", cur)
@@ -312,7 +313,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 
 	// 获取全部tags
 	for cur = 2; cur <= pages; cur++ {
-		for err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")); err != nil; err = ct.Visit(GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")) {
+		for err = ct.Visit(myutils.GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")); err != nil; err = ct.Visit(myutils.GetRepoTagsURL(namespace, repository, strconv.Itoa(cur), "100")) {
 			if errCnt == 0 {
 				if strings.Contains(err.Error(), "Not Found") {
 					fmt.Println("[-] Not Found tag list for repository: ", namespace, "/", repository, ", page: ", cur)
@@ -344,7 +345,7 @@ func ScrapeRepoInfo(namespace, repository string) {
 		if &repo.Tags[i] == nil || repo.Tags[i].Name == "" {
 			continue
 		}
-		for err = ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name)); err != nil; err = ca.Visit(GetImageHistoryURL(repo.Namespace, repo.Name, repo.Tags[i].Name)) {
+		for err = ca.Visit(myutils.GetImageMetadataURL(repo.Namespace, repo.Name, repo.Tags[i].Name)); err != nil; err = ca.Visit(myutils.GetImageMetadataURL(repo.Namespace, repo.Name, repo.Tags[i].Name)) {
 			if errCnt == 0 {
 				if strings.Contains(err.Error(), "Not Found") {
 					fmt.Println("[-] Not Found tag list for repository: ", namespace, "/", repository, ", page: ", cur)

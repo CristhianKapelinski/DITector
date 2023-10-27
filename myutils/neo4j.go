@@ -13,15 +13,14 @@ type MyNeo4j struct {
 }
 
 // NewNeo4jDriver 返回一个配置完全的neo4j driver
-func NewNeo4jDriver(target, neo4jUsername, neo4jPassword string, initFlag bool) (*MyNeo4j, error) {
+func NewNeo4jDriver(target, username, password string, initFlag bool) (*MyNeo4j, error) {
 	var ret = new(MyNeo4j)
 	var err error
 
 	ret.Driver, err = neo4j.NewDriverWithContext(
 		target,
-		neo4j.BasicAuth(neo4jUsername, neo4jPassword, ""),
+		neo4j.BasicAuth(username, password, ""),
 	)
-	fmt.Println("connect neo4j got err:", err)
 	if err != nil {
 		return nil, err
 	}

@@ -89,6 +89,9 @@ func init() {
 		fmt.Println("[+] Open log file: ", logFilepath)
 	}
 
+	// 配置tls，跳过https证书验证
+	configTLSConfig()
+
 	// 初始化数据库连接
 	//connectDBs()
 }

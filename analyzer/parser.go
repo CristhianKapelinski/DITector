@@ -62,7 +62,6 @@ func (currI *CurrentImage) Parse() error {
 
 	// 获取元数据
 	if err := currI.parseMetadata(); err != nil {
-		myutils.Logger.Error("parse metadata of image", currI.name, "failed with:", err.Error())
 		return err
 	}
 
@@ -127,14 +126,17 @@ func (currI *CurrentImage) parseMetadata() error {
 	currI.metadata = new(metadata)
 
 	if currI.metadata.repositoryMetadata, err = currI.getRepositoryMetadata(); err != nil {
+		myutils.Logger.Error("parse repository metadata of image", currI.name, "failed with:", err.Error())
 		return err
 	}
 
-	if err := currI.getTagMetadata(); err != nil {
+	if currI.metadata.tagMetadata, err = currI.getTagMetadata(); err != nil {
+		myutils.Logger.Error("parse tag metadata of image", currI.name, "failed with:", err.Error())
 		return err
 	}
 
-	if err := currI.getImageMetadata(); err != nil {
+	if currI.metadata.imageMetadata, err = currI.getImageMetadata(); err != nil {
+		myutils.Logger.Error("parse image metadata of image", currI.name, "failed with:", err.Error())
 		return err
 	}
 
@@ -144,19 +146,59 @@ func (currI *CurrentImage) parseMetadata() error {
 // getRepositoryMetadata gets repository metadata from local MongoDB,
 // if repository not maintained in MongoDB or disconnected from MongoDB,
 // try to get metadata from Docker Hub API and store metadata to MongoDB.
-func (currI *CurrentImage) getRepositoryMetadata() (*myutils.Repository, error) {
-	// 数据库在线
+func (currI *CurrentImage) getRepositoryMetadata() (rMeta *myutils.Repository, err error) {
+	// 数据库在线，尝试从数据库读取
 	if myutils.GlobalDBClient.MongoFlag {
-		if
+		if rMeta, err = myutils.GlobalDBClient.Mongo.FindRepositoryByName(currI.namespace, currI.repositoryName); err != nil {
+			// 数据库中不存在，从API获取metadata
+			rMeta, err = myutils.ReqRepoMetadata(currI.namespace, currI.repositoryName)
+			if err != nil {
+				return
+			}
+
+			// API结果正常，存入数据库，存数据库过程的error不需要返回
+			if e := myutils.GlobalDBClient.Mongo.UpdateRepository(rMeta); e != nil {
+				myutils.Logger.Error("update metadata of repository", currI.namespace, currI.repositoryName, "failed with:", err.Error())
+			}
+		} else {
+			// 数据库获取正常，直接返回
+			return
+		}
+	} else {
+		// 数据库不在线，从API获取metadata并返回
+		rMeta, err = myutils.ReqRepoMetadata(currI.namespace, currI.repositoryName)
+		return
 	}
-	return nil
+	return
 }
 
 // getTagMetadata gets tag metadata from local MongoDB, if tag not maintained
 // in MongoDB or disconnected from MongoDB, try to get metadata from Docker
 // Hub API and store metadata to MongoDB.
-func (currI *CurrentImage) getTagMetadata() (*myutils.Tag, error) {
-	return nil
+func (currI *CurrentImage) getTagMetadata() (tMeta *myutils.Tag, err error) {
+	// 数据库在线，尝试从数据库读取
+	if myutils.GlobalDBClient.MongoFlag {
+		if tMeta, err = myutils.GlobalDBClient.Mongo.FindTagByName(currI.namespace, currI.repositoryName, currI.tagName); err != nil {
+			// 数据库中不存在，从API获取metadata
+			tMeta, err = myutils.ReqTagMetadata(currI.namespace, currI.repositoryName, currI.tagName)
+			if err != nil {
+				return
+			}
+
+			// API结果正常，存入数据库，存数据库过程的error不需要返回
+			if e := myutils.GlobalDBClient.Mongo.UpdateTag(tMeta); e != nil {
+				myutils.Logger.Error("update metadata of tag", currI.namespace, currI.repositoryName, currI.tagName, "failed with:", err.Error())
+			}
+		} else {
+			// 数据库获取正常，直接返回
+			return
+		}
+	} else {
+		// 数据库不在线，从API获取metadata并返回
+		tMeta, err = myutils.ReqTagMetadata(currI.namespace, currI.repositoryName, currI.tagName)
+		return
+	}
+	return
 }
 
 // getImageMetadata gets image metadata from local MongoDB, if image not

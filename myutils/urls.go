@@ -1,14 +1,14 @@
-package crawler
+package myutils
 
 import "fmt"
 
 const (
-	RegURLTemplate          = `https://hub.docker.com/api/content/v1/products/search?q=%s&source=%s&page=%s&page_size=%s`
-	NamespaceURLTemplate    = `https://hub.docker.com/v2/repositories/%s?page=%s&page_size=%s&ordering=last_updated`
-	RepoMetaURLTemplate     = `https://hub.docker.com/v2/repositories/%s/%s/`
-	RepoTagsURLTemplate     = `https://hub.docker.com/v2/repositories/%s/%s/tags/?page=%s&page_size=%s&name&ordering`
-	ImageMetaURLTemplate    = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s`
-	ImageHistoryURLTemplate = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s/images`
+	RegURLTemplate                = `https://hub.docker.com/api/content/v1/products/search?q=%s&source=%s&page=%s&page_size=%s`
+	NamespaceURLTemplate          = `https://hub.docker.com/v2/repositories/%s?page=%s&page_size=%s&ordering=last_updated`
+	RepositoryMetadataURLTemplate = `https://hub.docker.com/v2/repositories/%s/%s/`
+	RepoTagsURLTemplate           = `https://hub.docker.com/v2/repositories/%s/%s/tags/?page=%s&page_size=%s&name&ordering`
+	TagMetadataURLTemplate        = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s`
+	ImageMetadataURLTemplate      = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s/images`
 )
 
 // GetRegURL 返回用于获取repository list的URL
@@ -27,11 +27,11 @@ func GetNamespaceURL(namespace, page, size string) string {
 	return fmt.Sprintf(NamespaceURLTemplate, namespace, page, size)
 }
 
-// GetRepoMetaURL 返回Repository的元数据URL
+// GetRepositoryMetadataURL 返回Repository的元数据URL
 //
 // 主要包括star_count, pull_count, 最近更新时间等。
-func GetRepoMetaURL(namespace, repo string) string {
-	return fmt.Sprintf(RepoMetaURLTemplate, namespace, repo)
+func GetRepositoryMetadataURL(namespace, repo string) string {
+	return fmt.Sprintf(RepositoryMetadataURLTemplate, namespace, repo)
 }
 
 // GetRepoTagsURL 返回Repository TagName List的URL
@@ -41,17 +41,17 @@ func GetRepoTagsURL(namespace, repo, page, size string) string {
 	return fmt.Sprintf(RepoTagsURLTemplate, namespace, repo, page, size)
 }
 
-// GetImageMetaURL 返回指定Image(Repo:TagName)的元数据URL
+// GetTagMetadataURL 返回指定Image(Repo:TagName)的元数据URL
 //
 // 内容与GetRepoTagsURL中对每个Tag单独的描述完全一致，可以略过
-func GetImageMetaURL(namespace, repo, tag string) string {
-	return fmt.Sprintf(ImageMetaURLTemplate, namespace, repo, tag)
+func GetTagMetadataURL(namespace, repo, tag string) string {
+	return fmt.Sprintf(TagMetadataURLTemplate, namespace, repo, tag)
 }
 
-// GetImageHistoryURL 返回指定Image(Repo:TagName)的Layer URL
+// GetImageMetadataURL 返回指定Image(Repo:TagName)的Layer URL
 //
 // 主要包括镜像包含的构建信息，即各层的digest、构建命令等。
 // 对于支持多种内核架构的Tag，会以列表形式记录每个架构下的构建信息。
-func GetImageHistoryURL(namespace, repo, tag string) string {
-	return fmt.Sprintf(ImageHistoryURLTemplate, namespace, repo, tag)
+func GetImageMetadataURL(namespace, repo, tag string) string {
+	return fmt.Sprintf(ImageMetadataURLTemplate, namespace, repo, tag)
 }

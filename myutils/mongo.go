@@ -21,9 +21,12 @@ func NewMongo(uri, database, repositories, tags, images, results string, initFla
 	var mymongo = new(MyMongo)
 	var err error
 
+	// 设置超时时间
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	mongoOptions := options.Client().ApplyURI(uri)
-	mongoOptions.SetConnectTimeout(time.Second)
-	mymongo.Client, err = mongo.Connect(context.TODO(), mongoOptions)
+	mymongo.Client, err = mongo.Connect(ctx, mongoOptions)
 	if err != nil {
 		return mymongo, err
 	}
@@ -41,138 +44,219 @@ func NewMongo(uri, database, repositories, tags, images, results string, initFla
 
 	// TODO: 初次使用建立索引
 	if initFlag {
-
-		// 建立唯一索引，namespace-repository防止插入重复数据
-		repoIndexView := mymongo.RepositoriesCollection.Indexes()
-		repoModel := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "namespace", Value: 1},
-				{Key: "name", Value: 1},
-			},
-			Options: options.Index().SetUnique(true),
-		}
-		_, err = repoIndexView.CreateOne(context.Background(), repoModel)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
-		}
-		// create index on namespace
-		repoModel2 := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "namespace", Value: 1},
-			},
-			Options: options.Index().SetUnique(false),
-		}
-		_, err = repoIndexView.CreateOne(context.Background(), repoModel2)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
-		}
-		// create index on name
-		repoModel3 := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "name", Value: 1},
-			},
-			Options: options.Index().SetUnique(false),
-		}
-		_, err = repoIndexView.CreateOne(context.Background(), repoModel3)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
+		if err = mymongo.createReposCollectionIndexes(); err != nil {
+			return mymongo, err
 		}
 
-		// create text index on namespace, name, description, full_description with weights
-		repoModelText := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "namespace", Value: "text"},
-				{Key: "name", Value: "text"},
-				{Key: "description", Value: "text"},
-				{Key: "full_description", Value: "text"},
-			},
-			Options: options.Index().SetWeights(bson.D{
-				{"namespace", 12},
-				{"name", 18},
-				{"description", 6},
-				{"full_description", 1},
-			}),
+		if err = mymongo.createTagsCollectionIndexes(); err != nil {
+			return mymongo, err
 		}
-		_, err = repoIndexView.CreateOne(context.Background(), repoModelText)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
+
+		if err = mymongo.createImagesCollectionIndexes(); err != nil {
+			return mymongo, err
 		}
-		// 建立唯一索引digest，防止插入重复数据
-		imageIndexView := mymongo.ImagesCollection.Indexes()
-		imageModel := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "digest", Value: 1},
-			},
-			Options: options.Index().SetUnique(true),
-		}
-		_, err = imageIndexView.CreateOne(context.Background(), imageModel)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
-		}
-		// create text index on digest for search
-		imageModelText := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "digest", Value: "text"},
-			},
-		}
-		_, err = imageIndexView.CreateOne(context.TODO(), imageModelText)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
-		}
-		// 建立唯一索引digest，防止插入重复数据
-		resultsIndexView := mymongo.ResultsCollection.Indexes()
-		resultsModel := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "digest", Value: 1},
-			},
-			Options: options.Index().SetUnique(true),
-		}
-		_, err = resultsIndexView.CreateOne(context.Background(), resultsModel)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
-		}
-		// create text index on digest for search
-		resultsModelText := mongo.IndexModel{
-			Keys: bson.D{
-				{Key: "results.rulename", Value: "text"},
-				{Key: "results.type", Value: "text"},
-				{Key: "results.path", Value: "text"},
-				{Key: "results.match", Value: "text"},
-				{Key: "results.severity", Value: "text"},
-				{Key: "results.layerdigest", Value: "text"},
-			},
-			Options: options.Index().SetWeights(bson.D{
-				{Key: "results.name", Value: 2},
-				{Key: "results.type", Value: 2},
-				{Key: "results.path", Value: 1},
-				{Key: "results.match", Value: 1},
-				{Key: "results.severity", Value: 1},
-				{Key: "results.layerdigest", Value: 1},
-			}),
-		}
-		_, err = resultsIndexView.CreateOne(context.TODO(), resultsModelText)
-		if err != nil {
-			if !mongo.IsDuplicateKeyError(err) {
-				return mymongo, err
-			}
+
+		if err = mymongo.createResultsCollectionIndexes(); err != nil {
+			return mymongo, err
 		}
 	}
 
 	return mymongo, nil
+}
+
+// createReposCollectionIndexes creates indexes on repositories collection.
+func (m *MyMongo) createReposCollectionIndexes() (err error) {
+	repoIndexView := m.RepositoriesCollection.Indexes()
+
+	// Unique index: namespace, name
+	repoModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "namespace", Value: 1},
+			{Key: "name", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err = repoIndexView.CreateOne(context.Background(), repoModel)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	// index: namespace
+	repoModel2 := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "namespace", Value: 1},
+		},
+		Options: options.Index().SetUnique(false),
+	}
+	_, err = repoIndexView.CreateOne(context.Background(), repoModel2)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	// index: name
+	repoModel3 := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "name", Value: 1},
+		},
+		Options: options.Index().SetUnique(false),
+	}
+	_, err = repoIndexView.CreateOne(context.Background(), repoModel3)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	// Text index: namespace, name, description, full_description
+	repoModelText := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "namespace", Value: "text"},
+			{Key: "name", Value: "text"},
+			{Key: "description", Value: "text"},
+			{Key: "full_description", Value: "text"},
+		},
+		Options: options.Index().SetWeights(bson.D{
+			{"namespace", 12},
+			{"name", 12},
+			{"description", 6},
+			{"full_description", 1},
+		}),
+	}
+	_, err = repoIndexView.CreateOne(context.Background(), repoModelText)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	// 报错为重复建立索引，将返回值置空
+	if mongo.IsDuplicateKeyError(err) {
+		err = nil
+	}
+	return
+}
+
+// createTagsCollectionIndexes creates indexes on tags collection.
+func (m *MyMongo) createTagsCollectionIndexes() (err error) {
+	tagIndexView := m.TagsCollection.Indexes()
+
+	// Unique index: repositories_namespace, repositories_name, name, last_updated
+	tagModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "repositories_namespace", Value: 1},
+			{Key: "repositories_name", Value: 1},
+			{Key: "name", Value: 1},
+			{Key: "last_updated", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err = tagIndexView.CreateOne(context.Background(), tagModel)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	// index: repositories_namespace
+	tagModel2 := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "repositories_namespace", Value: 1},
+		},
+		Options: options.Index().SetUnique(false),
+	}
+	_, err = tagIndexView.CreateOne(context.Background(), tagModel2)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	// index: repositories_name
+	tagModel3 := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "repositories_name", Value: 1},
+		},
+		Options: options.Index().SetUnique(false),
+	}
+	_, err = tagIndexView.CreateOne(context.Background(), tagModel3)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	// 报错为重复建立索引，将返回值置空
+	if mongo.IsDuplicateKeyError(err) {
+		err = nil
+	}
+	return
+}
+
+// createImagesCollectionIndexes creates indexes on images collection.
+func (m *MyMongo) createImagesCollectionIndexes() (err error) {
+	imageIndexView := m.ImagesCollection.Indexes()
+
+	// Unique index: digest
+	imageModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "digest", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err = imageIndexView.CreateOne(context.Background(), imageModel)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	if mongo.IsDuplicateKeyError(err) {
+		err = nil
+	}
+	return
+}
+
+// createResultsCollectionIndexes creates indexes on results collection.
+// TODO: 具体使用哪些索引有待商榷
+func (m *MyMongo) createResultsCollectionIndexes() (err error) {
+	resultsIndexView := m.ResultsCollection.Indexes()
+
+	// index: digest
+	resultsModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "digest", Value: 1},
+		},
+		Options: options.Index().SetUnique(false),
+	}
+	_, err = resultsIndexView.CreateOne(context.Background(), resultsModel)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	if mongo.IsDuplicateKeyError(err) {
+		err = nil
+	}
+	return
+}
+
+func (m *MyMongo) UpdateRepository(repoMeta *Repository) error {
+	filter := bson.M{
+		"namespace": repoMeta.Namespace,
+		"name":      repoMeta.Name,
+	}
+	update := bson.M{
+		"$set": repoMeta,
+	}
+	opts := options.Update().SetUpsert(true)
+
+	_, err := m.RepositoriesCollection.UpdateOne(context.TODO(), filter, update, opts)
+	return err
 }
 
 func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, error) {
@@ -191,35 +275,47 @@ func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, err
 	return rMeta, err
 }
 
+func (m *MyMongo) UpdateTag(tMeta *Tag) error {
+	filter := bson.M{
+		"repositories_namespace": tMeta.RepositoryNamespace,
+		"repositories_name":      tMeta.RepositoryName,
+		"name":                   tMeta.Name,
+	}
+	update := bson.M{
+		"$set": tMeta,
+	}
+	opts := options.Update().SetUpsert(true)
+
+	_, err := m.TagsCollection.UpdateOne(context.TODO(), filter, update, opts)
+	return err
+}
+
+// FindTagByName TODO: 待单元测试
 func (m *MyMongo) FindTagByName(repoNamespace, repoName, name string) (*Tag, error) {
 	tMeta := new(Tag)
 
-	// 按照流程一定是有值的
-	filter := bson.M{
-		"repositories_namespace": repoNamespace,
-		"repositories_name":      repoName,
-		"name":                   name,
-	}
+	// 创建管道流程，根据名称匹配返回最新的tag信息
 	pipeline := []bson.M{
 		bson.M{
-			"$match": {
-				"repositories_name": "mongo",
-				"repositories_namespace": "library",
-			}
+			"$match": bson.M{
+				"repositories_namespace": repoNamespace,
+				"repositories_name":      repoName,
+				"name":                   name,
+			},
 		},
 		bson.M{
-			"$project": {
-				"last_updated_time": {
-					"$dateFromString": {
+			"$addFields": bson.M{
+				"last_updated_time": bson.M{
+					"$dateFromString": bson.M{
 						"dateString": "$last_updated",
 					},
 				},
-			}
+			},
 		},
 		bson.M{
-			"$sort": {
+			"$sort": bson.M{
 				"last_updated_time": -1,
-			}
+			},
 		},
 		bson.M{
 			"$limit": 1,
@@ -227,6 +323,15 @@ func (m *MyMongo) FindTagByName(repoNamespace, repoName, name string) (*Tag, err
 	}
 
 	cursor, err := m.TagsCollection.Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return tMeta, err
+	}
+	defer cursor.Close(context.TODO())
+
+	for cursor.Next(context.TODO()) {
+		err := cursor.Decode(tMeta)
+		return tMeta, err
+	}
 
 	return tMeta, err
 }
