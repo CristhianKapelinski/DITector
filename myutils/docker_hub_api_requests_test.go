@@ -11,7 +11,8 @@ func TestReqRepoMetadata(t *testing.T) {
 	if err != nil {
 		log.Fatalln("request repository metadata failed with:", err)
 	}
-	fmt.Println(rMeta)
+	fmt.Println(rMeta.Namespace, rMeta.Name, rMeta.PullCount)
+	fmt.Println(rMeta.FullDescription)
 }
 
 func TestReqTagMetadata(t *testing.T) {
@@ -19,7 +20,8 @@ func TestReqTagMetadata(t *testing.T) {
 	if err != nil {
 		log.Fatalln("request tag metadata failed with:", err)
 	}
-	fmt.Println(tMeta)
+	fmt.Println(tMeta.RepositoryNamespace, tMeta.RepositoryName, tMeta.Name, tMeta.LastUpdated)
+	fmt.Println(len(tMeta.Images))
 }
 
 func TestReqImagesMetadata(t *testing.T) {
@@ -27,5 +29,6 @@ func TestReqImagesMetadata(t *testing.T) {
 	if err != nil {
 		log.Fatalln("request images metadata failed with:", err)
 	}
-	fmt.Println(isMeta)
+	fmt.Println(len(isMeta))
+	fmt.Println(isMeta[0].Digest, isMeta[0].Architecture, isMeta[0].OS)
 }

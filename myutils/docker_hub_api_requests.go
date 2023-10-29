@@ -3,11 +3,18 @@ package myutils
 import (
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
+	"os"
 )
 
+// configHTTPProxy configures http and https proxy.
+func configHTTPProxy() {
+	os.Setenv("http_proxy", "127.0.0.1:7890")
+	os.Setenv("https_proxy", "127.0.0.1:7890")
+}
+
+// configTLSConfig configures not to verify CA for https protocol.
 func configTLSConfig() {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 }
@@ -24,15 +31,10 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 		return rMeta, err
 	}
 
-	fmt.Println(resp.Header)
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return rMeta, err
 	}
-
-	fmt.Println(body)
-	fmt.Println(string(body))
 
 	err = json.Unmarshal(body, rMeta)
 

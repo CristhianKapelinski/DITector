@@ -89,11 +89,13 @@ func init() {
 		fmt.Println("[+] Open log file: ", logFilepath)
 	}
 
+	// 配置http代理
+	configHTTPProxy()
 	// 配置tls，跳过https证书验证
 	configTLSConfig()
 
 	// 初始化数据库连接
-	//connectDBs()
+	connectDBs()
 }
 
 // relativeToAbsoluteConfig 将GlobalConfig中相对路径的部分调整为绝对路径
