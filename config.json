@@ -4,7 +4,7 @@
   "tags_file": "/mysql/json-files/tags.json",
   "images_file": "/mysql/json-files/images.json",
   "log_file": "docker-crawler.log",
-  "tmp_dir": "/data/tmp",
+  "tmp_dir": "/data/tmp/docker-proj",
   "crawler_config": {
     "local_proxy": false,
     "proxy_file": "crawler/proxyaddr.json",

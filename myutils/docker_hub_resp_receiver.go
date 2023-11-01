@@ -12,7 +12,7 @@ type Repository struct {
 	Description       string      `json:"description"`
 	IsPrivate         bool        `json:"is_private"`
 	IsAutomated       bool        `json:"is_automated"`
-	StarCount         int         `json:"star_count"`
+	StarCount         int64       `json:"star_count"`
 	PullCount         int64       `json:"pull_count"`
 	LastUpdated       string      `json:"last_updated"`
 	DateRegistered    string      `json:"date_registered"`
@@ -80,6 +80,6 @@ type Image struct {
 
 type Layer struct {
 	Digest      string `json:"digest,omitempty"`
-	Size        int    `json:"size"`
+	Size        int64  `json:"size"`
 	Instruction string `json:"instruction"`
 }

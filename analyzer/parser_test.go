@@ -10,7 +10,12 @@ import (
 )
 
 func TestImagePull(t *testing.T) {
-	irc, err := imageAnalyzer.DockerClient.ImagePull(context.TODO(), "alpine:3", types.ImagePullOptions{})
+	ci, err := NewCurrentImage()
+	if err != nil {
+		log.Fatalln("create new current image got error:", err)
+	}
+
+	irc, err := ci.dockerClient.ImagePull(context.TODO(), "alpine:3", types.ImagePullOptions{})
 	if err != nil {
 		log.Fatalln("pull image got error:", err)
 	}
@@ -21,7 +26,11 @@ func TestImagePull(t *testing.T) {
 }
 
 func TestDownloadImage(t *testing.T) {
-	ci := CurrentImage{dockerClient: imageAnalyzer.DockerClient, name: "alpine:3"}
+	ci, err := NewCurrentImage()
+	if err != nil {
+		log.Fatalln("create new current image got error:", err)
+	}
+
 	ch := make(chan bool)
 	go ci.pullImage(ch)
 
@@ -30,7 +39,10 @@ func TestDownloadImage(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	ci := CurrentImage{dockerClient: imageAnalyzer.DockerClient, name: "curlimages/curl:latest"}
+	ci, err := NewCurrentImage()
+	if err != nil {
+		log.Fatalln("create new current image got error:", err)
+	}
 	ci.Parse()
 
 	// 查看系统平台
@@ -47,7 +59,10 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseMetadata(t *testing.T) {
-	ci := CurrentImage{dockerClient: imageAnalyzer.DockerClient, name: "curlimages/curl:latest"}
+	ci, err := NewCurrentImage()
+	if err != nil {
+		log.Fatalln("create new current image got error:", err)
+	}
 	ci.parseName()
 	ci.parseServerPlatform()
 

@@ -114,3 +114,9 @@ func (currI *CurrentImage) pullImage(ch chan<- bool) {
 
 	return
 }
+
+// TODO: downloadImage downloads tar file of image directly from Docker Hub
+// to specific local directory.
+func (currI *CurrentImage) downloadImage(dir string) {
+
+}
