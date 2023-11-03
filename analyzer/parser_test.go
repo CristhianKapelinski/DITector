@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types"
 	"io"
@@ -25,17 +26,17 @@ func TestImagePull(t *testing.T) {
 	fmt.Println(string(b))
 }
 
-func TestDownloadImage(t *testing.T) {
-	ci, err := NewCurrentImage()
-	if err != nil {
-		log.Fatalln("create new current image got error:", err)
-	}
+func TestDefer(t *testing.T) {
+	var a = make(map[string]interface{})
+	var err error
+	defer func(err error) {
+		fmt.Println("defer got error:", err)
+	}(err)
 
-	ch := make(chan bool)
-	go ci.pullImage(ch)
+	err = json.Unmarshal([]byte(`{"aaa": ["abc"}`), &a)
+	fmt.Println("got err:", err)
 
-	b := <-ch
-	fmt.Println(b)
+	return
 }
 
 func TestParse(t *testing.T) {
@@ -43,7 +44,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		log.Fatalln("create new current image got error:", err)
 	}
-	ci.Parse()
+	ci.ParseFromDockerEnv()
 
 	// 查看系统平台
 	fmt.Println(ci.architecture, ci.os)

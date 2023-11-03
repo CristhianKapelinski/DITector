@@ -6,15 +6,14 @@ import (
 	"myutils"
 )
 
-// Parse TODO: 解析指定镜像的元数据、配置信息，下载镜像，定位镜像的各个层
-func (currI *CurrentImage) Parse() (err error) {
-	downloadChan := make(chan bool)
-
-	// 新开goroutine下载镜像
-	go currI.pullImage(downloadChan)
-
+// ParseFromDockerEnv TODO: 解析指定镜像的元数据、配置信息，下载镜像，定位镜像的各个层
+func (currI *CurrentImage) ParseFromDockerEnv() (err error) {
 	// 解析镜像基本信息
 	currI.parseName()
+
+	// 新开goroutine下载镜像
+	downloadChan := make(chan downloadFinish)
+	go currI.pullSaveExtractImage(myutils.GlobalConfig.TmpDir, downloadChan)
 
 	// 获取当前Docker server环境所在的平台信息
 	if err = currI.parseServerPlatform(); err != nil {
@@ -27,9 +26,9 @@ func (currI *CurrentImage) Parse() (err error) {
 	}
 
 	// 等待镜像下载完成
-	downloadOk := <-downloadChan
-	if !downloadOk {
-		return fmt.Errorf("parse image %s error: download failed", currI.name)
+	finish := <-downloadChan
+	if finish.err != nil {
+		return fmt.Errorf("pull, save and extract image %s error: %s", currI.name, finish.err)
 	}
 
 	// 解析配置信息
@@ -46,7 +45,7 @@ func (currI *CurrentImage) Parse() (err error) {
 	}
 
 	// 解析内容信息
-	if err = currI.parseContent(); err != nil {
+	if err = currI.parseContentFromDockerEnv(); err != nil {
 		return err
 	}
 
@@ -60,7 +59,7 @@ func (currI *CurrentImage) ParsePartial() {
 
 // parseName parses registry, namespace, repository, tag of the image according to name.
 func (currI *CurrentImage) parseName() {
-	currI.registry, currI.namespace, currI.repositoryName, currI.tagName = myutils.DivideImageName(currI.name)
+	currI.registry, currI.namespace, currI.repoName, currI.tagName = myutils.DivideImageName(currI.name)
 }
 
 // parseServerPlatform gets platform of the host with Docker client.

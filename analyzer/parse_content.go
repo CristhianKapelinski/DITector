@@ -5,6 +5,11 @@ package analyzer
 func (currI *CurrentImage) parseContentFromDockerEnv() error {
 	currI.extractLayersFromMetadata()
 
+	// 获取Lower
+	//for _, graphPath := range currI.configuration.GraphDriver.Data[] {
+	//
+	//}
+
 	return nil
 }
 

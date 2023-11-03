@@ -69,7 +69,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) {
 		return
 	}
 	// 解析镜像信息
-	analyzer.CurrentImage.Parse()
+	analyzer.CurrentImage.ParseFromDockerEnv()
 }
 
 // AnalyzerImagePartialByName analyzes image partially by name, including only the metadata.

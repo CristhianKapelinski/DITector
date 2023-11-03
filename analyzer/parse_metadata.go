@@ -33,16 +33,16 @@ func (currI *CurrentImage) parseMetadata(partial bool) (err error) {
 func (currI *CurrentImage) getRepositoryMetadata() (rMeta *myutils.Repository, err error) {
 	// 数据库在线，尝试从数据库读取
 	if myutils.GlobalDBClient.MongoFlag {
-		if rMeta, err = myutils.GlobalDBClient.Mongo.FindRepositoryByName(currI.namespace, currI.repositoryName); err != nil {
+		if rMeta, err = myutils.GlobalDBClient.Mongo.FindRepositoryByName(currI.namespace, currI.repoName); err != nil {
 			// 数据库中不存在，从API获取metadata
-			rMeta, err = myutils.ReqRepoMetadata(currI.namespace, currI.repositoryName)
+			rMeta, err = myutils.ReqRepoMetadata(currI.namespace, currI.repoName)
 			if err != nil {
 				return
 			}
 
 			// API结果正常，存入数据库，存数据库过程的error不需要返回
 			if e := myutils.GlobalDBClient.Mongo.UpdateRepository(rMeta); e != nil {
-				myutils.Logger.Error("update metadata of repository", currI.namespace, currI.repositoryName, "failed with:", e.Error())
+				myutils.Logger.Error("update metadata of repository", currI.namespace, currI.repoName, "failed with:", e.Error())
 			}
 		} else {
 			// 数据库获取正常，直接返回
@@ -51,7 +51,7 @@ func (currI *CurrentImage) getRepositoryMetadata() (rMeta *myutils.Repository, e
 	} else {
 		fmt.Println("mongo not online, getting repository metadata from API")
 		// 数据库不在线，从API获取metadata并返回
-		rMeta, err = myutils.ReqRepoMetadata(currI.namespace, currI.repositoryName)
+		rMeta, err = myutils.ReqRepoMetadata(currI.namespace, currI.repoName)
 		return
 	}
 	return
@@ -63,16 +63,16 @@ func (currI *CurrentImage) getRepositoryMetadata() (rMeta *myutils.Repository, e
 func (currI *CurrentImage) getTagMetadata() (tMeta *myutils.Tag, err error) {
 	// 数据库在线，尝试从数据库读取
 	if myutils.GlobalDBClient.MongoFlag {
-		if tMeta, err = myutils.GlobalDBClient.Mongo.FindTagByName(currI.namespace, currI.repositoryName, currI.tagName); err != nil {
+		if tMeta, err = myutils.GlobalDBClient.Mongo.FindTagByName(currI.namespace, currI.repoName, currI.tagName); err != nil {
 			// 数据库中不存在，从API获取metadata
-			tMeta, err = myutils.ReqTagMetadata(currI.namespace, currI.repositoryName, currI.tagName)
+			tMeta, err = myutils.ReqTagMetadata(currI.namespace, currI.repoName, currI.tagName)
 			if err != nil {
 				return
 			}
 
 			// API结果正常，存入数据库，存数据库过程的error不需要返回
 			if e := myutils.GlobalDBClient.Mongo.UpdateTag(tMeta); e != nil {
-				myutils.Logger.Error("update metadata of tag", currI.namespace, currI.repositoryName, currI.tagName, "failed with:", e.Error())
+				myutils.Logger.Error("update metadata of tag", currI.namespace, currI.repoName, currI.tagName, "failed with:", e.Error())
 			}
 		} else {
 			// 数据库获取正常，直接返回
@@ -81,7 +81,7 @@ func (currI *CurrentImage) getTagMetadata() (tMeta *myutils.Tag, err error) {
 	} else {
 		fmt.Println("mongo not online, getting tag metadata from API")
 		// 数据库不在线，从API获取metadata并返回
-		tMeta, err = myutils.ReqTagMetadata(currI.namespace, currI.repositoryName, currI.tagName)
+		tMeta, err = myutils.ReqTagMetadata(currI.namespace, currI.repoName, currI.tagName)
 		return
 	}
 	return
@@ -110,7 +110,7 @@ func (currI *CurrentImage) getImageMetadata() (iMeta *myutils.Image, err error) 
 
 	if currI.digest == "" {
 		return nil, fmt.Errorf("no image with the same platform %s was found in tag %s metadata",
-			currI.os+"/"+currI.architecture, currI.registry+"/"+currI.namespace+"/"+currI.repositoryName+":"+currI.tagName)
+			currI.os+"/"+currI.architecture, currI.registry+"/"+currI.namespace+"/"+currI.repoName+":"+currI.tagName)
 	}
 
 	// 数据库在线，尝试从数据库读取
@@ -118,7 +118,7 @@ func (currI *CurrentImage) getImageMetadata() (iMeta *myutils.Image, err error) 
 		if iMeta, err = myutils.GlobalDBClient.Mongo.FindImageByDigest(currI.digest); err != nil {
 			// 数据库中不存在，从API获取images metadata
 			var isMeta []*myutils.Image
-			isMeta, err = myutils.ReqImagesMetadata(currI.namespace, currI.repositoryName, currI.tagName)
+			isMeta, err = myutils.ReqImagesMetadata(currI.namespace, currI.repoName, currI.tagName)
 			if err != nil {
 				return
 			}
@@ -133,7 +133,7 @@ func (currI *CurrentImage) getImageMetadata() (iMeta *myutils.Image, err error) 
 
 			if iMeta == nil {
 				return nil, fmt.Errorf("no image with the same platform %s was found in tag %s metadata",
-					currI.os+"/"+currI.architecture, currI.registry+"/"+currI.namespace+"/"+currI.repositoryName+":"+currI.tagName)
+					currI.os+"/"+currI.architecture, currI.registry+"/"+currI.namespace+"/"+currI.repoName+":"+currI.tagName)
 			}
 
 			// API结果正常，存入数据库，存数据库过程的error不需要返回
@@ -148,7 +148,7 @@ func (currI *CurrentImage) getImageMetadata() (iMeta *myutils.Image, err error) 
 		fmt.Println("mongo not online, getting image metadata from API")
 		// 数据库不在线，从API获取metadata并返回
 		var isMeta []*myutils.Image
-		isMeta, err = myutils.ReqImagesMetadata(currI.namespace, currI.repositoryName, currI.tagName)
+		isMeta, err = myutils.ReqImagesMetadata(currI.namespace, currI.repoName, currI.tagName)
 		if err != nil {
 			return
 		}
@@ -163,7 +163,7 @@ func (currI *CurrentImage) getImageMetadata() (iMeta *myutils.Image, err error) 
 
 		if iMeta == nil {
 			return nil, fmt.Errorf("no image with the same platform %s was found in tag %s metadata",
-				currI.os+"/"+currI.architecture, currI.registry+"/"+currI.namespace+"/"+currI.repositoryName+":"+currI.tagName)
+				currI.os+"/"+currI.architecture, currI.registry+"/"+currI.namespace+"/"+currI.repoName+":"+currI.tagName)
 		}
 
 		return
