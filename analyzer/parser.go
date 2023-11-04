@@ -31,7 +31,7 @@ type CurrentImage struct {
 	metadata *metadata
 
 	// configuration of the image
-	configuration *types.ImageInspect
+	configuration *Configuration
 
 	// content of the image
 	imgTarFile             string // filepath of image tar
@@ -39,7 +39,7 @@ type CurrentImage struct {
 	manifest               manifest
 	layerWithContentList   []string
 	layerLocalFilepathList []string
-	layerInfoMap           map[string]layerInfo
+	layerInfoMap           map[string]*layerInfo
 }
 
 type metadata struct {
@@ -92,10 +92,12 @@ func NewCurrentImage(imgName string) (*CurrentImage, error) {
 	currI.name = imgName
 	currI.parseName()
 
+	// 初始化引用变量
 	currI.metadata = new(metadata)
+	currI.configuration = new(Configuration)
 	currI.layerWithContentList = make([]string, 0)
 	currI.layerLocalFilepathList = make([]string, 0)
-	currI.layerInfoMap = make(map[string]layerInfo)
+	currI.layerInfoMap = make(map[string]*layerInfo)
 	currI.manifest = manifest{}
 
 	return currI, nil

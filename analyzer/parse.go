@@ -6,8 +6,18 @@ import (
 	"github.com/Musso12138/dockercrawler/myutils"
 )
 
+// ParseFromFile pulls and saves image to tar archive, and parses
+// information based on the tar file.
 func (currI *CurrentImage) ParseFromFile() (err error) {
+	// 新启动线程下载镜像
 	downloadCh := make(chan downloadFinish)
+	go currI.pullSaveExtractImage(myutils.GlobalConfig.TmpDir, downloadCh)
+
+	// 解析镜像repo、tag元数据
+	if err = currI.parseMetadata(false); err != nil {
+		myutils.Logger.Error("get repo-tag-metadata of image", currI.name, "failed with:", err.Error())
+		return
+	}
 
 	// 等待镜像下载完成
 	finish := <-downloadCh
@@ -16,6 +26,26 @@ func (currI *CurrentImage) ParseFromFile() (err error) {
 	}
 	currI.imgTarFile = finish.imgTarPath
 	currI.imgFilepath = finish.imgDirPath
+
+	// 解析镜像配置
+	if err = currI.parseConfigurationFromFile(); err != nil {
+		myutils.Logger.Error("parse configuration of image", currI.name, "failed with:", err.Error())
+		return
+	}
+
+	// 解析镜像image元数据
+	if currI.metadata.imageMetadata, err = currI.getImageMetadata(); err != nil {
+		myutils.Logger.Error("get image-metadata of image", currI.name, "failed with:", err.Error())
+		return err
+	}
+
+	// 解析镜像内容
+	if err = currI.parseContentFromFile(); err != nil {
+		myutils.Logger.Error("parse content of image", currI.name, "failed with:", err.Error())
+		return
+	}
+
+	return
 }
 
 // ParseFromDockerEnv TODO: 解析指定镜像的元数据、配置信息，下载镜像，定位镜像的各个层

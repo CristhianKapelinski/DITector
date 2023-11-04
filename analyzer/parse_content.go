@@ -38,7 +38,7 @@ func (currI *CurrentImage) parseLayersWithContentFromMetadata() {
 	for _, layer := range currI.metadata.imageMetadata.Layers {
 		if layer.Digest != "" {
 			currI.layerWithContentList = append(currI.layerWithContentList, layer.Digest)
-			currI.layerInfoMap[layer.Digest] = layerInfo{
+			currI.layerInfoMap[layer.Digest] = &layerInfo{
 				size:        layer.Size,
 				instruction: layer.Instruction,
 				digest:      layer.Digest,
