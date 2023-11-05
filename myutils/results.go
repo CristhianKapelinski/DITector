@@ -96,11 +96,13 @@ var IssuePart = struct {
 	"content",
 }
 
-func AddIssue(is []*Issue, i *Issue) {
-	for _, x := range is {
-		if *x == *i {
-			return
+func AddIssue(dest []*Issue, src ...*Issue) {
+	for _, i := range src {
+		for _, j := range dest {
+			if *i == *j {
+				break
+			}
 		}
+		dest = append(dest, i)
 	}
-	is = append(is, i)
 }
