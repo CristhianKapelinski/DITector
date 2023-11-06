@@ -10,9 +10,10 @@ func (analyzer *ImageAnalyzer) analyzeContent(ci *CurrentImage, ir *myutils.Imag
 	// 逐层分析layer内容，写入对应LayerResult
 	for _, ld := range ir.Layers {
 		// 数据库在线，检查是否已被分析
-		if myutils.GlobalDBClient.Neo4jFlag {
-			if lr, err := myutils.GlobalDBClient.Neo4j.FindRawLayerByDigest(ld); !myutils.IsLayerNotScannedError(err) {
+		if myutils.GlobalDBClient.MongoFlag {
+			if lr, err := myutils.GlobalDBClient.Mongo.FindLayerResultByDigest(ld); err == nil {
 
+				continue
 			}
 		}
 		if err := analyzer.analyzeLayer(ci.layerInfoMap[ld].localFilePath, ir.LayerResults[ld]); err != nil {

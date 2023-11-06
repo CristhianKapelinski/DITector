@@ -17,7 +17,8 @@
       "repositories": "repositories",
       "tags": "tags",
       "images": "images",
-      "results": "results"
+      "image_results": "image_results",
+      "layer_results": "layer_results"
     }
   },
   "neo4j_config": {

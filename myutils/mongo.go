@@ -9,15 +9,23 @@ import (
 )
 
 type MyMongo struct {
-	Client                 *mongo.Client
-	RepositoriesCollection *mongo.Collection
-	TagsCollection         *mongo.Collection
-	ImagesCollection       *mongo.Collection
-	ResultsCollection      *mongo.Collection
+	Client          *mongo.Client
+	RepoColl        *mongo.Collection
+	TagColl         *mongo.Collection
+	ImgColl         *mongo.Collection
+	ImgResultColl   *mongo.Collection
+	LayerResultColl *mongo.Collection
+}
+
+func NewMongoGlobalConfig() (*MyMongo, error) {
+	return NewMongo(GlobalConfig.MongoConfig.URI, GlobalConfig.MongoConfig.Database,
+		GlobalConfig.MongoConfig.Collections.Repositories, GlobalConfig.MongoConfig.Collections.Tags,
+		GlobalConfig.MongoConfig.Collections.Images, GlobalConfig.MongoConfig.Collections.ImageResults,
+		GlobalConfig.MongoConfig.Collections.LayerResults, false)
 }
 
 // NewMongo returns a new mongo client
-func NewMongo(uri, database, repositories, tags, images, results string, initFlag bool) (*MyMongo, error) {
+func NewMongo(uri, database, repositories, tags, images, imgResults, layerResults string, initFlag bool) (*MyMongo, error) {
 	var mymongo = new(MyMongo)
 	var err error
 
@@ -37,26 +45,31 @@ func NewMongo(uri, database, repositories, tags, images, results string, initFla
 	}
 
 	dockerhubDB := mymongo.Client.Database(database)
-	mymongo.RepositoriesCollection = dockerhubDB.Collection(repositories)
-	mymongo.TagsCollection = dockerhubDB.Collection(tags)
-	mymongo.ImagesCollection = dockerhubDB.Collection(images)
-	mymongo.ResultsCollection = dockerhubDB.Collection(results)
+	mymongo.RepoColl = dockerhubDB.Collection(repositories)
+	mymongo.TagColl = dockerhubDB.Collection(tags)
+	mymongo.ImgColl = dockerhubDB.Collection(images)
+	mymongo.ImgResultColl = dockerhubDB.Collection(imgResults)
+	mymongo.LayerResultColl = dockerhubDB.Collection(layerResults)
 
 	// TODO: 初次使用建立索引
 	if initFlag {
-		if err = mymongo.createReposCollectionIndexes(); err != nil {
+		if err = mymongo.createRepoCollIndexes(); err != nil {
 			return mymongo, err
 		}
 
-		if err = mymongo.createTagsCollectionIndexes(); err != nil {
+		if err = mymongo.createTagCollIndexes(); err != nil {
 			return mymongo, err
 		}
 
-		if err = mymongo.createImagesCollectionIndexes(); err != nil {
+		if err = mymongo.createImgCollIndexes(); err != nil {
 			return mymongo, err
 		}
 
-		if err = mymongo.createResultsCollectionIndexes(); err != nil {
+		if err = mymongo.createImgResultCollIndexes(); err != nil {
+			return mymongo, err
+		}
+
+		if err = mymongo.createLayerResultCollIndexes(); err != nil {
 			return mymongo, err
 		}
 	}
@@ -64,19 +77,19 @@ func NewMongo(uri, database, repositories, tags, images, results string, initFla
 	return mymongo, nil
 }
 
-// createReposCollectionIndexes creates indexes on repositories collection.
-func (m *MyMongo) createReposCollectionIndexes() (err error) {
-	repoIndexView := m.RepositoriesCollection.Indexes()
+// createRepoCollIndexes creates indexes on repositories collection.
+func (m *MyMongo) createRepoCollIndexes() (err error) {
+	indexView := m.RepoColl.Indexes()
 
 	// Unique index: namespace, name
-	repoModel := mongo.IndexModel{
+	model := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "namespace", Value: 1},
 			{Key: "name", Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
 	}
-	_, err = repoIndexView.CreateOne(context.Background(), repoModel)
+	_, err = indexView.CreateOne(context.Background(), model)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -84,13 +97,13 @@ func (m *MyMongo) createReposCollectionIndexes() (err error) {
 	}
 
 	// index: namespace
-	repoModel2 := mongo.IndexModel{
+	model2 := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "namespace", Value: 1},
 		},
 		Options: options.Index().SetUnique(false),
 	}
-	_, err = repoIndexView.CreateOne(context.Background(), repoModel2)
+	_, err = indexView.CreateOne(context.Background(), model2)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -98,13 +111,13 @@ func (m *MyMongo) createReposCollectionIndexes() (err error) {
 	}
 
 	// index: name
-	repoModel3 := mongo.IndexModel{
+	model3 := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "name", Value: 1},
 		},
 		Options: options.Index().SetUnique(false),
 	}
-	_, err = repoIndexView.CreateOne(context.Background(), repoModel3)
+	_, err = indexView.CreateOne(context.Background(), model3)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -112,7 +125,7 @@ func (m *MyMongo) createReposCollectionIndexes() (err error) {
 	}
 
 	// Text index: namespace, name, description, full_description
-	repoModelText := mongo.IndexModel{
+	textModel := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "namespace", Value: "text"},
 			{Key: "name", Value: "text"},
@@ -126,7 +139,7 @@ func (m *MyMongo) createReposCollectionIndexes() (err error) {
 			{"full_description", 1},
 		}),
 	}
-	_, err = repoIndexView.CreateOne(context.Background(), repoModelText)
+	_, err = indexView.CreateOne(context.Background(), textModel)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -140,12 +153,12 @@ func (m *MyMongo) createReposCollectionIndexes() (err error) {
 	return
 }
 
-// createTagsCollectionIndexes creates indexes on tags collection.
-func (m *MyMongo) createTagsCollectionIndexes() (err error) {
-	tagIndexView := m.TagsCollection.Indexes()
+// createTagCollIndexes creates indexes on tags collection.
+func (m *MyMongo) createTagCollIndexes() (err error) {
+	indexView := m.TagColl.Indexes()
 
 	// Unique index: repositories_namespace, repositories_name, name, last_updated
-	tagModel := mongo.IndexModel{
+	model := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "repositories_namespace", Value: 1},
 			{Key: "repositories_name", Value: 1},
@@ -154,7 +167,7 @@ func (m *MyMongo) createTagsCollectionIndexes() (err error) {
 		},
 		Options: options.Index().SetUnique(true),
 	}
-	_, err = tagIndexView.CreateOne(context.Background(), tagModel)
+	_, err = indexView.CreateOne(context.Background(), model)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -162,13 +175,13 @@ func (m *MyMongo) createTagsCollectionIndexes() (err error) {
 	}
 
 	// index: repositories_namespace
-	tagModel2 := mongo.IndexModel{
+	model2 := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "repositories_namespace", Value: 1},
 		},
 		Options: options.Index().SetUnique(false),
 	}
-	_, err = tagIndexView.CreateOne(context.Background(), tagModel2)
+	_, err = indexView.CreateOne(context.Background(), model2)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -176,13 +189,13 @@ func (m *MyMongo) createTagsCollectionIndexes() (err error) {
 	}
 
 	// index: repositories_name
-	tagModel3 := mongo.IndexModel{
+	model3 := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "repositories_name", Value: 1},
 		},
 		Options: options.Index().SetUnique(false),
 	}
-	_, err = tagIndexView.CreateOne(context.Background(), tagModel3)
+	_, err = indexView.CreateOne(context.Background(), model3)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -196,18 +209,21 @@ func (m *MyMongo) createTagsCollectionIndexes() (err error) {
 	return
 }
 
-// createImagesCollectionIndexes creates indexes on images collection.
-func (m *MyMongo) createImagesCollectionIndexes() (err error) {
-	imageIndexView := m.ImagesCollection.Indexes()
+// createImgCollIndexes creates indexes on images collection.
+func (m *MyMongo) createImgCollIndexes() (err error) {
+	indexView := m.ImgColl.Indexes()
 
-	// Unique index: digest
-	imageModel := mongo.IndexModel{
+	// Unique index: namespace, repository_name, tag_name, digest
+	model := mongo.IndexModel{
 		Keys: bson.D{
+			{Key: "namespace", Value: 1},
+			{Key: "repository_name", Value: 1},
+			{Key: "tag_name", Value: 1},
 			{Key: "digest", Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
 	}
-	_, err = imageIndexView.CreateOne(context.Background(), imageModel)
+	_, err = indexView.CreateOne(context.Background(), model)
 	if err != nil {
 		if !mongo.IsDuplicateKeyError(err) {
 			return
@@ -220,10 +236,10 @@ func (m *MyMongo) createImagesCollectionIndexes() (err error) {
 	return
 }
 
-// createResultsCollectionIndexes creates indexes on results collection.
+// createImgResultCollIndexes creates indexes on image results collection.
 // TODO: 具体使用哪些索引有待商榷
-func (m *MyMongo) createResultsCollectionIndexes() (err error) {
-	resultsIndexView := m.ResultsCollection.Indexes()
+func (m *MyMongo) createImgResultCollIndexes() (err error) {
+	resultsIndexView := m.ImgResultColl.Indexes()
 
 	// index: digest
 	resultsModel := mongo.IndexModel{
@@ -231,6 +247,30 @@ func (m *MyMongo) createResultsCollectionIndexes() (err error) {
 			{Key: "digest", Value: 1},
 		},
 		Options: options.Index().SetUnique(false),
+	}
+	_, err = resultsIndexView.CreateOne(context.Background(), resultsModel)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	if mongo.IsDuplicateKeyError(err) {
+		err = nil
+	}
+	return
+}
+
+// createLayerResultCollIndexes creates indexes on layer results collection.
+func (m *MyMongo) createLayerResultCollIndexes() (err error) {
+	resultsIndexView := m.LayerResultColl.Indexes()
+
+	// index: digest
+	resultsModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "digest", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
 	}
 	_, err = resultsIndexView.CreateOne(context.Background(), resultsModel)
 	if err != nil {
@@ -255,7 +295,7 @@ func (m *MyMongo) UpdateRepository(repoMeta *Repository) error {
 	}
 	opts := options.Update().SetUpsert(true)
 
-	_, err := m.RepositoriesCollection.UpdateOne(context.TODO(), filter, update, opts)
+	_, err := m.RepoColl.UpdateOne(context.TODO(), filter, update, opts)
 	return err
 }
 
@@ -270,7 +310,7 @@ func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, err
 		filter["name"] = name
 	}
 
-	err := m.RepositoriesCollection.FindOne(context.Background(), filter).Decode(rMeta)
+	err := m.RepoColl.FindOne(context.Background(), filter).Decode(rMeta)
 
 	return rMeta, err
 }
@@ -286,7 +326,7 @@ func (m *MyMongo) UpdateTag(tMeta *Tag) error {
 	}
 	opts := options.Update().SetUpsert(true)
 
-	_, err := m.TagsCollection.UpdateOne(context.TODO(), filter, update, opts)
+	_, err := m.TagColl.UpdateOne(context.TODO(), filter, update, opts)
 	return err
 }
 
@@ -322,7 +362,7 @@ func (m *MyMongo) FindTagByName(repoNamespace, repoName, name string) (*Tag, err
 		},
 	}
 
-	cursor, err := m.TagsCollection.Aggregate(context.Background(), pipeline)
+	cursor, err := m.TagColl.Aggregate(context.Background(), pipeline)
 	if err != nil {
 		return tMeta, err
 	}
@@ -345,7 +385,7 @@ func (m *MyMongo) UpdateImage(iMeta *Image) error {
 	}
 	opts := options.Update().SetUpsert(true)
 
-	_, err := m.ImagesCollection.UpdateOne(context.TODO(), filter, update, opts)
+	_, err := m.ImgColl.UpdateOne(context.TODO(), filter, update, opts)
 	return err
 }
 
@@ -356,7 +396,7 @@ func (m *MyMongo) FindImageByDigest(digest string) (*Image, error) {
 		"digest": digest,
 	}
 
-	err := m.ImagesCollection.FindOne(context.Background(), filter).Decode(iMeta)
+	err := m.ImgColl.FindOne(context.Background(), filter).Decode(iMeta)
 
 	return iMeta, err
 }

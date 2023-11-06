@@ -28,6 +28,11 @@ func (e *LayerNotExistsError) Error() string {
 	return fmt.Sprintf("LayerNotExistsError: %s", e.Msg)
 }
 
+func NewNeo4jDriverGlobalConfig() (*MyNeo4j, error) {
+	return NewNeo4jDriver(GlobalConfig.Neo4jConfig.Neo4jURI, GlobalConfig.Neo4jConfig.Neo4jUsername,
+		GlobalConfig.Neo4jConfig.Neo4jPassword, false)
+}
+
 // NewNeo4jDriver 返回一个配置完全的neo4j driver
 func NewNeo4jDriver(target, username, password string, initFlag bool) (*MyNeo4j, error) {
 	var ret = new(MyNeo4j)
@@ -143,11 +148,11 @@ func addNewLayerFunc(ctx context.Context, previousHash, idHash string, layer Lay
 					"ON CREATE SET l.digest=$digest, l.images=$images "+
 					"WITH l "+
 					"MERGE (rl:RawLayer {digest: $digest}) "+
-					"ON CREATE SET rl.size=$size, rl.instruction=$instruction, rl.scanned=$scanned, rl.file_added=$file_added, rl.file_deleted=$file_deleted, rl.vul=$vul "+
+					"ON CREATE SET rl.size=$size, rl.instruction=$instruction "+
 					"WITH l,rl "+
 					"MERGE (l)-[:SAME]-(rl)",
 				map[string]any{"idHash": idHash, "digest": layer.Digest, "images": []string{},
-					"size": layer.Size, "instruction": layer.Instruction, "scanned": false, "file_added": []string{}, "file_deleted": []string{}, "vul": [][]string{}},
+					"size": layer.Size, "instruction": layer.Instruction},
 			)
 
 			if err != nil {
@@ -164,14 +169,14 @@ func addNewLayerFunc(ctx context.Context, previousHash, idHash string, layer Lay
 					"ON CREATE SET l.digest=$digest, l.images=$images "+
 					"WITH l "+
 					"MERGE (rl:RawLayer {digest: $digest}) "+
-					"ON CREATE SET rl.size=$size, rl.instruction=$instruction, rl.scanned=$scanned, rl.file_added=$file_added, rl.file_deleted=$file_deleted, rl.vul=$vul "+
+					"ON CREATE SET rl.size=$size, rl.instruction=$instruction "+
 					"WITH l,rl "+
 					"MERGE (l)-[:SAME]-(rl) "+
 					"WITH l "+
 					"MATCH (previous:Layer {id: $previousHash}) "+
 					"MERGE (previous)-[:IS_BASE_OF]->(l)",
 				map[string]any{"previousHash": previousHash, "idHash": idHash, "digest": layer.Digest, "images": []string{},
-					"size": layer.Size, "instruction": layer.Instruction, "scanned": false, "file_added": []string{}, "file_deleted": []string{}, "vul": [][]string{}},
+					"size": layer.Size, "instruction": layer.Instruction},
 			)
 
 			if err != nil {

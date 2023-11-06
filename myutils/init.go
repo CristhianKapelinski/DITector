@@ -40,7 +40,8 @@ type MongoCollections struct {
 	Repositories string `json:"repositories"`
 	Tags         string `json:"tags"`
 	Images       string `json:"images"`
-	Results      string `json:"results"`
+	ImageResults string `json:"image_results"`
+	LayerResults string `json:"layer_results"`
 }
 
 type Neo4jConfig struct {
@@ -121,10 +122,7 @@ func connectDBs() {
 
 	// 连接MongoDB
 	// TODO: Mongo Timeout设置不正确，目前不生效
-	if GlobalDBClient.Mongo, err = NewMongo(GlobalConfig.MongoConfig.URI, GlobalConfig.MongoConfig.Database,
-		GlobalConfig.MongoConfig.Collections.Repositories, GlobalConfig.MongoConfig.Collections.Tags,
-		GlobalConfig.MongoConfig.Collections.Images, GlobalConfig.MongoConfig.Collections.Results,
-		false); err != nil {
+	if GlobalDBClient.Mongo, err = NewMongoGlobalConfig(); err != nil {
 		GlobalDBClient.MongoFlag = false
 		Logger.Error("connect to MongoDB failed with:", err.Error())
 		fmt.Println("[-] Connect to MongoDB failed")
@@ -135,8 +133,7 @@ func connectDBs() {
 
 	// 连接Neo4j
 	// TODO: Neo4j连接返回的err不正确，目前永远为nil
-	if GlobalDBClient.Neo4j, err = NewNeo4jDriver(GlobalConfig.Neo4jConfig.Neo4jURI, GlobalConfig.Neo4jConfig.Neo4jUsername,
-		GlobalConfig.Neo4jConfig.Neo4jPassword, false); err != nil {
+	if GlobalDBClient.Neo4j, err = NewNeo4jDriverGlobalConfig(); err != nil {
 		GlobalDBClient.Neo4jFlag = false
 		Logger.Error("connect to Neo4j failed with:", err.Error())
 		fmt.Println("[-] Connect to Neo4j failed")
