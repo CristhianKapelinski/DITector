@@ -46,9 +46,20 @@ type AskYData struct {
 }
 
 type AskYReportData struct {
-	Total        int            `json:"total"`
-	ComponentNum int            `json:"componentNum"`
-	VulnInfo     []AskYVulnInfo `json:"vulnInfo"`
+	Component    []AskYComponent `json:"component"`
+	Total        int             `json:"total"`
+	ComponentNum int             `json:"componentNum"`
+	VulnInfo     []AskYVulnInfo  `json:"vulnInfo"`
+}
+
+type AskYComponent struct {
+	FileName    string `json:"fileName"`
+	Codetype    string `json:"codetype"`
+	FilePath    string `json:"filePath"`
+	FileSha1    string `json:"fileSha1"`
+	FileMd5     string `json:"fileMd5"`
+	FileVersion string `json:"fileVersion"`
+	OpenSource  string `json:"openSource"`
 }
 
 type AskYVulnInfo struct {
@@ -86,10 +97,14 @@ type FileReputation struct {
 func (analyzer *ImageAnalyzer) analyzeContent(ci *CurrentImage, ir *myutils.ImageResult) (*myutils.ContentResult, error) {
 	res := myutils.NewContentResult()
 	fileWithIssues := make(map[string]bool)
+	defaultExecFiles := make(map[string]struct{})
+	for _, f := range ci.defaultExecFile {
+		defaultExecFiles[f] = struct{}{}
+	}
 
 	// 逐层分析layer内容，写入对应LayerResult
 	for _, ld := range ci.layerWithContentList {
-		layerRes, fromMongo, err := analyzer.analyzeLayer(ci.layerInfoMap[ld], fileWithIssues)
+		layerRes, fromMongo, err := analyzer.analyzeLayer(ci.layerInfoMap[ld], fileWithIssues, defaultExecFiles)
 		if err != nil {
 			myutils.Logger.Error("analyze layer", ci.layerInfoMap[ld].digest, "failed with:", err.Error())
 			return nil, err
@@ -150,7 +165,7 @@ func (analyzer *ImageAnalyzer) analyzeContent(ci *CurrentImage, ir *myutils.Imag
 
 // analyzeLayer TODO: traverses and analyzes files under inputted layerDir,
 // and writes results directly to layerResult.
-func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo, fileWithIssues map[string]bool) (*myutils.LayerResult, bool, error) {
+func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo, fileWithIssues map[string]bool, defaultExecFiles map[string]struct{}) (*myutils.LayerResult, bool, error) {
 	// 数据库在线，检查是否已被分析
 	if myutils.GlobalDBClient.MongoFlag {
 		if lr, err := myutils.GlobalDBClient.Mongo.FindLayerResultByDigest(layer.digest); err == nil {
@@ -175,10 +190,13 @@ func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo, fileWithIssues map
 
 		report, err := scaVul(layerDir, path.Join(layerDir, "..", "sca.json"))
 		if err != nil {
-			myutils.Logger.Error("sca and matches vuln for filepath failed with:", err.Error())
+			myutils.Logger.Error("sca and matches vuln for filepath", layerDir, "failed with:", err.Error())
 			return
 		}
 
+		//TODO: component加入LayerResult
+
+		// 形成LayerResult的漏洞列表
 		vulnList := make([]myutils.Vulnerability, 0)
 		for _, vuln := range report.Data.ReportData.VulnInfo {
 			relPath, _ := filepath.Rel(layerDir, vuln.FilePath)
@@ -220,7 +238,7 @@ func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo, fileWithIssues map
 	}(layer.localFilePath, res)
 
 	// 遍历layer目录，发现需要扫描隐私泄露/错误配置/恶意软件的文件，并进行相应扫描
-	if err = filepath.Walk(layer.localFilePath, scanLayerFunc(layer, fileWithIssues)); err != nil {
+	if err = filepath.Walk(layer.localFilePath, scanLayerFunc(layer, fileWithIssues, defaultExecFiles, res, &resLock)); err != nil {
 		fmt.Println()
 	}
 
@@ -237,6 +255,12 @@ func scaVul(layerDir, dest string) (*AskYReport, error) {
 		return nil, err
 	}
 
+	scaFile, err := os.Open(dest)
+	if err != nil {
+		return nil, err
+	}
+	defer scaFile.Close()
+
 	// 上传asky sca结果到天蚕API
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -244,12 +268,6 @@ func scaVul(layerDir, dest string) (*AskYReport, error) {
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
 		},
 	}
-
-	scaFile, err := os.Open(dest)
-	if err != nil {
-		return nil, err
-	}
-	defer scaFile.Close()
 
 	postReq, err := http.NewRequest(http.MethodPost,
 		fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/uploadLog?token=%s", myutils.GlobalConfig.AskyConfig.AskyToken),
@@ -274,14 +292,14 @@ func scaVul(layerDir, dest string) (*AskYReport, error) {
 	if err = json.Unmarshal(body, task); err != nil {
 		return nil, err
 	}
-	if task.Code != "10000" {
-		return nil, fmt.Errorf("asky start with task code %s != 10000", task.Code)
+	if task.Data.Status != "0" && task.Data.Status != "1" && task.Data.Status != "2" {
+		return nil, fmt.Errorf("asky start with task code %s", task.Code)
 	}
 
 	// 等待asky服务端检测任务完成
 	failCnt := 0
 	for {
-		time.Sleep(time.Second)
+		time.Sleep(1 * time.Second)
 
 		// 获取检测状态
 		statusReq, err := http.NewRequest(http.MethodGet,
@@ -350,12 +368,28 @@ func scaVul(layerDir, dest string) (*AskYReport, error) {
 }
 
 // scanLayerFunc 返回一个用于遍历layer目录时扫描文件内容的函数
-func scanLayerFunc(layer *layerInfo, fileWithIssues map[string]bool) filepath.WalkFunc {
+func scanLayerFunc(layer *layerInfo, fileWithIssues map[string]bool, defaultExecFiles map[string]struct{}, layerRes *myutils.LayerResult, layerResMu *sync.Mutex) filepath.WalkFunc {
 	return func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			myutils.Logger.Error("scan layer file", layer.localFilePath, "failed with:", err.Error())
+			return err
+		}
+
 		// 跳过文件夹
 		if info.IsDir() {
 			return nil
 		}
+
+		relPath, err := filepath.Rel(layer.localFilePath, path)
+		if err != nil {
+			return err
+		}
+		// 基于当前状态删除过往扫描记录
+		if secretFlag, ok := fileWithIssues[relPath]; ok && !secretFlag {
+			delete(fileWithIssues, relPath)
+		}
+
+		// TODO: 根据文件路径确定扫描内容
 
 		return nil
 	}
@@ -405,7 +439,7 @@ func getFileReputation(filepath string) (*FileReputation, error) {
 	}
 
 	req, err := http.NewRequest("GET",
-		fmt.Sprintf("https://tqs.qianxin-inc.cn/file/v1/files/%s/reputation", h),
+		fmt.Sprintf("http://tqs.qianxin-inc.cn/file/v1/files/%s/reputation", h),
 		nil,
 	)
 	if err != nil {

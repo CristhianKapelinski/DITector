@@ -34,7 +34,6 @@ type CurrentImage struct {
 	// configuration of the image
 	configuration   *Configuration
 	defaultCmd      defaultCmd
-	defaultFile     string
 	defaultExecFile []string // filepath of default executed files
 
 	// content of the image

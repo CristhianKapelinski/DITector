@@ -30,7 +30,8 @@ func TestPullSaveExtractImage(t *testing.T) {
 }
 
 func TestParseFromFile(t *testing.T) {
-	ci, err := NewCurrentImage("curlimages/curl:8.4.0")
+	//ci, err := NewCurrentImage("curlimages/curl:8.4.0")
+	ci, err := NewCurrentImage("thanhcongnhe/thanhcongnhe:latest")
 	if err != nil {
 		log.Fatalln("create new current image got error:", err)
 	}

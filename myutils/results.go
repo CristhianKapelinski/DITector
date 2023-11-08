@@ -54,8 +54,9 @@ type LayerResult struct {
 	Size        int64  `json:"size"`
 	Digest      string `json:"digest"`
 
-	Total        int `json:"total"` // from qianxin asky
-	ComponentNum int `json:"component_num"`
+	Total        int         `json:"total"` // from qianxin asky
+	ComponentNum int         `json:"component_num"`
+	Components   []Component `json:"components"`
 
 	SecretLeakages    []SecretLeakage    `json:"secret_leakages"`
 	Vulnerabilities   []Vulnerability    `json:"vulnerabilities"`
@@ -67,6 +68,13 @@ type LayerResult struct {
 }
 
 type Component struct {
+	Filename    string `json:"filename"`
+	Codetype    string `json:"codetype"`
+	Filepath    string `json:"filepath"`
+	FileSha1    string `json:"file_sha1"`
+	FileMd5     string `json:"file_md5"`
+	FileVersion string `json:"file_version"`
+	OpenSource  string `json:"open_source"`
 }
 
 func NewImageResult() *ImageResult {

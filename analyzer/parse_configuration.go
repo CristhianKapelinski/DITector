@@ -42,7 +42,7 @@ func (currI *CurrentImage) parseConfigurationFromFile() error {
 	currI.architecture, currI.variant = currI.configuration.Architecture, currI.configuration.Variant
 	currI.os, currI.osVersion = currI.configuration.Os, currI.configuration.OsVersion
 
-	// 解析容器默认启动命令及执行文件
+	// 解析容器默认启动命令
 	currI.defaultCmd.entrypoint = strings.TrimSpace(strings.Join(currI.configuration.Config.Entrypoint, " "))
 	currI.defaultCmd.cmd = strings.TrimSpace(strings.Join(currI.configuration.Config.Cmd, " "))
 	if currI.defaultCmd.entrypoint != "" {
@@ -50,10 +50,28 @@ func (currI *CurrentImage) parseConfigurationFromFile() error {
 	} else {
 		currI.defaultCmd.fullCmd = currI.defaultCmd.cmd
 	}
+	// 解析容器默认执行文件路径
+	stripBinShR, _ := regexp.Compile(`^(?:/bin/sh\s+-c\s+)?(.*)`)
 	defaultExecFileR, _ := regexp.Compile(`^(?:python\s+|./)?(\S+)`)
-	matches := defaultExecFileR.FindStringSubmatch(currI.defaultCmd.fullCmd)
+	cmd := currI.defaultCmd.fullCmd
+	if strings.HasPrefix(cmd, "/bin/sh -c") {
+		ms := stripBinShR.FindStringSubmatch(cmd)
+		if len(ms) > 1 {
+			cmd = ms[1]
+		}
+	}
+	matches := defaultExecFileR.FindStringSubmatch(cmd)
 	if len(matches) > 1 {
-		currI.defaultExecFile = append(currI.defaultExecFile, matches[1])
+		defaultExecFile := matches[1]
+		if strings.HasPrefix(defaultExecFile, "/") {
+			currI.defaultExecFile = append(currI.defaultExecFile, defaultExecFile)
+		} else {
+			workdir := "/"
+			if currI.configuration.Config.WorkingDir != "" {
+				workdir = currI.configuration.Config.WorkingDir
+			}
+			currI.defaultExecFile = append(currI.defaultExecFile, path.Join(workdir, defaultExecFile))
+		}
 	}
 
 	return nil

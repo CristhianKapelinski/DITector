@@ -50,5 +50,6 @@ func TestScanSensitiveParamInString(t *testing.T) {
 }
 
 func TestScanFileMalicious(t *testing.T) {
-	fmt.Println(scanFileMalicious("/Users/musso/workshop/docker-projects/docker-image-supply-chain/malware/xmrig-6.20.0-linux-static-x64.tar.gz"))
+	//fmt.Println(scanFileMalicious("/Users/musso/workshop/docker-projects/docker-image-supply-chain/malware/xmrig-6.20.0-linux-static-x64.tar.gz"))
+	fmt.Println(scanFileMalicious("/Users/musso/workshop/docker-projects/docker-image-supply-chain/download-images/thanhcongnhe-thanhcongnhe-latest/eed3f579a2a05c9097747ad49de87b3149de099dc2ddcd0e39df9b59908bac84/layer/etc/dao.py"))
 }

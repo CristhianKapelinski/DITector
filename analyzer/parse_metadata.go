@@ -59,7 +59,6 @@ func (currI *CurrentImage) getRepositoryMetadata() (rMeta *myutils.Repository, e
 			return
 		}
 	} else {
-		fmt.Println("mongo not online, getting repository metadata from API")
 		// 数据库不在线，从API获取metadata并返回
 		rMeta, err = myutils.ReqRepoMetadata(currI.namespace, currI.repoName)
 		return
@@ -92,7 +91,6 @@ func (currI *CurrentImage) getTagMetadata() (tMeta *myutils.Tag, err error) {
 			return
 		}
 	} else {
-		fmt.Println("mongo not online, getting tag metadata from API")
 		// 数据库不在线，从API获取metadata并返回
 		tMeta, err = myutils.ReqTagMetadata(currI.namespace, currI.repoName, currI.tagName)
 		return
@@ -161,7 +159,6 @@ func (currI *CurrentImage) getImageMetadata() (iMeta *myutils.Image, err error) 
 			return
 		}
 	} else {
-		fmt.Println("mongo not online, getting image metadata from API")
 		// 数据库不在线，从API获取metadata并返回
 		var isMeta []*myutils.Image
 		isMeta, err = myutils.ReqImagesMetadata(currI.namespace, currI.repoName, currI.tagName)
