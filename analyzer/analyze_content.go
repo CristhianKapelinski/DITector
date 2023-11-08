@@ -1,12 +1,19 @@
 package analyzer
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/Musso12138/dockercrawler/myutils"
 	"io"
+	"io/fs"
 	"net/http"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
 	"sync"
+	"time"
 )
 
 // 用于Asky与服务器通信确定任务情况
@@ -30,6 +37,7 @@ type AskYTaskData struct {
 
 // 用于接受服务器返回的SCA和漏洞匹配结果
 type AskYReport struct {
+	Code string   `json:"code"`
 	Data AskYData `json:"data"`
 }
 
@@ -77,70 +85,80 @@ type FileReputation struct {
 
 func (analyzer *ImageAnalyzer) analyzeContent(ci *CurrentImage, ir *myutils.ImageResult) (*myutils.ContentResult, error) {
 	res := myutils.NewContentResult()
-	wg := sync.WaitGroup{}
+	fileWithIssues := make(map[string]bool)
 
 	// 逐层分析layer内容，写入对应LayerResult
 	for _, ld := range ci.layerWithContentList {
-		wg.Add(1)
-		go func(layer *layerInfo) {
-			defer wg.Done()
-			layerRes, fromMongo, err := analyzer.analyzeLayer(layer)
-			if err != nil {
-				myutils.Logger.Error("analyze layer", layer.digest, "failed with:", err.Error())
-				return
-			}
-			ir.LayerResults[layer.digest] = layerRes
+		layerRes, fromMongo, err := analyzer.analyzeLayer(ci.layerInfoMap[ld], fileWithIssues)
+		if err != nil {
+			myutils.Logger.Error("analyze layer", ci.layerInfoMap[ld].digest, "failed with:", err.Error())
+			return nil, err
+		}
+		ir.LayerResults[ld] = layerRes
 
-			if !fromMongo {
-				if myutils.GlobalDBClient.MongoFlag {
-					go func(layerRes *myutils.LayerResult) {
-						if e := myutils.GlobalDBClient.Mongo.UpdateLayerResult(layerRes); e != nil {
-							myutils.Logger.Error("update LayerResult", layerRes.Digest, "failed with:", e.Error())
-						}
-					}(layerRes)
-				}
-			}
-		}(ci.layerInfoMap[ld])
-	}
+		// 把有问题的结果文件放入当前状态表
+		for _, secretInfo := range layerRes.SecretLeakages {
+			fileWithIssues[secretInfo.Path] = true
+		}
+		for _, vulnInfo := range layerRes.Vulnerabilities {
+			fileWithIssues[vulnInfo.Path] = false
+		}
+		for _, misconfInfo := range layerRes.Misconfigurations {
+			fileWithIssues[misconfInfo.Path] = false
+		}
+		for _, malInfo := range layerRes.MaliciousFiles {
+			fileWithIssues[malInfo.Path] = false
+		}
 
-	// 等待各层分析结束
-	wg.Wait()
-
-	// 遍历各层结果，存入全局表中（当前状态）
-	for _, ld := range ir.Layers {
-		for filepath, fileIs := range ir.LayerResults[ld].FileIssues {
-			// 如果下层中扫过filepath，将其中的隐私信息泄露问题加进来
-			tmpIs := make([]*myutils.Issue, len(fileIs))
-			copy(tmpIs, fileIs)
-			if preIs, ok := ir.FileIssues[filepath]; ok {
-				for _, preI := range preIs {
-					if preI.Type == myutils.IssueType.SecretLeakage {
-						myutils.AddIssue(tmpIs, preI)
+		// 新分析的结果存入数据库
+		if !fromMongo {
+			if myutils.GlobalDBClient.MongoFlag {
+				go func(layerRes *myutils.LayerResult) {
+					if e := myutils.GlobalDBClient.Mongo.UpdateLayerResult(layerRes); e != nil {
+						myutils.Logger.Error("update LayerResult", layerRes.Digest, "failed with:", e.Error())
 					}
-				}
+				}(layerRes)
 			}
-
-			ir.FileIssues[filepath] = tmpIs
 		}
 	}
 
-	// 汇总各层file，形成最终结果
-	for _, fileIs := range ir.FileIssues {
-		myutils.AddIssue(res, fileIs...)
-	}
+	//// 遍历各层结果，存入全局表中（当前状态）
+	//for _, ld := range ir.Layers {
+	//	for filepath, fileIs := range ir.LayerResults[ld].FileIssues {
+	//		// 如果下层中扫过filepath，将其中的隐私信息泄露问题加进来
+	//		tmpIs := make([]*myutils.Issue, len(fileIs))
+	//		copy(tmpIs, fileIs)
+	//		if preIs, ok := ir.FileIssues[filepath]; ok {
+	//			for _, preI := range preIs {
+	//				if preI.Type == myutils.IssueType.SecretLeakage {
+	//					myutils.AddIssue(tmpIs, preI)
+	//				}
+	//			}
+	//		}
+	//
+	//		ir.FileIssues[filepath] = tmpIs
+	//	}
+	//}
+	//
+	//// 汇总各层file，形成最终结果
+	//for _, fileIs := range ir.FileIssues {
+	//	myutils.AddIssue(res, fileIs...)
+	//}
 
 	return res, nil
 }
 
 // analyzeLayer TODO: traverses and analyzes files under inputted layerDir,
 // and writes results directly to layerResult.
-func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo) (*myutils.LayerResult, bool, error) {
+func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo, fileWithIssues map[string]bool) (*myutils.LayerResult, bool, error) {
 	// 数据库在线，检查是否已被分析
 	if myutils.GlobalDBClient.MongoFlag {
 		if lr, err := myutils.GlobalDBClient.Mongo.FindLayerResultByDigest(layer.digest); err == nil {
 			return lr, true, nil
 		}
 	}
+
+	var err error
 
 	resLock := sync.Mutex{}
 	res := myutils.NewLayerResult()
@@ -150,35 +168,197 @@ func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo) (*myutils.LayerRes
 
 	wg := sync.WaitGroup{}
 
-	// SCA: 调用asky对本地层文件做
+	// SCA: 调用asky对本地层文件做SCA和漏洞匹配
 	wg.Add(1)
 	go func(layerDir string, layerRes *myutils.LayerResult) {
 		defer wg.Done()
 
-		report, err := scaVul(layerDir)
+		report, err := scaVul(layerDir, path.Join(layerDir, "..", "sca.json"))
 		if err != nil {
 			myutils.Logger.Error("sca and matches vuln for filepath failed with:", err.Error())
 			return
 		}
 
+		vulnList := make([]myutils.Vulnerability, 0)
+		for _, vuln := range report.Data.ReportData.VulnInfo {
+			relPath, _ := filepath.Rel(layerDir, vuln.FilePath)
+			affectFile := make([]string, len(vuln.AffectFile))
+			for i, p := range vuln.AffectFile {
+				tmpRel, _ := filepath.Rel(layerDir, p)
+				affectFile[i] = tmpRel
+			}
+
+			vulnList = append(vulnList, myutils.Vulnerability{
+				Type:        myutils.IssueType.Vulnerability,
+				Name:        vuln.CVEID,
+				Part:        myutils.IssuePart.Content,
+				Path:        relPath,
+				LayerDigest: layer.digest,
+
+				CVEID:           vuln.CVEID,
+				Filename:        vuln.FileName,
+				ProductName:     vuln.ProductName,
+				VendorName:      vuln.VendorName,
+				Version:         vuln.Version,
+				VulnType:        vuln.VulnType,
+				ThrType:         vuln.ThrType,
+				PublishedTime:   vuln.PublishedTime,
+				Description:     vuln.Description,
+				Severity:        vuln.Severity,
+				CVSSScore:       vuln.CVSSScore,
+				AffectComponent: vuln.AffectComponent,
+				AffectFile:      affectFile,
+			})
+		}
+
+		// 上锁写入layer
 		resLock.Lock()
 		defer resLock.Unlock()
 		layerRes.Total = report.Data.ReportData.Total
 		layerRes.ComponentNum = report.Data.ReportData.ComponentNum
-		for _, vuln := range report.Data.ReportData.VulnInfo {
-
-		}
-
+		layerRes.Vulnerabilities = vulnList
 	}(layer.localFilePath, res)
 
+	// 遍历layer目录，发现需要扫描隐私泄露/错误配置/恶意软件的文件，并进行相应扫描
+	if err = filepath.Walk(layer.localFilePath, scanLayerFunc(layer, fileWithIssues)); err != nil {
+		fmt.Println()
+	}
+
 	wg.Wait()
-	return res, false, nil
+	return res, false, err
 }
 
 // scaVul TODO: 对层文件进行SCA并进行漏洞匹配
-func scaVul(layerDir string) (*AskYReport, error) {
+func scaVul(layerDir, dest string) (*AskYReport, error) {
 	// 调用asky脚本本地SCA
+	cmd := exec.Command("bash", myutils.GlobalConfig.AskyConfig.AskyFile, "-s", layerDir, "-o", dest)
+	err := cmd.Run()
+	if err != nil {
+		return nil, err
+	}
 
+	// 上传asky sca结果到天蚕API
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           nil,
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+		},
+	}
+
+	scaFile, err := os.Open(dest)
+	if err != nil {
+		return nil, err
+	}
+	defer scaFile.Close()
+
+	postReq, err := http.NewRequest(http.MethodPost,
+		fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/uploadLog?token=%s", myutils.GlobalConfig.AskyConfig.AskyToken),
+		scaFile,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(postReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	task := new(AskYTask)
+	if err = json.Unmarshal(body, task); err != nil {
+		return nil, err
+	}
+	if task.Code != "10000" {
+		return nil, fmt.Errorf("asky start with task code %s != 10000", task.Code)
+	}
+
+	// 等待asky服务端检测任务完成
+	failCnt := 0
+	for {
+		time.Sleep(time.Second)
+
+		// 获取检测状态
+		statusReq, err := http.NewRequest(http.MethodGet,
+			fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/queryTaskStatus?sha1=%s&tid=%s", task.Data.Sha1, task.Data.Flag2),
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := client.Do(statusReq)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		state := new(AskYTask)
+		if err := json.Unmarshal(body, state); err != nil {
+			return nil, err
+		}
+
+		// 检测完成时退出循环
+		if state.Data.Status == "2" {
+			break
+		} else if state.Data.Status == "3" || state.Data.Status == "4" {
+			return nil, fmt.Errorf("asky server response exception (task status %s)", state.Data.Status)
+		}
+
+		// 最多等待一个任务五分钟
+		failCnt++
+		if failCnt > 300 {
+			return nil, fmt.Errorf("waiting for asky server scanning filepath %s timeout after %d retries", dest, failCnt)
+		}
+	}
+
+	// 获取检测结果
+	reportReq, err := http.NewRequest(http.MethodGet,
+		fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/queryReport/%s?token=%s", task.Data.TaskID, myutils.GlobalConfig.AskyConfig.AskyToken),
+		nil)
+	if err != nil {
+		return nil, err
+	}
+
+	reportResp, err := client.Do(reportReq)
+	if err != nil {
+		return nil, err
+	}
+	defer reportResp.Body.Close()
+
+	body, err = io.ReadAll(reportResp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	report := new(AskYReport)
+	if err := json.Unmarshal(body, report); err != nil {
+		return nil, err
+	}
+
+	return report, nil
+}
+
+// scanLayerFunc 返回一个用于遍历layer目录时扫描文件内容的函数
+func scanLayerFunc(layer *layerInfo, fileWithIssues map[string]bool) filepath.WalkFunc {
+	return func(path string, info fs.FileInfo, err error) error {
+		// 跳过文件夹
+		if info.IsDir() {
+			return nil
+		}
+
+		return nil
+	}
 }
 
 // scanFileMalicious 利用奇安信云查接口检查文件是否恶意
@@ -217,10 +397,26 @@ func getFileReputation(filepath string) (*FileReputation, error) {
 		return nil, err
 	}
 
-	resp, err := http.Get(fmt.Sprintf("https://tqs.qianxin-inc.cn/file/v1/files/%s/reputation", h))
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           nil,
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+		},
+	}
+
+	req, err := http.NewRequest("GET",
+		fmt.Sprintf("https://tqs.qianxin-inc.cn/file/v1/files/%s/reputation", h),
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

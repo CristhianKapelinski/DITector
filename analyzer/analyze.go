@@ -88,7 +88,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 		return nil, err
 	}
 	res.MetadataAnalyzed = true
-	res.MetadataIssues = metaIs
+	res.MetadataResult = metaIs
 
 	// 分析镜像配置信息
 	configIs, err := analyzer.analyzeConfiguration(ci)
@@ -96,7 +96,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 		return nil, err
 	}
 	res.ConfigurationAnalyzed = true
-	res.ConfigurationIssues = configIs
+	res.ConfigurationResult = configIs
 
 	// 分析镜像内容信息
 	contentIs, err := analyzer.analyzeContent(ci, res)
@@ -104,7 +104,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 		return nil, err
 	}
 	res.ContentAnalyzed = true
-	res.ContentIssues = contentIs
+	res.ContentResult = contentIs
 
 	// 收尾赋值工作
 	res.TotalTime = time.Since(beginTime).String()

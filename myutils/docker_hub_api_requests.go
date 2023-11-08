@@ -30,6 +30,7 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 	if err != nil {
 		return rMeta, err
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -50,6 +51,7 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 	if err != nil {
 		return tMeta, err
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -76,6 +78,7 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	if err != nil {
 		return isMeta, err
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -29,8 +29,8 @@ type ImageResult struct {
 	// LayerResults: layer-id -> LayerResult
 	LayerResults map[string]*LayerResult `json:"layer_results"`
 	// FileWithIssues: filepath -> bool, true: 文件包含问题为隐私泄露，false:文件包含问题不是隐私泄露
-	FileWithIssues map[string]bool `json:"-"`
-	ContentResult  *ContentResult  `json:"content_result"`
+	//FileWithIssues map[string]bool `json:"-"`
+	ContentResult *ContentResult `json:"content_result"`
 }
 
 type MetadataResult struct {
@@ -76,7 +76,7 @@ func NewImageResult() *ImageResult {
 	ir.ConfigurationResult = NewConfigurationResult()
 	ir.Layers = make([]string, 0)
 	ir.LayerResults = make(map[string]*LayerResult)
-	ir.FileWithIssues = make(map[string]bool)
+	//ir.FileWithIssues = make(map[string]bool)
 	ir.ContentResult = NewContentResult()
 
 	return ir
@@ -151,13 +151,19 @@ type Vulnerability struct {
 	Path        string `json:"path"`
 	LayerDigest string `json:"layer_digest"`
 
-	CVEID       string  `json:"cve_id"`
-	ProductName string  `json:"product_name"`
-	VendorName  string  `json:"vendor_name"`
-	Version     string  `json:"version"`
-	Description string  `json:"description"`
-	Severity    string  `json:"severity"`
-	CVSSScore   float64 `json:"cvss_score"`
+	CVEID           string   `json:"cve_id"`
+	Filename        string   `json:"filename"`
+	ProductName     string   `json:"product_name"`
+	VendorName      string   `json:"vendor_name"`
+	Version         string   `json:"version"`
+	VulnType        string   `json:"vuln_type"`
+	ThrType         string   `json:"thr_type"`
+	PublishedTime   string   `json:"published_time"`
+	Description     string   `json:"description"`
+	Severity        string   `json:"severity"`
+	CVSSScore       float64  `json:"cvss_score"`
+	AffectComponent []string `json:"affect_component"`
+	AffectFile      []string `json:"affect_file"`
 }
 
 type Misconfiguration struct {

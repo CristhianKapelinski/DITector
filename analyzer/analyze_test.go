@@ -19,12 +19,12 @@ func TestAnalyzeImageMetadata(t *testing.T) {
 			myutils.Layer{Digest: "123456", Instruction: "-----BEGIN RSA PRIVATE KEYsk_test_000011112222333344445555", Size: 10},
 		},
 	})
-	for _, targetImage := range targetImages {
-		results, _ := imageAnalyzer.AnalyzeImageMetadata(targetImage)
-		for _, result := range results {
-			fmt.Println(result)
-		}
-	}
+	//for _, targetImage := range targetImages {
+	//	results, _ := imageAnalyzer.AnalyzeImageMetadata(targetImage)
+	//	for _, result := range results {
+	//		fmt.Println(result)
+	//	}
+	//}
 }
 
 func TestScanSecretsInString(t *testing.T) {
@@ -47,4 +47,8 @@ func TestScanSensitiveParamInString(t *testing.T) {
 	for _, secret := range secrets {
 		fmt.Println(secret)
 	}
+}
+
+func TestScanFileMalicious(t *testing.T) {
+	fmt.Println(scanFileMalicious("/Users/musso/workshop/docker-projects/docker-image-supply-chain/malware/xmrig-6.20.0-linux-static-x64.tar.gz"))
 }

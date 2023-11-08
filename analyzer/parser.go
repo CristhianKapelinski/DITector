@@ -32,8 +32,10 @@ type CurrentImage struct {
 	recommendedCmd []string
 
 	// configuration of the image
-	configuration *Configuration
-	defaultCmd    defaultCmd
+	configuration   *Configuration
+	defaultCmd      defaultCmd
+	defaultFile     string
+	defaultExecFile []string // filepath of default executed files
 
 	// content of the image
 	imgTarFile             string // filepath of image tar
@@ -42,7 +44,6 @@ type CurrentImage struct {
 	layerWithContentList   []string
 	layerLocalFilepathList []string
 	layerInfoMap           map[string]*layerInfo
-	defaultExecFile        []string // filepath of default executed files
 }
 
 type metadata struct {

@@ -29,5 +29,9 @@
   "rules_config": {
     "secret_rules_file": "rules/secret_rules.yaml",
     "sensitive_param_rules_file": "rules/sensitive_param_rules.yaml"
+  },
+  "asky_config": {
+    "asky_file": "/data/docker-proj/asky/asky_linux_64.sh",
+    "asky_token": "200162c8359429f7206204d2ef75856e"
   }
 }

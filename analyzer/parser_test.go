@@ -38,6 +38,8 @@ func TestParseFromFile(t *testing.T) {
 		log.Fatalln(err)
 	}
 
+	fmt.Println("get current image:", ci)
+
 	return
 }
 

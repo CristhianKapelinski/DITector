@@ -22,6 +22,7 @@ var GlobalConfig struct {
 	MongoConfig      MongoConfig   `json:"mongo_config"`
 	Neo4jConfig      Neo4jConfig   `json:"neo4j_config"`
 	RulesConfig      RulesConfig   `json:"rules_config"`
+	AskyConfig       AskyConfig    `json:"asky_config"`
 }
 
 type CrawlerConfig struct {
@@ -53,6 +54,11 @@ type Neo4jConfig struct {
 type RulesConfig struct {
 	SecretRulesFile         string `json:"secret_rules_file"`
 	SensitiveParamRulesFile string `json:"sensitive_param_rules_file"`
+}
+
+type AskyConfig struct {
+	AskyFile  string `json:"asky_file"`
+	AskyToken string `json:"asky_token"`
 }
 
 // GlobalDBClient 用于维护全局所有模块的数据库client连接
@@ -97,7 +103,7 @@ func init() {
 	configTLSConfig()
 
 	// 初始化数据库连接
-	connectDBs()
+	//connectDBs()
 }
 
 // relativeToAbsoluteConfig 将GlobalConfig中相对路径的部分调整为绝对路径
