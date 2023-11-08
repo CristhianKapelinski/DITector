@@ -5,54 +5,54 @@ import (
 	"github.com/Musso12138/dockercrawler/myutils"
 )
 
-func (analyzer *ImageAnalyzer) analyzeMetadata(ci *CurrentImage) ([]*myutils.Issue, error) {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) analyzeMetadata(ci *CurrentImage) (*myutils.MetadataResult, error) {
+	res := myutils.NewMetadataResult()
 
-	repoMetaIs, err := analyzer.analyzeRepoMetadata(ci)
+	repoMetaRes, err := analyzer.analyzeRepoMetadata(ci)
 	if err != nil {
 		return nil, err
 	}
-	myutils.AddIssue(res, repoMetaIs...)
+	res.SensitiveParams = repoMetaRes.SensitiveParams
 
-	imgMetaIs, err := analyzer.analyzeImageMetadata(ci)
+	imgMetaRes, err := analyzer.analyzeImageMetadata(ci)
 	if err != nil {
 		return nil, err
 	}
-	myutils.AddIssue(res, imgMetaIs...)
+	res.SecretLeakages = imgMetaRes.SecretLeakages
 
 	return res, nil
 }
 
-func (analyzer *ImageAnalyzer) analyzeRepoMetadata(ci *CurrentImage) ([]*myutils.Issue, error) {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) analyzeRepoMetadata(ci *CurrentImage) (*myutils.MetadataResult, error) {
+	res := myutils.NewMetadataResult()
 
 	// 分析敏感参数
 	// full_description中推荐的`docker run`
 	for _, recCmd := range ci.recommendedCmd {
 		is := analyzer.scanSensitiveParamInString(recCmd)
-		for _, i := range is {
-			i.Part = myutils.IssuePart.RepoMetadata
-			i.Path = "full_description"
+		for i, _ := range is {
+			is[i].Part = myutils.IssuePart.RepoMetadata
+			is[i].Path = "full_description"
 		}
-
-		myutils.AddIssue(res, is...)
+		res.SensitiveParams = append(res.SensitiveParams, is...)
 	}
 
 	return res, nil
 }
 
-func (analyzer *ImageAnalyzer) analyzeImageMetadata(ci *CurrentImage) ([]*myutils.Issue, error) {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) analyzeImageMetadata(ci *CurrentImage) (*myutils.MetadataResult, error) {
+	res := myutils.NewMetadataResult()
 
 	// 分析隐私泄露
 	// 扫描layers.instruction
 	for index, layer := range ci.metadata.imageMetadata.Layers {
 		is := analyzer.scanSecretsInString(layer.Instruction)
-		for _, i := range is {
-			i.Part = myutils.IssuePart.ImageMetadata
-			i.Path = fmt.Sprintf("layers[%d].instruction", index)
-			i.LayerDigest = layer.Digest
+		for i, _ := range is {
+			is[i].Part = myutils.IssuePart.ImageMetadata
+			is[i].Path = fmt.Sprintf("layers[%d].instruction", index)
+			is[i].LayerDigest = layer.Digest
 		}
+		res.SecretLeakages = append(res.SecretLeakages, is...)
 	}
 
 	return res, nil

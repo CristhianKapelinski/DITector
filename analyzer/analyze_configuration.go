@@ -6,37 +6,28 @@ import (
 	"strings"
 )
 
-func (analyzer *ImageAnalyzer) analyzeConfiguration(ci *CurrentImage) ([]*myutils.Issue, error) {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) analyzeConfiguration(ci *CurrentImage) (*myutils.ConfigurationResult, error) {
+	res := myutils.NewConfigurationResult()
 
-	repoMetaIs, err := analyzer.analyzeRepoMetadata(ci)
-	if err != nil {
-		return nil, err
-	}
-	myutils.AddIssue(res, repoMetaIs...)
-
-	imgMetaIs, err := analyzer.analyzeImageMetadata(ci)
-	if err != nil {
-		return nil, err
-	}
-	myutils.AddIssue(res, imgMetaIs...)
+	envSecrets := analyzer.analyzeEnvConfig(ci)
+	res.SecretLeakages = envSecrets
 
 	return res, nil
 }
 
-func (analyzer *ImageAnalyzer) analyzeEnvConfig(ci *CurrentImage) []*myutils.Issue {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) analyzeEnvConfig(ci *CurrentImage) []myutils.SecretLeakage {
+	res := make([]myutils.SecretLeakage, 0)
 
 	// 分析隐私泄露
 	// 扫描镜像环境变量
 	for _, env := range ci.configuration.Config.Env {
-		is := analyzer.scanSensitiveParamInString(env)
-		for _, i := range is {
-			i.Part = myutils.IssuePart.Configuration
-			i.Path = fmt.Sprintf("Env[%s]", strings.Split(env, "=")[0])
+		is := analyzer.scanSecretsInString(env)
+		for i, _ := range is {
+			is[i].Part = myutils.IssuePart.Configuration
+			is[i].Path = fmt.Sprintf("Env[%s]", strings.Split(env, "=")[0])
 		}
 
-		myutils.AddIssue(res, is...)
+		res = append(res, is...)
 	}
 
 	return res

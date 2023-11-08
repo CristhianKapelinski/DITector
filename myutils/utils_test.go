@@ -3,6 +3,7 @@ package myutils
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -25,4 +26,8 @@ func TestSha256File(t *testing.T) {
 		log.Fatalln("got error:", e)
 	}
 	fmt.Println(h, time.Since(begin).String())
+}
+
+func TestRelPath(t *testing.T) {
+	fmt.Println(filepath.Rel("/aaa/bbb/ccc/layer/", "/aaa/bbb/ccc/layer/etc/library"))
 }

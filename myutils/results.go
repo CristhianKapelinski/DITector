@@ -17,59 +17,196 @@ type ImageResult struct {
 	TotalTime    string `json:"total_time"`
 	AnalyzeTime  string `json:"analyze_time"`
 
-	MetadataAnalyzed bool     `json:"metadata_analyzed"`
-	MetadataIssues   []*Issue `json:"metadata_issues"`
+	MetadataAnalyzed bool            `json:"metadata_analyzed"`
+	MetadataResult   *MetadataResult `json:"metadata_result"`
 
-	ConfigurationAnalyzed bool     `json:"configuration_analyzed"`
-	ConfigurationIssues   []*Issue `json:"configuration_issues"`
+	ConfigurationAnalyzed bool                 `json:"configuration_analyzed"`
+	ConfigurationResult   *ConfigurationResult `json:"configuration_result"`
 
 	ContentAnalyzed bool `json:"content_analyzed"`
 	// Layers: [ layer-id1, layer-id2, ... ], from bottom to top
 	Layers []string `json:"layers"`
 	// LayerResults: layer-id -> LayerResult
 	LayerResults map[string]*LayerResult `json:"layer_results"`
-	// FileIssues: filepath -> []*Issue, issues in the file system after mounting by UnionFS
-	FileIssues    map[string][]*Issue `json:"-"`
-	ContentIssues []*Issue            `json:"content_issues"`
+	// FileWithIssues: filepath -> bool, true: 文件包含问题为隐私泄露，false:文件包含问题不是隐私泄露
+	FileWithIssues map[string]bool `json:"-"`
+	ContentResult  *ContentResult  `json:"content_result"`
+}
+
+type MetadataResult struct {
+	SecretLeakages  []SecretLeakage  `json:"secret_leakages"`
+	SensitiveParams []SensitiveParam `json:"sensitive_params"`
+}
+
+type ConfigurationResult struct {
+	SecretLeakages []SecretLeakage `json:"secret_leakages"`
+}
+
+type ContentResult struct {
+	SecretLeakages    []SecretLeakage    `json:"secret_leakages"`
+	Vulnerabilities   []Vulnerability    `json:"vulnerabilities"`
+	Misconfigurations []Misconfiguration `json:"misconfiguration"`
+	MaliciousFiles    []MaliciousFile    `json:"malicious_files"`
 }
 
 type LayerResult struct {
-	Instruction   string   `json:"instruction"`
-	Size          int64    `json:"size"`
-	Digest        string   `json:"digest"`
-	AnalyzedFiles []string `json:"analyzed_files"`
-	// FileIssues: filepath -> []*Issue
-	FileIssues map[string][]*Issue `json:"file_issues"`
+	Instruction string `json:"instruction"`
+	Size        int64  `json:"size"`
+	Digest      string `json:"digest"`
+
+	Total        int `json:"total"` // from qianxin asky
+	ComponentNum int `json:"component_num"`
+
+	SecretLeakages    []SecretLeakage    `json:"secret_leakages"`
+	Vulnerabilities   []Vulnerability    `json:"vulnerabilities"`
+	Misconfigurations []Misconfiguration `json:"misconfiguration"`
+	MaliciousFiles    []MaliciousFile    `json:"malicious_files"`
+
+	// 奇安信扫描taskid
+	TaskID string `json:"task_id"`
+}
+
+type Component struct {
 }
 
 func NewImageResult() *ImageResult {
 	ir := new(ImageResult)
 
-	ir.MetadataIssues = make([]*Issue, 0)
-	ir.ConfigurationIssues = make([]*Issue, 0)
+	ir.MetadataResult = NewMetadataResult()
+	ir.ConfigurationResult = NewConfigurationResult()
 	ir.Layers = make([]string, 0)
 	ir.LayerResults = make(map[string]*LayerResult)
-	ir.FileIssues = make(map[string][]*Issue)
-	ir.ContentIssues = make([]*Issue, 0)
+	ir.FileWithIssues = make(map[string]bool)
+	ir.ContentResult = NewContentResult()
 
 	return ir
 }
 
-// Issue 表示一条发现的问题
-// TODO: 需要考虑怎么统一所有检测的结果
-type Issue struct {
+func NewMetadataResult() *MetadataResult {
+	res := new(MetadataResult)
+
+	res.SecretLeakages = make([]SecretLeakage, 0)
+	res.SensitiveParams = make([]SensitiveParam, 0)
+
+	return res
+}
+
+func NewConfigurationResult() *ConfigurationResult {
+	res := new(ConfigurationResult)
+
+	res.SecretLeakages = make([]SecretLeakage, 0)
+
+	return res
+}
+
+func NewContentResult() *ContentResult {
+	res := new(ContentResult)
+
+	res.SecretLeakages = make([]SecretLeakage, 0)
+	res.Vulnerabilities = make([]Vulnerability, 0)
+	res.Misconfigurations = make([]Misconfiguration, 0)
+	res.MaliciousFiles = make([]MaliciousFile, 0)
+
+	return res
+}
+
+func NewLayerResult() *LayerResult {
+	res := new(LayerResult)
+
+	res.SecretLeakages = make([]SecretLeakage, 0)
+	res.Vulnerabilities = make([]Vulnerability, 0)
+	res.Misconfigurations = make([]Misconfiguration, 0)
+	res.MaliciousFiles = make([]MaliciousFile, 0)
+
+	return res
+}
+
+type SecretLeakage struct {
 	Type          string  `json:"type"`
 	Name          string  `json:"name"`
 	Part          string  `json:"part"` // part of image: metadata, configuration, content
 	Path          string  `json:"path"`
-	Sha256        string  `json:"sha256,omitempty"`  // sha256 of file, only for malicious file
-	Version       string  `json:"version,omitempty"` // version of the product, only for vulnerability
-	Match         string  `json:"match,omitempty"`
+	Match         string  `json:"match"`
 	Description   string  `json:"description"`
 	Severity      string  `json:"severity"`
 	SeverityScore float64 `json:"severity_score"`
 	LayerDigest   string  `json:"layer_digest,omitempty"`
 }
+
+type SensitiveParam struct {
+	Type          string  `json:"type"`
+	Name          string  `json:"name"`
+	Part          string  `json:"part"` // part of image: metadata, configuration, content
+	Path          string  `json:"path"`
+	Match         string  `json:"match"`
+	Description   string  `json:"description"`
+	Severity      string  `json:"severity"`
+	SeverityScore float64 `json:"severity_score"`
+}
+
+type Vulnerability struct {
+	Type        string `json:"type"`
+	Name        string `json:"name"`
+	Part        string `json:"part"` // part of image: metadata, configuration, content
+	Path        string `json:"path"`
+	LayerDigest string `json:"layer_digest"`
+
+	CVEID       string  `json:"cve_id"`
+	ProductName string  `json:"product_name"`
+	VendorName  string  `json:"vendor_name"`
+	Version     string  `json:"version"`
+	Description string  `json:"description"`
+	Severity    string  `json:"severity"`
+	CVSSScore   float64 `json:"cvss_score"`
+}
+
+type Misconfiguration struct {
+	Type          string  `json:"type"`
+	Name          string  `json:"name"`
+	Part          string  `json:"part"` // part of image: metadata, configuration, content
+	Path          string  `json:"path"`
+	Match         string  `json:"match"`
+	Description   string  `json:"description"`
+	Severity      string  `json:"severity"`
+	SeverityScore float64 `json:"severity_score"`
+	LayerDigest   string  `json:"layer_digest"`
+}
+
+type MaliciousFile struct {
+	Type          string  `json:"type"`
+	Name          string  `json:"name"`
+	Part          string  `json:"part"` // part of image: metadata, configuration, content
+	Path          string  `json:"path"`
+	Description   string  `json:"description"`
+	Severity      string  `json:"severity"`
+	SeverityScore float64 `json:"severity_score"`
+	LayerDigest   string  `json:"layer_digest"`
+
+	Sha256          string  `json:"sha256"` // sha256 of file, only for malicious file
+	Level           int     `json:"level"`
+	MalwareTypeName string  `json:"malware_type_name"`
+	FileDesc        string  `json:"file_desc"`
+	Describe        string  `json:"describe"`
+	MaliciousFamily string  `json:"malicious_family"`
+	SandboxScore    float64 `json:"sandbox_score"`
+}
+
+// Deprecated: 不统一实现了
+//// Issue 表示一条发现的问题
+//// TODO: 需要考虑怎么统一所有检测的结果
+//type Issue struct {
+//	Type          string  `json:"type"`
+//	Name          string  `json:"name"`
+//	Part          string  `json:"part"` // part of image: metadata, configuration, content
+//	Path          string  `json:"path"`
+//	Sha256        string  `json:"sha256,omitempty"`  // sha256 of file, only for malicious file
+//	Version       string  `json:"version,omitempty"` // version of the product, only for vulnerability
+//	Match         string  `json:"match,omitempty"`
+//	Description   string  `json:"description"`
+//	Severity      string  `json:"severity"`
+//	SeverityScore float64 `json:"severity_score"`
+//	LayerDigest   string  `json:"layer_digest,omitempty"`
+//}
 
 var IssueType = struct {
 	SecretLeakage    string
@@ -97,18 +234,4 @@ var IssuePart = struct {
 	"image-metadata",
 	"configuration",
 	"content",
-}
-
-func AddIssue(dest []*Issue, src ...*Issue) {
-	for _, i := range src {
-		// 隐私泄露不存在覆盖
-		if i.Type != IssueType.SecretLeakage {
-			for _, j := range dest {
-				if *i == *j {
-					break
-				}
-			}
-		}
-		dest = append(dest, i)
-	}
 }

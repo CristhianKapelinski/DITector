@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"github.com/Musso12138/dockercrawler/myutils"
-	"strconv"
 )
 
 type ImageAnalyzer struct {
@@ -54,30 +53,8 @@ func (analyzer *ImageAnalyzer) AnalyzeMetadata() {
 
 }
 
-// AnalyzeImageMetadata analyze instruction of layers to
-func (analyzer *ImageAnalyzer) AnalyzeImageMetadata(image *myutils.Image) ([]*myutils.Issue, error) {
-	res := make([]*myutils.Issue, 0)
-
-	for index, layer := range image.Layers {
-		digest := ""
-		if layer.Size != 0 {
-			digest = layer.Digest
-		}
-		results := analyzer.scanSecretsInString(layer.Instruction)
-
-		for _, result := range results {
-			result.Type = "in-dockerfile-command"
-			result.Path = "layer[" + strconv.Itoa(index) + "].instruction"
-			result.LayerDigest = digest
-		}
-		res = append(res, results...)
-	}
-
-	return res, nil
-}
-
-func (analyzer *ImageAnalyzer) scanSecretsInString(s string) []*myutils.Issue {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) scanSecretsInString(s string) []myutils.SecretLeakage {
+	res := make([]myutils.SecretLeakage, 0)
 
 	for _, secret := range analyzer.rules.SecretRules {
 		if secret.CompiledRegex == nil {
@@ -85,7 +62,7 @@ func (analyzer *ImageAnalyzer) scanSecretsInString(s string) []*myutils.Issue {
 		}
 		matches := secret.CompiledRegex.FindAllString(s, -1)
 		for _, match := range matches {
-			tmp := &myutils.Issue{
+			tmp := myutils.SecretLeakage{
 				Type:          myutils.IssueType.SecretLeakage,
 				Name:          secret.Name,
 				Match:         match,
@@ -100,8 +77,8 @@ func (analyzer *ImageAnalyzer) scanSecretsInString(s string) []*myutils.Issue {
 	return res
 }
 
-func (analyzer *ImageAnalyzer) scanSecretsInBytes(b []byte) []*myutils.Issue {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) scanSecretsInBytes(b []byte) []myutils.SecretLeakage {
+	res := make([]myutils.SecretLeakage, 0)
 
 	for _, secret := range analyzer.rules.SecretRules {
 		if secret.CompiledRegex == nil {
@@ -109,7 +86,7 @@ func (analyzer *ImageAnalyzer) scanSecretsInBytes(b []byte) []*myutils.Issue {
 		}
 		matches := secret.CompiledRegex.FindAll(b, -1)
 		for _, match := range matches {
-			tmp := &myutils.Issue{
+			tmp := myutils.SecretLeakage{
 				Type:          myutils.IssueType.SecretLeakage,
 				Name:          secret.Name,
 				Match:         string(match),
@@ -124,13 +101,13 @@ func (analyzer *ImageAnalyzer) scanSecretsInBytes(b []byte) []*myutils.Issue {
 	return res
 }
 
-func (analyzer *ImageAnalyzer) scanSensitiveParamInString(s string) []*myutils.Issue {
-	res := make([]*myutils.Issue, 0)
+func (analyzer *ImageAnalyzer) scanSensitiveParamInString(s string) []myutils.SensitiveParam {
+	res := make([]myutils.SensitiveParam, 0)
 
 	for _, sensitive := range analyzer.rules.SensitiveParamRules {
 		matches := sensitive.CompiledRegex.FindAllString(s, -1)
 		for _, match := range matches {
-			tmp := &myutils.Issue{
+			tmp := myutils.SensitiveParam{
 				Type:          myutils.IssueType.SensitiveParam,
 				Name:          sensitive.Name,
 				Match:         match,
