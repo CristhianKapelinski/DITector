@@ -2,8 +2,8 @@ package myutils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 	"path"
@@ -12,53 +12,53 @@ import (
 )
 
 var GlobalConfig struct {
-	MaxThread        int           `json:"max_thread"`
-	RepositoriesFile string        `json:"repositories_file"`
-	TagsFile         string        `json:"tags_file"`
-	ImagesFile       string        `json:"images_file"`
-	LogFile          string        `json:"log_file"`
-	TmpDir           string        `json:"tmp_dir"`
-	CrawlerConfig    CrawlerConfig `json:"crawler_config"`
-	MongoConfig      MongoConfig   `json:"mongo_config"`
-	Neo4jConfig      Neo4jConfig   `json:"neo4j_config"`
-	RulesConfig      RulesConfig   `json:"rules_config"`
-	AskyConfig       AskyConfig    `json:"asky_config"`
+	MaxThread        int           `yaml:"max_thread"`
+	RepositoriesFile string        `yaml:"repositories_file"`
+	TagsFile         string        `yaml:"tags_file"`
+	ImagesFile       string        `yaml:"images_file"`
+	LogFile          string        `yaml:"log_file"`
+	TmpDir           string        `yaml:"tmp_dir"`
+	CrawlerConfig    CrawlerConfig `yaml:"crawler_config"`
+	MongoConfig      MongoConfig   `yaml:"mongo_config"`
+	Neo4jConfig      Neo4jConfig   `yaml:"neo4j_config"`
+	RulesConfig      RulesConfig   `yaml:"rules_config"`
+	AskyConfig       AskyConfig    `yaml:"asky_config"`
 }
 
 type CrawlerConfig struct {
-	LocalProxy bool   `json:"local_proxy"`
-	ProxyFile  string `json:"proxy_file"`
-	MysqlDSN   string `json:"mysql_dsn"`
+	LocalProxy bool   `yaml:"local_proxy"`
+	ProxyFile  string `yaml:"proxy_file"`
+	MysqlDSN   string `yaml:"mysql_dsn"`
 }
 
 type MongoConfig struct {
-	URI         string           `json:"uri"`
-	Database    string           `json:"database"`
-	Collections MongoCollections `json:"collections"`
+	URI         string           `yaml:"uri"`
+	Database    string           `yaml:"database"`
+	Collections MongoCollections `yaml:"collections"`
 }
 
 type MongoCollections struct {
-	Repositories string `json:"repositories"`
-	Tags         string `json:"tags"`
-	Images       string `json:"images"`
-	ImageResults string `json:"image_results"`
-	LayerResults string `json:"layer_results"`
+	Repositories string `yaml:"repositories"`
+	Tags         string `yaml:"tags"`
+	Images       string `yaml:"images"`
+	ImageResults string `yaml:"image_results"`
+	LayerResults string `yaml:"layer_results"`
 }
 
 type Neo4jConfig struct {
-	Neo4jURI      string `json:"neo4j_uri"`
-	Neo4jUsername string `json:"neo4j_username"`
-	Neo4jPassword string `json:"neo4j_password"`
+	Neo4jURI      string `yaml:"neo4j_uri"`
+	Neo4jUsername string `yaml:"neo4j_username"`
+	Neo4jPassword string `yaml:"neo4j_password"`
 }
 
 type RulesConfig struct {
-	SecretRulesFile         string `json:"secret_rules_file"`
-	SensitiveParamRulesFile string `json:"sensitive_param_rules_file"`
+	SecretRulesFile         string `yaml:"secret_rules_file"`
+	SensitiveParamRulesFile string `yaml:"sensitive_param_rules_file"`
 }
 
 type AskyConfig struct {
-	AskyFile  string `json:"asky_file"`
-	AskyToken string `json:"asky_token"`
+	AskyFile  string `yaml:"asky_file"`
+	AskyToken string `yaml:"asky_token"`
 }
 
 // GlobalDBClient 用于维护全局所有模块的数据库client连接
@@ -73,14 +73,14 @@ func init() {
 	// 获取程序根目录
 	_, filename, _, _ := runtime.Caller(0)
 	root := path.Dir(path.Dir(filename))
-	configFile := path.Join(root, "config.json")
+	configFile := path.Join(root, "config.yaml")
 
-	// 加载config.json
+	// 加载config.yaml
 	fb, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatalln("[ERROR] Failed to load ", configFile)
 	}
-	if err = json.Unmarshal(fb, &GlobalConfig); err != nil {
+	if err = yaml.Unmarshal(fb, &GlobalConfig); err != nil {
 		log.Fatalf("[ERROR] Json failed to unmarshal %s with err: %v\n", configFile, err)
 	}
 
@@ -122,7 +122,7 @@ func relativeToAbsoluteConfig(root string) {
 	}
 }
 
-// connectDBs connects MongoDB and Neo4j based on config.json
+// connectDBs connects MongoDB and Neo4j based on config.yaml
 func connectDBs() {
 	var err error
 

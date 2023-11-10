@@ -55,7 +55,7 @@ func config(format string) {
 	// 获取程序根目录
 	_, filename, _, _ := runtime.Caller(0)
 	root := path.Dir(path.Dir(filename))
-	configFile := root + "/config.json"
+	configFile := root + "/config.yaml"
 	// 加载DockerCrawler Config
 	fb, err := os.ReadFile(configFile)
 	if err != nil {

@@ -1,0 +1,30 @@
+max_thread: 0
+repositories_file: '/mysql/json-files/repositories.json'
+tags_file: '/mysql/json-files/tags.json'
+images_file: '/mysql/json-files/images.json'
+log_file: 'docker-crawler.log'
+tmp_dir: '/Users/musso/workshop/docker-projects/docker-image-supply-chain/download-images'
+#tmp_dir: '/data/tmp/docker-proj/'
+crawler_config:
+  local_proxy: false
+  proxy_file: 'crawler/proxyaddr.json'
+  mysql_dsn: 'docker:docker@/dockerhub'
+mongo_config:
+  uri: 'mongodb://localhost:27017'
+  database: 'dockerhub'
+  collections:
+    repositories: 'repositories'
+    tags: 'tags'
+    images: 'images'
+    image_results: 'image_results'
+    layer_results: 'layer_results'
+neo4j_config:
+  neo4j_uri: 'neo4j://localhost:7687'
+  neo4j_username: 'neo4j'
+  neo4j_password: 'qazwsxedc'
+rules_config:
+  secret_rules_file: 'rules/secret_rules.yaml'
+  sensitive_param_rules_file: 'rules/sensitive_param_rules.yaml'
+asky_config:
+  asky_file: '/data/docker-proj/asky/asky_linux_64.sh'
+  asky_token: '200162c8359429f7206204d2ef75856e'

@@ -8,7 +8,7 @@ type ImageAnalyzer struct {
 	rules *ImageAnalyzerRules
 }
 
-// NewImageAnalyzerGlobalConfig creates a new ImageAnalyzer configured based on config.json
+// NewImageAnalyzerGlobalConfig creates a new ImageAnalyzer configured based on config.yaml
 func NewImageAnalyzerGlobalConfig() (*ImageAnalyzer, error) {
 	return NewImageAnalyzer(myutils.GlobalConfig.RulesConfig.SecretRulesFile,
 		myutils.GlobalConfig.RulesConfig.SensitiveParamRulesFile)
