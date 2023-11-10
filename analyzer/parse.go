@@ -6,6 +6,21 @@ import (
 	"github.com/Musso12138/dockercrawler/myutils"
 )
 
+// ParsePartial 仅解析指定镜像的元数据
+func (currI *CurrentImage) ParsePartial() (err error) {
+	// 获取当前Docker server环境所在的平台信息
+	if err = currI.parseServerPlatform(); err != nil {
+		myutils.Logger.Error("get Docker server platform failed with:", err.Error())
+		return
+	}
+
+	if err = currI.parseMetadata(true); err != nil {
+		return
+	}
+
+	return
+}
+
 // ParseFromFile pulls and saves image to tar archive, and parses
 // information based on the tar file.
 func (currI *CurrentImage) ParseFromFile() (err error) {
@@ -84,11 +99,6 @@ func (currI *CurrentImage) ParseFromDockerEnv() (err error) {
 	}
 
 	return nil
-}
-
-// ParsePartial TODO: 解析指定镜像的元数据
-func (currI *CurrentImage) ParsePartial() {
-
 }
 
 // parseName parses registry, namespace, repository, tag of the image according to name.

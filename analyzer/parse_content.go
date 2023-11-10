@@ -15,6 +15,7 @@ func (currI *CurrentImage) parseContentFromFile() error {
 	}
 	for i, digest := range currI.layerWithContentList {
 		currI.layerInfoMap[digest].localFilePath = currI.layerLocalFilepathList[i]
+		currI.layerInfoMap[digest].localRootFilePath = currI.layerLocalRootFilepathList[i]
 	}
 
 	return nil

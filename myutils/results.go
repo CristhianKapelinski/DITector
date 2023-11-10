@@ -183,7 +183,8 @@ type Vulnerability struct {
 
 type Misconfiguration struct {
 	Type          string  `json:"type"`
-	Name          string  `json:"name"`
+	AppName       string  `json:"app_name"`
+	MisConfType   string  `json:"mis_conf_type"`
 	Part          string  `json:"part"` // part of image: metadata, configuration, content
 	Path          string  `json:"path"`
 	Match         string  `json:"match"`

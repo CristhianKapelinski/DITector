@@ -471,6 +471,20 @@ func (m *MyMongo) FindImgResultByDigest(digest string) (*ImageResult, error) {
 	return res, err
 }
 
+func (m *MyMongo) FindImgResultByName(namespace, repoName, tagName string) (*ImageResult, error) {
+	res := new(ImageResult)
+
+	filter := bson.M{
+		"namespace":       namespace,
+		"repository_name": repoName,
+		"tag_name":        tagName,
+	}
+
+	err := m.ImgResultColl.FindOne(context.TODO(), filter).Decode(res)
+
+	return res, err
+}
+
 func (m *MyMongo) UpdateLayerResult(layerRes *LayerResult) error {
 	filter := bson.M{
 		"digest": layerRes.Digest,

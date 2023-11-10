@@ -24,10 +24,85 @@ func AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
 		return nil, fmt.Errorf("create ImageAnalyzer failed with: %s", imageAnalyzerE)
 	}
 
-	var err error
-	res := new(myutils.ImageResult)
+	return imageAnalyzer.AnalyzeImagePartialByName(name)
+}
 
-	return res, err
+// AnalyzeImagePartialByName analyzes image partially by name, including only the metadata.
+//
+// This will never pull the layers of the image to local env.
+func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
+	beginTime := time.Now()
+	beginTimeStr := myutils.GetLocalNowTime()
+
+	// 创建新镜像信息
+	ci, err := NewCurrentImage(name)
+	if err != nil {
+		myutils.Logger.Error("create CurrentImage for image", name, "failed with:", err.Error())
+		return nil, err
+	}
+
+	// 数据库已有检测结果，跳过下载和检测
+	if myutils.GlobalDBClient.MongoFlag {
+		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err != nil {
+			return res, nil
+		}
+	}
+
+	// 仅解析镜像元数据
+	if err = ci.ParsePartial(); err != nil {
+		myutils.Logger.Error("parse image partially (only metadata) for image", name, "failed with:", err.Error())
+		return nil, err
+	}
+
+	// 分析镜像
+	analyzeBeginTime := time.Now()
+	// 查找数据库中是否已有digest对应的镜像结果
+	if myutils.GlobalDBClient.MongoFlag {
+
+		// 检查是否有digest相同的镜像结果(完整更好)
+		imgRes, err := myutils.GlobalDBClient.Mongo.FindImgResultByDigest(ci.digest)
+		if err == nil {
+			imgRes.Name = name
+			imgRes.Registry = ci.registry
+			imgRes.Namespace = ci.namespace
+			imgRes.RepoName = ci.repoName
+			imgRes.TagName = ci.tagName
+			imgRes.Architecture = ci.architecture
+			imgRes.Variant = ci.variant
+			imgRes.OS = ci.osVersion
+			imgRes.OSVersion = ci.osVersion
+
+			imgRes.TotalTime = time.Since(beginTime).String()
+			imgRes.AnalyzeTime = time.Since(analyzeBeginTime).String()
+			return imgRes, nil
+		}
+	}
+
+	// 创建结果对象
+	res := CurrentImageToImageResult(ci)
+	res.LastAnalyzed = beginTimeStr
+
+	// 分析镜像元数据
+	metaIs, err := analyzer.analyzeMetadata(ci)
+	if err != nil {
+		return nil, err
+	}
+	res.MetadataAnalyzed = true
+	res.MetadataResult = metaIs
+
+	// 收尾赋值工作
+	res.TotalTime = time.Since(beginTime).String()
+	res.AnalyzeTime = time.Since(analyzeBeginTime).String()
+
+	if myutils.GlobalDBClient.MongoFlag {
+		go func(imgRes *myutils.ImageResult) {
+			if e := myutils.GlobalDBClient.Mongo.UpdateImgResult(imgRes); e != nil {
+				myutils.Logger.Error("update ImageResult", imgRes.Name, imgRes.Digest, "failed with:", e.Error())
+			}
+		}(res)
+	}
+
+	return res, nil
 }
 
 // AnalyzeImageByName analyzes image totally by name, including analyzing metadata,
@@ -38,12 +113,21 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 	beginTime := time.Now()
 	beginTimeStr := myutils.GetLocalNowTime()
 
-	// 解析镜像信息
+	// 创建新镜像信息
 	ci, err := NewCurrentImage(name)
 	if err != nil {
 		myutils.Logger.Error("create CurrentImage for image", name, "failed with:", err.Error())
 		return nil, err
 	}
+
+	// 数据库已有检测结果，跳过下载和检测
+	if myutils.GlobalDBClient.MongoFlag {
+		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err != nil {
+			return res, nil
+		}
+	}
+
+	// 下载并解析镜像信息
 	if err = ci.ParseFromFile(); err != nil {
 		myutils.Logger.Error("parse image", name, "failed with:", err.Error())
 		return nil, err
@@ -59,21 +143,25 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 	// 查找数据库中是否已有digest对应的镜像结果
 	analyzeBeginTime := time.Now()
 	if myutils.GlobalDBClient.MongoFlag {
-		res, err := myutils.GlobalDBClient.Mongo.FindImgResultByDigest(ci.digest)
-		if err == nil {
-			res.Name = name
-			res.Registry = ci.registry
-			res.Namespace = ci.namespace
-			res.RepoName = ci.repoName
-			res.TagName = ci.tagName
-			res.Architecture = ci.architecture
-			res.Variant = ci.variant
-			res.OS = ci.osVersion
-			res.OSVersion = ci.osVersion
 
-			res.TotalTime = time.Since(beginTime).String()
-			res.AnalyzeTime = time.Since(analyzeBeginTime).String()
-			return res, nil
+		// 检查是否有digest相同的完整镜像结果
+		imgRes, err := myutils.GlobalDBClient.Mongo.FindImgResultByDigest(ci.digest)
+		if err == nil {
+			if imgRes.ConfigurationAnalyzed && imgRes.ContentAnalyzed {
+				imgRes.Name = name
+				imgRes.Registry = ci.registry
+				imgRes.Namespace = ci.namespace
+				imgRes.RepoName = ci.repoName
+				imgRes.TagName = ci.tagName
+				imgRes.Architecture = ci.architecture
+				imgRes.Variant = ci.variant
+				imgRes.OS = ci.osVersion
+				imgRes.OSVersion = ci.osVersion
+
+				imgRes.TotalTime = time.Since(beginTime).String()
+				imgRes.AnalyzeTime = time.Since(analyzeBeginTime).String()
+				return imgRes, nil
+			}
 		}
 	}
 
@@ -109,6 +197,14 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 	// 收尾赋值工作
 	res.TotalTime = time.Since(beginTime).String()
 	res.AnalyzeTime = time.Since(analyzeBeginTime).String()
+
+	if myutils.GlobalDBClient.MongoFlag {
+		go func(imgRes *myutils.ImageResult) {
+			if e := myutils.GlobalDBClient.Mongo.UpdateImgResult(imgRes); e != nil {
+				myutils.Logger.Error("update ImageResult", imgRes.Name, imgRes.Digest, "failed with:", e.Error())
+			}
+		}(res)
+	}
 
 	return res, nil
 }

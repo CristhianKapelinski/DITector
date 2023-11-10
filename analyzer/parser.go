@@ -37,12 +37,13 @@ type CurrentImage struct {
 	defaultExecFile []string // filepath of default executed files
 
 	// content of the image
-	imgTarFile             string // filepath of image tar
-	imgFilepath            string // filepath of uncompressed image file
-	manifest               manifest
-	layerWithContentList   []string
-	layerLocalFilepathList []string
-	layerInfoMap           map[string]*layerInfo
+	imgTarFile                 string // filepath of image tar
+	imgFilepath                string // filepath of uncompressed image file
+	manifest                   manifest
+	layerWithContentList       []string
+	layerLocalRootFilepathList []string // /.../layer-id
+	layerLocalFilepathList     []string // /.../layer-id/layer
+	layerInfoMap               map[string]*layerInfo
 }
 
 type metadata struct {
@@ -62,7 +63,8 @@ type layerInfo struct {
 	instruction string
 	digest      string
 
-	localFilePath string // localFilePath of the layer
+	localRootFilePath string // parent dir path of localFilePath
+	localFilePath     string // localFilePath of the layer
 }
 
 type imagePullEvent struct {
@@ -105,6 +107,7 @@ func NewCurrentImage(imgName string) (*CurrentImage, error) {
 	currI.metadata = new(metadata)
 	currI.configuration = new(Configuration)
 	currI.layerWithContentList = make([]string, 0)
+	currI.layerLocalRootFilepathList = make([]string, 0)
 	currI.layerLocalFilepathList = make([]string, 0)
 	currI.layerInfoMap = make(map[string]*layerInfo)
 	currI.manifest = manifest{}
@@ -233,11 +236,13 @@ func (currI *CurrentImage) extractImage(imgTar, dstDir string) error {
 	for _, layerTarFilename := range currI.manifest.Layers {
 		layerTarFilepath := path.Join(dstDir, layerTarFilename)
 		digest := strings.Split(layerTarFilename, "/")[0]
+		layerRootFilepath := path.Join(dstDir, digest)
 		layerFilepath := path.Join(dstDir, digest, "layer")
 		if err = myutils.ExtractTar(layerTarFilepath, layerFilepath); err != nil {
 			return err
 		}
 		// 将解压得到的本地layer文件夹维护起来
+		currI.layerLocalRootFilepathList = append(currI.layerLocalRootFilepathList, layerRootFilepath)
 		currI.layerLocalFilepathList = append(currI.layerLocalFilepathList, layerFilepath)
 	}
 
