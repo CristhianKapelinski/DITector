@@ -280,7 +280,29 @@ func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo, fileWithIssues map
 		layerRes.Vulnerabilities = vulnList
 	}(layer.localRootFilePath, layer.localFilePath, res)
 
-	// 遍历layer目录，发现需要扫描隐私泄露/错误配置/恶意软件的文件，并进行相应扫描
+	// 隐私泄露扫描：调用trufflehog对层的解压文件目录扫描
+	wg.Add(1)
+	go func(layerRootDir, layerDir string, layerRes *myutils.LayerResult) {
+		defer wg.Done()
+
+		secrets, err := scanSecretsInFilepath(layerDir)
+		if err != nil {
+			myutils.Logger.Error("scanSecretsInFilepath", layerDir, "failed with:", err.Error())
+			return
+		}
+
+		for _, secret := range secrets {
+			secret.Part = myutils.IssuePart.Content
+			secret.Path = getRelAbsPath(layerDir, secret.TrufflehogResult.SourceMetadata.Data.Filesystem.File)
+			secret.LayerDigest = layer.digest
+		}
+
+		resLock.Lock()
+		defer resLock.Unlock()
+		layerRes.SecretLeakages = secrets
+	}(layer.localRootFilePath, layer.localFilePath, res)
+
+	// 遍历layer目录，发现需要扫描错误配置/恶意软件的文件，并进行相应扫描
 	if err = filepath.Walk(layer.localFilePath, analyzer.scanLayerFunc(layer, fileWithIssues, defaultExecFiles, res, &resLock)); err != nil {
 		fmt.Println()
 	}
@@ -361,33 +383,6 @@ func postCreateAskYTask(client *http.Client, dest string) (*AskYTask, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	//scaFile, err := os.Open(dest)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//defer scaFile.Close()
-	//
-	//postReq, err := http.NewRequest(http.MethodPost,
-	//	fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/uploadLog?token=%s", myutils.GlobalConfig.AskyConfig.AskyToken),
-	//	scaFile,
-	//)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//resp, err := client.Do(postReq)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//defer resp.Body.Close()
-
-	//body, err := io.ReadAll(resp.Body)
-	//test := string(body)
-	//fmt.Println(test)
-	//if err != nil {
-	//	return nil, err
-	//}
 
 	task := new(AskYTask)
 	if err = json.Unmarshal(respBody, task); err != nil {
@@ -494,23 +489,6 @@ func (analyzer *ImageAnalyzer) scanLayerFunc(layer *layerInfo, fileWithIssues ma
 		}
 
 		// 根据文件路径确定扫描内容
-		// 扫描隐私泄露
-		if FileNeedScanSecrets(relPath) {
-			secrets, err := analyzer.scanSecretsInFile(path)
-			if err != nil {
-				myutils.Logger.Error("scan secret leakages for file", path, "failed with:", err.Error())
-				return err
-			}
-			for _, secret := range secrets {
-				secret.Part = myutils.IssuePart.Content
-				secret.Path = relPath
-				secret.LayerDigest = layer.digest
-
-				layerResMu.Lock()
-				layerRes.SecretLeakages = append(layerRes.SecretLeakages, secret)
-				layerResMu.Unlock()
-			}
-		}
 
 		// 配置文件，检测错误配置
 		if need, app := misconfiguration.FileNeedScan(relPath); need {

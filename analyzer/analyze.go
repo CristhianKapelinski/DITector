@@ -67,10 +67,6 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 			imgRes.Namespace = ci.namespace
 			imgRes.RepoName = ci.repoName
 			imgRes.TagName = ci.tagName
-			imgRes.Architecture = ci.architecture
-			imgRes.Variant = ci.variant
-			imgRes.OS = ci.osVersion
-			imgRes.OSVersion = ci.osVersion
 
 			imgRes.TotalTime = time.Since(beginTime).String()
 			imgRes.AnalyzeTime = time.Since(analyzeBeginTime).String()

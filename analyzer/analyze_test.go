@@ -19,7 +19,7 @@ func TestScanSecretsInString(t *testing.T) {
 		log.Fatalln(imageAnalyzerE)
 	}
 
-	secrets := imageAnalyzer.scanSecretsInString("-----BEGIN RSA PRIVATE KEYsk_test_000011112222333344445555")
+	secrets := ("-----BEGIN RSA PRIVATE KEYsk_test_000011112222333344445555")
 	for _, secret := range secrets {
 		fmt.Println(secret)
 	}

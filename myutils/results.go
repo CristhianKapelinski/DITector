@@ -136,15 +136,40 @@ func NewLayerResult() *LayerResult {
 }
 
 type SecretLeakage struct {
-	Type          string  `json:"type"`
-	Name          string  `json:"name"`
-	Part          string  `json:"part"` // part of image: metadata, configuration, content
-	Path          string  `json:"path"`
-	Match         string  `json:"match"`
-	Description   string  `json:"description"`
-	Severity      string  `json:"severity"`
-	SeverityScore float64 `json:"severity_score"`
-	LayerDigest   string  `json:"layer_digest,omitempty"`
+	Type             string           `json:"type"`
+	Name             string           `json:"name"`
+	Part             string           `json:"part"` // part of image: metadata, configuration, content
+	Path             string           `json:"path"`
+	Match            string           `json:"match"`
+	Description      string           `json:"description"`
+	Severity         string           `json:"severity"`
+	SeverityScore    float64          `json:"severity_score"`
+	LayerDigest      string           `json:"layer_digest,omitempty"`
+	TrufflehogResult TrufflehogResult `json:"trufflehog_result"`
+}
+
+type TrufflehogResult struct {
+	SourceMetadata struct {
+		Data struct {
+			Filesystem struct {
+				File string `json:"file"`
+			} `json:"Filesystem"`
+		} `json:"Data"`
+	} `json:"SourceMetadata"`
+	SourceID     int    `json:"SourceID"`
+	SourceType   int    `json:"SourceType"`
+	SourceName   string `json:"SourceName"`
+	DetectorType int    `json:"DetectorType"`
+	DetectorName string `json:"DetectorName"`
+	DecoderName  string `json:"DecoderName"`
+	Verified     bool   `json:"Verified"`
+	Raw          string `json:"Raw"`
+	RawV2        string `json:"RawV2"`
+	Redacted     string `json:"Redacted"`
+	ExtraData    struct {
+		RotationGuide string `json:"rotation_guide"`
+	} `json:"ExtraData"`
+	StructuredData interface{} `json:"StructuredData"`
 }
 
 type SensitiveParam struct {

@@ -12,17 +12,18 @@ import (
 )
 
 var GlobalConfig struct {
-	MaxThread        int           `yaml:"max_thread"`
-	RepositoriesFile string        `yaml:"repositories_file"`
-	TagsFile         string        `yaml:"tags_file"`
-	ImagesFile       string        `yaml:"images_file"`
-	LogFile          string        `yaml:"log_file"`
-	TmpDir           string        `yaml:"tmp_dir"`
-	CrawlerConfig    CrawlerConfig `yaml:"crawler_config"`
-	MongoConfig      MongoConfig   `yaml:"mongo_config"`
-	Neo4jConfig      Neo4jConfig   `yaml:"neo4j_config"`
-	RulesConfig      RulesConfig   `yaml:"rules_config"`
-	AskyConfig       AskyConfig    `yaml:"asky_config"`
+	MaxThread        int              `yaml:"max_thread"`
+	RepositoriesFile string           `yaml:"repositories_file"`
+	TagsFile         string           `yaml:"tags_file"`
+	ImagesFile       string           `yaml:"images_file"`
+	LogFile          string           `yaml:"log_file"`
+	TmpDir           string           `yaml:"tmp_dir"`
+	CrawlerConfig    CrawlerConfig    `yaml:"crawler_config"`
+	MongoConfig      MongoConfig      `yaml:"mongo_config"`
+	Neo4jConfig      Neo4jConfig      `yaml:"neo4j_config"`
+	RulesConfig      RulesConfig      `yaml:"rules_config"`
+	AskyConfig       AskyConfig       `yaml:"asky_config"`
+	TrufflehogConfig TrufflehogConfig `yaml:"trufflehog_config"`
 }
 
 type CrawlerConfig struct {
@@ -57,8 +58,13 @@ type RulesConfig struct {
 }
 
 type AskyConfig struct {
-	AskyFile  string `yaml:"asky_file"`
-	AskyToken string `yaml:"asky_token"`
+	AskyFile  string `yaml:"filepath"`
+	AskyToken string `yaml:"token"`
+}
+
+type TrufflehogConfig struct {
+	Filepath string `yaml:"filepath"`
+	Verify   bool   `yaml:"verify"`
 }
 
 // GlobalDBClient 用于维护全局所有模块的数据库client连接
