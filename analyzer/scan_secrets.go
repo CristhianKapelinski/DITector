@@ -11,10 +11,20 @@ import (
 func scanSecretsInFilepath(filepath string) ([]*myutils.SecretLeakage, error) {
 	res := make([]*myutils.SecretLeakage, 0)
 
-	cmd := exec.Command(myutils.GlobalConfig.TrufflehogConfig.Filepath, "--json", "filesystem", filepath)
+	var cmd *exec.Cmd
+	if myutils.GlobalConfig.TrufflehogConfig.Verify {
+		cmd = exec.Command(myutils.GlobalConfig.TrufflehogConfig.Filepath, "--json", "filesystem", filepath)
+	} else {
+		cmd = exec.Command(myutils.GlobalConfig.TrufflehogConfig.Filepath, "--json", "--no-verification", "filesystem", filepath)
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		myutils.Logger.Error("scan secrets of filepath", filepath, "with trufflehog failed with:", err.Error())
+		myutils.Logger.Error("connect to stdout pipe of cmd", cmd.Path, "failed with:", err.Error())
+		return nil, err
+	}
+	defer stdout.Close()
+	if err = cmd.Start(); err != nil {
+		myutils.Logger.Error("start cmd", cmd.Path, "failed with:", err.Error())
 		return nil, err
 	}
 
@@ -40,6 +50,11 @@ func scanSecretsInFilepath(filepath string) ([]*myutils.SecretLeakage, error) {
 			TrufflehogResult: result,
 		}
 		res = append(res, secret)
+	}
+
+	if err = cmd.Wait(); err != nil {
+		myutils.Logger.Error("wait for cmd exec", cmd.Path, "failed with:", err.Error())
+		return nil, err
 	}
 
 	return res, nil

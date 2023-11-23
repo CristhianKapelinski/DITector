@@ -314,7 +314,7 @@ func (analyzer *ImageAnalyzer) analyzeLayer(layer *layerInfo, fileWithIssues map
 // scaVul 对层文件进行SCA并进行漏洞匹配
 func scaVul(layerDir, dest string) (*AskYReport, error) {
 	// 调用asky脚本本地SCA
-	cmd := exec.Command("bash", myutils.GlobalConfig.AskyConfig.AskyFile, "-s", layerDir, "-o", dest)
+	cmd := exec.Command("bash", myutils.GlobalConfig.AskyConfig.Filepath, "-s", layerDir, "-o", dest)
 	err := cmd.Run()
 	if err != nil {
 		return nil, err
@@ -367,7 +367,7 @@ func postCreateAskYTask(client *http.Client, dest string) (*AskYTask, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/uploadLog?token=%s", myutils.GlobalConfig.AskyConfig.AskyToken), body)
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/uploadLog?token=%s", myutils.GlobalConfig.AskyConfig.Token), body)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +443,7 @@ func checkGetAskYReport(client *http.Client, task *AskYTask) (*AskYReport, error
 
 	// 获取检测结果
 	reportReq, err := http.NewRequest(http.MethodGet,
-		fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/queryReport/%s?token=%s", task.Data.TaskID, myutils.GlobalConfig.AskyConfig.AskyToken),
+		fmt.Sprintf("http://beta.tqs.qianxin-inc.cn/asky/skily/queryReport/%s?token=%s", task.Data.TaskID, myutils.GlobalConfig.AskyConfig.Token),
 		nil)
 	if err != nil {
 		return nil, err

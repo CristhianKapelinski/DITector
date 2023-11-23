@@ -11,7 +11,7 @@ func (analyzer *ImageAnalyzer) analyzeConfiguration(ci *CurrentImage) (*myutils.
 
 	secrets, err := scanSecretsInFilepath(ci.manifest.Config)
 	if err != nil {
-		myutils.Logger.Error("scan secrets for image", ci.name, "manifest file", ci.manifest.Config, "failed with:", err.Error())
+		myutils.Logger.Error("scanSecretsInFilepath for image", ci.name, "manifest file", ci.manifest.Config, "failed with:", err.Error())
 		return nil, err
 	}
 	for _, secret := range secrets {

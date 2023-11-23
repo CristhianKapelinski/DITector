@@ -12,59 +12,47 @@ import (
 )
 
 var GlobalConfig struct {
-	MaxThread        int              `yaml:"max_thread"`
-	RepositoriesFile string           `yaml:"repositories_file"`
-	TagsFile         string           `yaml:"tags_file"`
-	ImagesFile       string           `yaml:"images_file"`
-	LogFile          string           `yaml:"log_file"`
-	TmpDir           string           `yaml:"tmp_dir"`
-	CrawlerConfig    CrawlerConfig    `yaml:"crawler_config"`
-	MongoConfig      MongoConfig      `yaml:"mongo_config"`
-	Neo4jConfig      Neo4jConfig      `yaml:"neo4j_config"`
-	RulesConfig      RulesConfig      `yaml:"rules_config"`
-	AskyConfig       AskyConfig       `yaml:"asky_config"`
-	TrufflehogConfig TrufflehogConfig `yaml:"trufflehog_config"`
-}
-
-type CrawlerConfig struct {
-	LocalProxy bool   `yaml:"local_proxy"`
-	ProxyFile  string `yaml:"proxy_file"`
-	MysqlDSN   string `yaml:"mysql_dsn"`
-}
-
-type MongoConfig struct {
-	URI         string           `yaml:"uri"`
-	Database    string           `yaml:"database"`
-	Collections MongoCollections `yaml:"collections"`
-}
-
-type MongoCollections struct {
-	Repositories string `yaml:"repositories"`
-	Tags         string `yaml:"tags"`
-	Images       string `yaml:"images"`
-	ImageResults string `yaml:"image_results"`
-	LayerResults string `yaml:"layer_results"`
-}
-
-type Neo4jConfig struct {
-	Neo4jURI      string `yaml:"neo4j_uri"`
-	Neo4jUsername string `yaml:"neo4j_username"`
-	Neo4jPassword string `yaml:"neo4j_password"`
-}
-
-type RulesConfig struct {
-	SecretRulesFile         string `yaml:"secret_rules_file"`
-	SensitiveParamRulesFile string `yaml:"sensitive_param_rules_file"`
-}
-
-type AskyConfig struct {
-	AskyFile  string `yaml:"filepath"`
-	AskyToken string `yaml:"token"`
-}
-
-type TrufflehogConfig struct {
-	Filepath string `yaml:"filepath"`
-	Verify   bool   `yaml:"verify"`
+	MaxThread  int    `yaml:"max_thread"`
+	LogFile    string `yaml:"log_file"`
+	TmpDir     string `yaml:"tmp_dir"`
+	DataSource struct {
+		RepositoriesFile string `yaml:"repositories_file"`
+		TagsFile         string `yaml:"tags_file"`
+		ImagesFile       string `yaml:"images_file"`
+	} `yaml:"data_source"`
+	CrawlerConfig struct {
+		LocalProxy bool   `yaml:"local_proxy"`
+		ProxyFile  string `yaml:"proxy_file"`
+		MysqlDSN   string `yaml:"mysql_dsn"`
+	} `yaml:"crawler_config"`
+	MongoConfig struct {
+		URI         string `yaml:"uri"`
+		Database    string `yaml:"database"`
+		Collections struct {
+			Repositories string `yaml:"repositories"`
+			Tags         string `yaml:"tags"`
+			Images       string `yaml:"images"`
+			ImageResults string `yaml:"image_results"`
+			LayerResults string `yaml:"layer_results"`
+		} `yaml:"collections"`
+	} `yaml:"mongo_config"`
+	Neo4jConfig struct {
+		Neo4jURI      string `yaml:"neo4j_uri"`
+		Neo4jUsername string `yaml:"neo4j_username"`
+		Neo4jPassword string `yaml:"neo4j_password"`
+	} `yaml:"neo4j_config"`
+	RulesConfig struct {
+		SecretRulesFile         string `yaml:"secret_rules_file"`
+		SensitiveParamRulesFile string `yaml:"sensitive_param_rules_file"`
+	} `yaml:"rules_config"`
+	AskyConfig struct {
+		Filepath string `yaml:"filepath"`
+		Token    string `yaml:"token"`
+	} `yaml:"asky_config"`
+	TrufflehogConfig struct {
+		Filepath string `yaml:"filepath"`
+		Verify   bool   `yaml:"verify"`
+	} `yaml:"trufflehog_config"`
 }
 
 // GlobalDBClient 用于维护全局所有模块的数据库client连接

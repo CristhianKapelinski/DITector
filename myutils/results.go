@@ -153,6 +153,7 @@ type TrufflehogResult struct {
 		Data struct {
 			Filesystem struct {
 				File string `json:"file"`
+				Line int    `json:"line"`
 			} `json:"Filesystem"`
 		} `json:"Data"`
 	} `json:"SourceMetadata"`

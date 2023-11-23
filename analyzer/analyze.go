@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/Musso12138/dockercrawler/myutils"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,7 @@ func AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
 //
 // This will never pull the layers of the image to local env.
 func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
+	wg := sync.WaitGroup{}
 	beginTime := time.Now()
 	beginTimeStr := myutils.GetLocalNowTime()
 
@@ -43,7 +45,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 
 	// 数据库已有检测结果，跳过下载和检测
 	if myutils.GlobalDBClient.MongoFlag {
-		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err != nil {
+		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err == nil {
 			return res, nil
 		}
 	}
@@ -91,12 +93,16 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 	res.AnalyzeTime = time.Since(analyzeBeginTime).String()
 
 	if myutils.GlobalDBClient.MongoFlag {
+		wg.Add(1)
 		go func(imgRes *myutils.ImageResult) {
+			defer wg.Done()
 			if e := myutils.GlobalDBClient.Mongo.UpdateImgResult(imgRes); e != nil {
 				myutils.Logger.Error("update ImageResult", imgRes.Name, imgRes.Digest, "failed with:", e.Error())
 			}
 		}(res)
 	}
+
+	wg.Wait()
 
 	return res, nil
 }
@@ -118,7 +124,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 
 	// 数据库已有检测结果，跳过下载和检测
 	if myutils.GlobalDBClient.MongoFlag {
-		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err != nil {
+		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err == nil && res.ConfigurationAnalyzed && res.ContentAnalyzed {
 			return res, nil
 		}
 	}
