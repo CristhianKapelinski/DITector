@@ -45,6 +45,20 @@ func TestParseFromFile(t *testing.T) {
 	return
 }
 
+func TestParsePartial(t *testing.T) {
+	ci, err := NewCurrentImage("benjamineugenewhite/safegraph-sieve-2:early")
+	if err != nil {
+		log.Fatalln("create new current image got error:", err)
+	}
+	if err = ci.ParsePartial(); err != nil {
+		log.Fatalln("parse partial of image", ci.name, "failed with:", err)
+	}
+
+	fmt.Println("get CurrentImage:", ci)
+
+	return
+}
+
 func TestExtractRecommendCmd(t *testing.T) {
 	for _, s := range extractRecommendCmd("```\n> docker pull curlimages/curl:8.4.0\n```\n\n### run docker image\nCheck everything works properly by running:\n```\n> docker run --rm curlimages/curl:8.4.0 --version\n```\nHere is a more specific example of running curl docker container: \n```\n> docker run --rm curlimages/curl:8.4.0 -L -v https://curl.haxx.se \n```\nTo work with files it is best to mount directory:\n```\n>  docker run --rm -it \\\n-v \"$PWD:/work\" \\\ncurlimages/curl:8.4.0 \\\n-d@/work/test.txt https://httpbin.org/post\n```") {
 		fmt.Println(s)

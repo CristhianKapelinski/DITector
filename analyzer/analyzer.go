@@ -28,15 +28,16 @@ func NewImageAnalyzer(secretFile, sensParamFile string) (*ImageAnalyzer, error) 
 	analyzer.rules = newImageAnalyzerRules()
 
 	// 配置隐私泄露规则
-	if err = analyzer.rules.loadSecretsFromYAMLFile(secretFile); err != nil {
-		return nil, err
-	}
-	analyzer.rules.compileSecretsRegex()
+	//if err = analyzer.rules.loadSecretsFromYAMLFile(secretFile); err != nil {
+	//	return nil, err
+	//}
+	//analyzer.rules.compileSecretsRegex()
 
 	// 配置敏感参数规则
-	if err = analyzer.rules.loadSensitiveParamsFromYAMLFile(secretFile); err != nil {
+	if err = analyzer.rules.loadSensitiveParamsFromYAMLFile(sensParamFile); err != nil {
 		return nil, err
 	}
+	analyzer.rules.compileSensitiveParamRegex()
 
 	return analyzer, nil
 }

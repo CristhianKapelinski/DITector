@@ -8,11 +8,12 @@ import (
 
 func TestRules_LoadRulesFromYAMLFile(t *testing.T) {
 	rs := ImageAnalyzerRules{}
-	err := rs.loadSecretsFromYAMLFile("../rules/secret_rules.yaml")
+	err := rs.loadSensitiveParamsFromYAMLFile("../rules/sensitive_param_rules.yaml")
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println(rs.SecretRules)
+
+	return
 }
 
 func TestRules_CompileSecretsRegex(t *testing.T) {

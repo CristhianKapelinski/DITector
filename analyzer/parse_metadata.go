@@ -49,7 +49,9 @@ func (currI *CurrentImage) getRepositoryMetadata() (rMeta *myutils.Repository, e
 			}
 
 			// API结果正常，存入数据库，存数据库过程的error不需要返回
+			currI.wg.Add(1)
 			go func(repoMetadata *myutils.Repository) {
+				defer currI.wg.Done()
 				if e := myutils.GlobalDBClient.Mongo.UpdateRepository(repoMetadata); e != nil {
 					myutils.Logger.Error("update metadata of repository", repoMetadata.Namespace, repoMetadata.Name, "failed with:", e.Error())
 				}
@@ -80,7 +82,9 @@ func (currI *CurrentImage) getTagMetadata() (tMeta *myutils.Tag, err error) {
 			}
 
 			// API结果正常，存入数据库，存数据库过程的error不需要返回
+			currI.wg.Add(1)
 			go func(tagMetadata *myutils.Tag) {
+				defer currI.wg.Done()
 				if e := myutils.GlobalDBClient.Mongo.UpdateTag(tagMetadata); e != nil {
 					myutils.Logger.Error("update metadata of tag", tagMetadata.RepositoryNamespace, tagMetadata.RepositoryName, tagMetadata.Name, "failed with:", e.Error())
 				}
@@ -148,7 +152,9 @@ func (currI *CurrentImage) getImageMetadata() (iMeta *myutils.Image, err error) 
 			}
 
 			// API结果正常，存入数据库，存数据库过程的error不需要返回
+			currI.wg.Add(1)
 			go func(imgMetadata *myutils.Image) {
+				defer currI.wg.Done()
 				if e := myutils.GlobalDBClient.Mongo.UpdateImage(imgMetadata); e != nil {
 					myutils.Logger.Error("update metadata of image", imgMetadata.Digest, "failed with:", e.Error())
 				}

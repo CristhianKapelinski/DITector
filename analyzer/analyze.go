@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/Musso12138/dockercrawler/myutils"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -32,7 +31,6 @@ func AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
 //
 // This will never pull the layers of the image to local env.
 func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
-	wg := sync.WaitGroup{}
 	beginTime := time.Now()
 	beginTimeStr := myutils.GetLocalNowTime()
 
@@ -51,8 +49,10 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 	}
 
 	// 仅解析镜像元数据
+	// ci.ParsePartial中包含WaitGroup Add，后续的return都需要Wait
 	if err = ci.ParsePartial(); err != nil {
 		myutils.Logger.Error("parse image partially (only metadata) for image", name, "failed with:", err.Error())
+		ci.wg.Wait()
 		return nil, err
 	}
 
@@ -62,8 +62,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 	if myutils.GlobalDBClient.MongoFlag {
 
 		// 检查是否有digest相同的镜像结果(完整更好)
-		imgRes, err := myutils.GlobalDBClient.Mongo.FindImgResultByDigest(ci.digest)
-		if err == nil {
+		if imgRes, err := myutils.GlobalDBClient.Mongo.FindImgResultByDigest(ci.digest); err == nil {
 			imgRes.Name = name
 			imgRes.Registry = ci.registry
 			imgRes.Namespace = ci.namespace
@@ -72,6 +71,17 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 
 			imgRes.TotalTime = time.Since(beginTime).String()
 			imgRes.AnalyzeTime = time.Since(analyzeBeginTime).String()
+
+			ci.wg.Add(1)
+			go func(imgRes *myutils.ImageResult) {
+				defer ci.wg.Done()
+				if e := myutils.GlobalDBClient.Mongo.UpdateImgResult(imgRes); e != nil {
+					myutils.Logger.Error("update ImageResult", imgRes.Name, imgRes.Digest, "failed with:", e.Error())
+				}
+			}(imgRes)
+
+			ci.wg.Wait()
+
 			return imgRes, nil
 		}
 	}
@@ -83,6 +93,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 	// 分析镜像元数据
 	metaIs, err := analyzer.analyzeMetadata(ci)
 	if err != nil {
+		ci.wg.Wait()
 		return nil, err
 	}
 	res.MetadataAnalyzed = true
@@ -93,16 +104,16 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 	res.AnalyzeTime = time.Since(analyzeBeginTime).String()
 
 	if myutils.GlobalDBClient.MongoFlag {
-		wg.Add(1)
+		ci.wg.Add(1)
 		go func(imgRes *myutils.ImageResult) {
-			defer wg.Done()
+			defer ci.wg.Done()
 			if e := myutils.GlobalDBClient.Mongo.UpdateImgResult(imgRes); e != nil {
 				myutils.Logger.Error("update ImageResult", imgRes.Name, imgRes.Digest, "failed with:", e.Error())
 			}
 		}(res)
 	}
 
-	wg.Wait()
+	ci.wg.Wait()
 
 	return res, nil
 }

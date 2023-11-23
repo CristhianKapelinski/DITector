@@ -48,7 +48,7 @@ func (analyzer *ImageAnalyzer) analyzeImageMetadata(ci *CurrentImage) (*myutils.
 	res := myutils.NewMetadataResult()
 
 	// 将image元数据中的layer信息写入临时文件
-	metaFilepath := path.Join(myutils.GlobalConfig.TmpDir, ci.name+"-meta.json")
+	metaFilepath := path.Join(myutils.GlobalConfig.TmpDir, fmt.Sprintf("%s-%s-%s-meta.json", ci.namespace, ci.repoName, ci.tagName))
 	layerData, err := json.MarshalIndent(ci.metadata.imageMetadata.Layers, "", "    ")
 	if err != nil {
 		myutils.Logger.Error("json marshal layer metadata of image", ci.name, "failed with:", err.Error())
@@ -76,6 +76,8 @@ func (analyzer *ImageAnalyzer) analyzeImageMetadata(ci *CurrentImage) (*myutils.
 			}
 		}
 	}
+
+	res.SecretLeakages = secrets
 
 	return res, nil
 }

@@ -11,10 +11,12 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 )
 
 type CurrentImage struct {
 	dockerClient *client.Client
+	wg           sync.WaitGroup
 
 	name         string
 	registry     string
@@ -99,6 +101,7 @@ func NewCurrentImage(imgName string) (*CurrentImage, error) {
 	if err != nil {
 		return nil, err
 	}
+	currI.wg = sync.WaitGroup{}
 
 	currI.name = imgName
 	currI.parseName()

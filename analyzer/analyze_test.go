@@ -14,6 +14,18 @@ func TestAnalyzeImageMetadata(t *testing.T) {
 	fmt.Println(AnalyzeImagePartialByName("benjamineugenewhite/safegraph-sieve-2:early"))
 }
 
+func TestAnalyzeImagePartialByName(t *testing.T) {
+	// 隐私信息泄露
+	//res, err := AnalyzeImagePartialByName("benjamineugenewhite/safegraph-sieve-2:early")
+	// 敏感参数
+	res, err := AnalyzeImagePartialByName("phenompeople/mongodb:latest")
+	if err != nil {
+		log.Fatalln("AnalyzeImagePartialByName", res.Name, "failed with:", err)
+	}
+
+	return
+}
+
 func TestScanSecretsInString(t *testing.T) {
 	if imageAnalyzerE != nil {
 		log.Fatalln(imageAnalyzerE)
