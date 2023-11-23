@@ -5,6 +5,7 @@ go.work.sum
 crawler/proxyaddr.json
 secret.json
 .secret
+config.yaml
 
 test.json
 *.log
