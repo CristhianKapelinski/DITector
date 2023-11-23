@@ -124,14 +124,16 @@ func ExtractTar(src, dst string) error {
 
 		// 如果是文件夹，创建目录
 		if info.IsDir() {
-			if err = os.MkdirAll(targetFile, info.Mode()); err != nil {
+			if err = os.MkdirAll(targetFile, 0750); err != nil {
 				return err
 			}
 			continue
 		}
 
 		// 如果是文件，创建文件并写入数据
-		file, err := os.OpenFile(targetFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+		// 不再根据原有文件权限创建文件，容易报错
+		file, err := os.Create(targetFile)
+		//file, err := os.OpenFile(targetFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 		if err != nil {
 			return err
 		}
@@ -139,6 +141,10 @@ func ExtractTar(src, dst string) error {
 
 		_, err = io.Copy(file, tr)
 		if err != nil {
+			// 跳过权限不足的文件
+			if os.IsPermission(err) {
+				continue
+			}
 			return err
 		}
 	}

@@ -2,15 +2,35 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/Musso12138/dockercrawler/buildgraph"
 	"github.com/Musso12138/dockercrawler/crawler"
 	"github.com/Musso12138/dockercrawler/myutils"
 	"github.com/Musso12138/dockercrawler/scripts"
 	"github.com/Musso12138/dockercrawler/server"
+	"github.com/spf13/cobra"
 	"os"
 )
 
+var art = `
+ _____             _             _____                 
+|  __ \           | |           / ____|                
+| |  | | ___   ___| | _____ _ _| (___   ___ __ _ _ __  
+| |  | |/ _ \ / __| |/ / _ \ '__\___ \ / __/ _ | '_ \ 
+| |__| | (_) | (__|   <  __/ |  ____) | (_| (_| | | | |
+|_____/ \___/ \___|_|\_\___|_| |_____/ \___\__,_|_| |_|
+`
+
 func main() {
+	rootCmd := &cobra.Command{
+		Run: "docker-scan",
+		Long: art +
+			"\n\t- crawl Docker container image from Docker Hub" +
+			"\n\t- build dependency graph" +
+			"\n\t- pull, save image with Docker CLI and scan weakness of image",
+		Args:
+	}
+
 	// 命令行参数定义与绑定
 	var (
 		crawl       bool   // 是否要爬镜像仓库数据
@@ -61,5 +81,10 @@ func main() {
 	} else {
 		flag.Usage()
 		os.Exit(-1)
+	}
+
+	if err := rootCmd.Execute(); err != nil {
+		myutils.Logger.Critical("execute root cmd failed with:", err.Error())
+		os.Exit(1)
 	}
 }
