@@ -7,24 +7,25 @@ import (
 	"time"
 )
 
-var imageAnalyzer, imageAnalyzerE = NewImageAnalyzerGlobalConfig()
+var DefaultAnalyzer *ImageAnalyzer
+var DefaultAnalyzerE error
 
 // AnalyzeImageByName analyzes image totally, including metadata, configuration, content of the image.
 func AnalyzeImageByName(name string) (*myutils.ImageResult, error) {
-	if imageAnalyzerE != nil {
-		return nil, fmt.Errorf("create ImageAnalyzer failed with: %s", imageAnalyzerE)
+	if DefaultAnalyzerE != nil {
+		return nil, fmt.Errorf("create ImageAnalyzer failed with: %s", DefaultAnalyzerE)
 	}
 
-	return imageAnalyzer.AnalyzeImageByName(name)
+	return DefaultAnalyzer.AnalyzeImageByName(name)
 }
 
 // AnalyzeImagePartialByName analyzes image partially, currently only metadata.
 func AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
-	if imageAnalyzerE != nil {
-		return nil, fmt.Errorf("create ImageAnalyzer failed with: %s", imageAnalyzerE)
+	if DefaultAnalyzerE != nil {
+		return nil, fmt.Errorf("create ImageAnalyzer failed with: %s", DefaultAnalyzerE)
 	}
 
-	return imageAnalyzer.AnalyzeImagePartialByName(name)
+	return DefaultAnalyzer.AnalyzeImagePartialByName(name)
 }
 
 // AnalyzeImagePartialByName analyzes image partially by name, including only the metadata.

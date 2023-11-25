@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"fmt"
 	"gopkg.in/yaml.v3"
 	"os"
 	"regexp"
@@ -78,6 +79,7 @@ func (rs *ImageAnalyzerRules) compileSecretsRegex() {
 func (rs *ImageAnalyzerRules) loadSensitiveParamsFromYAMLFile(path string) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
+		fmt.Println("load fail:", path)
 		return err
 	}
 

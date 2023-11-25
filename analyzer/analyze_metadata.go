@@ -59,6 +59,7 @@ func (analyzer *ImageAnalyzer) analyzeImageMetadata(ci *CurrentImage) (*myutils.
 		myutils.Logger.Error("write layer metadata of image", ci.name, "to file", metaFilepath, "failed with:", err.Error())
 		return nil, err
 	}
+	defer os.Remove(metaFilepath)
 
 	// 调用trufflehog扫描临时文件
 	secrets, err := scanSecretsInFilepath(metaFilepath)

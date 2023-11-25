@@ -2,6 +2,7 @@ package myutils
 
 import (
 	"context"
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -405,16 +406,19 @@ func (m *MyMongo) FindTagByName(repoNamespace, repoName, name string) (*Tag, err
 
 	cursor, err := m.TagColl.Aggregate(context.Background(), pipeline)
 	if err != nil {
-		return tMeta, err
+		return nil, err
 	}
 	defer cursor.Close(context.TODO())
 
-	for cursor.Next(context.TODO()) {
-		err := cursor.Decode(tMeta)
-		return tMeta, err
+	if cursor.Next(context.TODO()) {
+		if err = cursor.Decode(tMeta); err != nil {
+			Logger.Error("mongo cursor.Decode metadata of tag", repoNamespace, repoName, name, "failed with:", err.Error())
+			return nil, err
+		}
+		return tMeta, nil
 	}
 
-	return tMeta, err
+	return nil, fmt.Errorf("no metadata of tag %s/%s:%s found in mongo", repoNamespace, repoName, name)
 }
 
 func (m *MyMongo) UpdateImage(iMeta *Image) error {

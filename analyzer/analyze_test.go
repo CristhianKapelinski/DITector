@@ -27,8 +27,8 @@ func TestAnalyzeImagePartialByName(t *testing.T) {
 }
 
 func TestScanSecretsInString(t *testing.T) {
-	if imageAnalyzerE != nil {
-		log.Fatalln(imageAnalyzerE)
+	if DefaultAnalyzerE != nil {
+		log.Fatalln(DefaultAnalyzerE)
 	}
 
 	secrets := ("-----BEGIN RSA PRIVATE KEYsk_test_000011112222333344445555")
@@ -38,11 +38,11 @@ func TestScanSecretsInString(t *testing.T) {
 }
 
 func TestScanSensitiveParamInString(t *testing.T) {
-	if imageAnalyzerE != nil {
-		log.Fatalln(imageAnalyzerE)
+	if DefaultAnalyzerE != nil {
+		log.Fatalln(DefaultAnalyzerE)
 	}
 
-	secrets := imageAnalyzer.scanSensitiveParamInString("")
+	secrets := DefaultAnalyzer.scanSensitiveParamInString("")
 	for _, secret := range secrets {
 		fmt.Println(secret)
 	}

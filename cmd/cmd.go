@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/Musso12138/docker-scan/analyzer"
 	"github.com/Musso12138/docker-scan/myutils"
+	"github.com/Musso12138/docker-scan/scripts"
 	"github.com/spf13/cobra"
 	"log"
 	"os"
@@ -13,28 +14,38 @@ import (
 var logLevelStr string
 var validLogLevel = map[string]int{"debug": 1, "info": 2, "warn": 3, "error": 4, "critical": 5}
 
+const longDesc = `
+_____             _             _____                 
+|  __ \           | |           / ____|                
+| |  | | ___   ___| | _____ _ _| (___   ___ __ _ _ __  
+| |  | |/ _ \ / __| |/ / _ \ '__\___ \ / __/ _ | '_ \ 
+| |__| | (_) | (__|   <  __/ |  ____) | (_| (_| | | | |
+|_____/ \___/ \___|_|\_\___|_| |_____/ \___\__,_|_| |_|
+
+A Docker security tool built with Go, implementing:
+	- crawl Docker container image from Docker Hub
+	- build dependency graph
+	- pull, save image with Docker CLI and scan weakness of image`
+
 var RootCmd = &cobra.Command{
 	Use:   "docker-scan",
 	Short: "docker-scan is a security tool for scraping and scanning Docker container images",
-	Long: `
-			 _____             _             _____                 
-			|  __ \           | |           / ____|                
-			| |  | | ___   ___| | _____ _ _| (___   ___ __ _ _ __  
-			| |  | |/ _ \ / __| |/ / _ \ '__\___ \ / __/ _ | '_ \ 
-			| |__| | (_) | (__|   <  __/ |  ____) | (_| (_| | | | |
-			|_____/ \___/ \___|_|\_\___|_| |_____/ \___\__,_|_| |_|
-
-			A Docker security tool built with Go, implementing:
-				- crawl Docker container image from Docker Hub
-				- build dependency graph
-				- pull, save image with Docker CLI and scan weakness of image`,
+	Long:  longDesc,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		configFile, _ := cmd.Flags().GetString("config")
 		if logLevel, ok := validLogLevel[logLevelStr]; ok {
 			myutils.LoadConfigFromFile(configFile, logLevel)
+			analyzer.DefaultAnalyzer, analyzer.DefaultAnalyzerE = analyzer.NewImageAnalyzerGlobalConfig()
 		} else {
 			log.Fatalln("invalid log_level:", logLevelStr)
 		}
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		// 仅用作测试
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		// 所有命令退出前的清理工作
+		myutils.CloseAllConnections()
 	},
 }
 
@@ -93,6 +104,8 @@ var analyzeCmd = &cobra.Command{
 		} else {
 			log.Fatalln("something wrong during analyzing image got result: nil")
 		}
+
+		fmt.Println("analyze finish")
 	},
 }
 
@@ -102,7 +115,13 @@ var executeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		script, _ := cmd.Flags().GetString("script")
 		switch script {
-
+		case "batch-analyze":
+			file, _ := cmd.Flags().GetString("file")
+			partial, _ := cmd.Flags().GetBool("partial")
+			err := scripts.BatchAnalyzeByName(file, partial)
+			if err != nil {
+				log.Fatalln("batch-analyze file", file, "got error:", err)
+			}
 		}
 	},
 }
@@ -116,11 +135,13 @@ func init() {
 	analyzeCmd.Flags().Bool("partial", false, "only analyze metadata of the Docker image")
 	analyzeCmd.Flags().StringP("name", "n", "", "analyze Docker image by name")
 	analyzeCmd.Flags().StringP("file", "f", "", "analyze Docker image by file")
-	analyzeCmd.Flags().Bool("json", false, "output in JSON")
+	analyzeCmd.Flags().Bool("json", true, "output in JSON")
 	analyzeCmd.Flags().StringP("output", "o", fmt.Sprintf("%s_result.json", myutils.GetLocalNowTimeNoSpace()), "analysis result output filepath")
 
 	// executeCmd
 	executeCmd.Flags().String("script", "", "execute custom script")
+	executeCmd.Flags().Bool("partial", false, "only analyze metadata of the Docker images")
+	executeCmd.Flags().StringP("file", "p", "", "input file for scripts, like batch-analyze")
 
 	// 向root命令中注册命令
 	RootCmd.AddCommand(
@@ -183,9 +204,4 @@ func init() {
 //} else {
 //flag.Usage()
 //os.Exit(-1)
-//}
-//
-//if err := rootCmd.Execute(); err != nil {
-//myutils.Logger.Critical("execute root cmd failed with:", err.Error())
-//os.Exit(1)
 //}

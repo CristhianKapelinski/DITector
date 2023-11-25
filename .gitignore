@@ -13,6 +13,7 @@ test.json
 pkg/
 
 # ==========================
-# used for scripts
+# used for build files
 # ==========================
-#scripts
+docker-scan
+*result.json

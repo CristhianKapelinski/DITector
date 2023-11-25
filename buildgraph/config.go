@@ -3,8 +3,8 @@ package buildgraph
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Musso12138/docker-scan/myutils"
 	"log"
-	"myutils"
 	"os"
 	"path"
 	"runtime"
