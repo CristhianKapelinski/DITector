@@ -99,6 +99,12 @@ var analyzeCmd = &cobra.Command{
 var executeCmd = &cobra.Command{
 	Use:   "execute",
 	Short: "execute custom scripts",
+	Run: func(cmd *cobra.Command, args []string) {
+		script, _ := cmd.Flags().GetString("script")
+		switch script {
+
+		}
+	},
 }
 
 func init() {

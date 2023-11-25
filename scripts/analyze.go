@@ -2,18 +2,13 @@ package scripts
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Musso12138/docker-scan/analyzer"
 	"github.com/Musso12138/docker-scan/myutils"
-	"go.mongodb.org/mongo-driver/bson"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -23,41 +18,41 @@ import (
 // log to file
 // /data/docker-crawler/results/secrets-in-image-metadata.log
 func ScanAllSecretsInImageMetadata() {
-	cursor, err := myutils.GlobalDBClient.Mongo.ImgColl.Find(context.TODO(), bson.D{})
-	if err != nil {
-		logself(myutils.LogLevelStr.Error, "traverse images failed with:", err.Error())
-		log.Fatalln(err)
-	}
-	defer cursor.Close(context.TODO())
-	cnt := 0
-
-	for cursor.Next(context.TODO()) {
-		cnt++
-		logself(myutils.LogLevelStr.Debug, "begin to scan", strconv.Itoa(cnt))
-
-		targetImage := new(myutils.Image)
-		err := cursor.Decode(targetImage)
-		if err != nil {
-			logself(myutils.LogLevelStr.Error, "decode image failed with:", err.Error())
-			continue
-		}
-
-		imgres := new(myutils.ImageResult)
-		imgres.Digest = targetImage.Digest
-		imgres.LastAnalyzed = myutils.GetLocalNowTime()
-
-		imgres, err = analyzer.AnalyzeImagePartialByName(targetImage)
-		if err != nil {
-			logself(myutils.LogLevelStr.Error, "analyze metadata of image", imgres.Digest, "failed with:", err.Error())
-			continue
-		}
-
-		err = mymongo.InsertResult(imgres)
-		if err != nil {
-			logself(myutils.LogLevelStr.Error, "insert image result failed with:", err.Error())
-			continue
-		}
-	}
+	//cursor, err := myutils.GlobalDBClient.Mongo.ImgColl.Find(context.TODO(), bson.D{})
+	//if err != nil {
+	//	logself(myutils.LogLevelStr.Error, "traverse images failed with:", err.Error())
+	//	log.Fatalln(err)
+	//}
+	//defer cursor.Close(context.TODO())
+	//cnt := 0
+	//
+	//for cursor.Next(context.TODO()) {
+	//	cnt++
+	//	logself(myutils.LogLevelStr.Debug, "begin to scan", strconv.Itoa(cnt))
+	//
+	//	targetImage := new(myutils.Image)
+	//	err := cursor.Decode(targetImage)
+	//	if err != nil {
+	//		logself(myutils.LogLevelStr.Error, "decode image failed with:", err.Error())
+	//		continue
+	//	}
+	//
+	//	imgres := new(myutils.ImageResult)
+	//	imgres.Digest = targetImage.Digest
+	//	imgres.LastAnalyzed = myutils.GetLocalNowTime()
+	//
+	//	imgres, err = analyzer.AnalyzeImagePartialByName(targetImage)
+	//	if err != nil {
+	//		logself(myutils.LogLevelStr.Error, "analyze metadata of image", imgres.Digest, "failed with:", err.Error())
+	//		continue
+	//	}
+	//
+	//	err = myutils.GlobalDBClient.Mongo.UpdateImgResult(imgres)
+	//	if err != nil {
+	//		logself(myutils.LogLevelStr.Error, "insert image result failed with:", err.Error())
+	//		continue
+	//	}
+	//}
 }
 
 // ScanTop100DownstreamImagesVul scan vulnerabilities of top 100
