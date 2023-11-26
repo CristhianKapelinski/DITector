@@ -48,6 +48,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 	// 数据库已有检测结果，跳过下载和检测
 	if myutils.GlobalDBClient.MongoFlag {
 		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err == nil {
+			myutils.Logger.Info("AnalyzeImagePartial", name, "succeeded")
 			return res, nil
 		}
 	}
@@ -85,7 +86,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 			}(imgRes)
 
 			ci.wg.Wait()
-
+			myutils.Logger.Info("AnalyzeImagePartial", name, "succeeded")
 			return imgRes, nil
 		}
 	}
@@ -118,7 +119,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 	}
 
 	ci.wg.Wait()
-
+	myutils.Logger.Info("AnalyzeImagePartial", name, "succeeded")
 	return res, nil
 }
 
@@ -140,6 +141,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 	// 数据库已有检测结果，跳过下载和检测
 	if myutils.GlobalDBClient.MongoFlag {
 		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err == nil && res.ConfigurationAnalyzed && res.ContentAnalyzed {
+			myutils.Logger.Info("AnalyzeImage", name, "succeeded")
 			return res, nil
 		}
 	}
@@ -194,6 +196,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 					}
 				}(imgRes)
 				ci.wg.Wait()
+				myutils.Logger.Info("AnalyzeImage", name, "succeeded")
 				return imgRes, nil
 			}
 		}
@@ -244,7 +247,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 	}
 
 	ci.wg.Wait()
-
+	myutils.Logger.Info("AnalyzeImage", name, "succeeded")
 	return res, nil
 }
 
