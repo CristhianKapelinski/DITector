@@ -27,7 +27,7 @@ type ImageResult struct {
 	// Layers: [ layer-id1, layer-id2, ... ], from bottom to top
 	Layers []string `json:"layers"`
 	// LayerResults: layer-id -> LayerResult
-	LayerResults map[string]*LayerResult `json:"layer_results"`
+	LayerResults map[string]*LayerResult `json:"-"`
 	// FileWithIssues: filepath -> bool, true: 文件包含问题为隐私泄露，false:文件包含问题不是隐私泄露
 	//FileWithIssues map[string]bool `json:"-"`
 	ContentResult *ContentResult `json:"content_result"`

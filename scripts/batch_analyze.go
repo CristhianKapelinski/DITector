@@ -2,6 +2,7 @@ package scripts
 
 import (
 	"bufio"
+	"fmt"
 	"github.com/Musso12138/docker-scan/analyzer"
 	"github.com/Musso12138/docker-scan/myutils"
 	"io"
@@ -51,7 +52,7 @@ func BatchAnalyzeByName(input string, partial bool) error {
 		line = strings.TrimSpace(line)
 		imgNameCh <- line
 		if i%100 == 0 {
-			myutils.Logger.Info("BatchAnalyzeByName begin to analyze line:", strconv.Itoa(i), ", image:", line)
+			fmt.Println("BatchAnalyzeByName begin to analyze line:", strconv.Itoa(i), ", image:", line)
 		}
 	}
 
@@ -71,7 +72,7 @@ func batchAnalyzeByNameWorker(workerId int, jobs <-chan string, partial bool, wg
 				myutils.Logger.Error("batchAnalyzeWorker", strconv.Itoa(workerId), "analyze partial image", job, "failed with:", err.Error())
 			}
 		} else {
-			_, err := analyzer.AnalyzeImageByName(job)
+			_, err := analyzer.AnalyzeImageByName(job, true)
 			if err != nil {
 				myutils.Logger.Error("batchAnalyzeWorker", strconv.Itoa(workerId), "analyze image", job, "failed with:", err.Error())
 			}

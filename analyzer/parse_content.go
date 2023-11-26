@@ -10,8 +10,14 @@ func (currI *CurrentImage) parseContentFromFile() error {
 
 	// 根据文件解压情况对应镜像文件本地位置（不需要root权限）
 	if len(currI.layerWithContentList) != len(currI.layerLocalFilepathList) {
-		return fmt.Errorf("count of layers from image metadata(%d) is not equal with count of layers from image tar manifest(%d)",
-			len(currI.layerWithContentList), len(currI.layerLocalFilepathList))
+		if err := currI.parseMetadata(true, true); err != nil {
+			return fmt.Errorf("layers number of image %s from metadata %d != from tar manifest %d, reload metadata from API got error: %s",
+				currI.name, len(currI.layerWithContentList), len(currI.layerLocalFilepathList), err)
+		} else {
+			currI.parseLayersWithContentFromMetadata()
+			return fmt.Errorf("layers number of image %s from metadata %d != from tar manifest %d",
+				currI.name, len(currI.layerWithContentList), len(currI.layerLocalFilepathList))
+		}
 	}
 	for i, digest := range currI.layerWithContentList {
 		currI.layerInfoMap[digest].localFilePath = currI.layerLocalFilepathList[i]
@@ -32,18 +38,4 @@ func (currI *CurrentImage) parseContentFromDockerEnv() error {
 	//}
 
 	return nil
-}
-
-// parseLayersWithContentFromMetadata extracts layer digests from layer metadata.
-func (currI *CurrentImage) parseLayersWithContentFromMetadata() {
-	for _, layer := range currI.metadata.imageMetadata.Layers {
-		if layer.Digest != "" {
-			currI.layerWithContentList = append(currI.layerWithContentList, layer.Digest)
-			currI.layerInfoMap[layer.Digest] = &layerInfo{
-				size:        layer.Size,
-				instruction: layer.Instruction,
-				digest:      layer.Digest,
-			}
-		}
-	}
 }

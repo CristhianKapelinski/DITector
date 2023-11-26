@@ -76,7 +76,7 @@ var analyzeCmd = &cobra.Command{
 			if partial {
 				res, err = analyzer.AnalyzeImagePartialByName(name)
 			} else {
-				res, err = analyzer.AnalyzeImageByName(name)
+				res, err = analyzer.AnalyzeImageByName(name, false)
 			}
 		} else if file != "" {
 			// AnalyzeImageByFile暂时未实现
@@ -94,9 +94,11 @@ var analyzeCmd = &cobra.Command{
 				if err != nil {
 					log.Fatalln("json marshal analysis result got error:", err)
 				}
-				err = os.WriteFile(output, jsonData, 0664)
-				if err != nil {
-					log.Fatalln("json marshal analysis result got error:", err)
+				if output != "" {
+					err = os.WriteFile(output, jsonData, 0664)
+					if err != nil {
+						log.Fatalln("json marshal analysis result got error:", err)
+					}
 				}
 			}
 

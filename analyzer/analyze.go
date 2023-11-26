@@ -1,8 +1,11 @@
 package analyzer
 
 import (
+	"context"
 	"fmt"
 	"github.com/Musso12138/docker-scan/myutils"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 	"os"
 	"time"
 )
@@ -11,12 +14,12 @@ var DefaultAnalyzer *ImageAnalyzer
 var DefaultAnalyzerE error
 
 // AnalyzeImageByName analyzes image totally, including metadata, configuration, content of the image.
-func AnalyzeImageByName(name string) (*myutils.ImageResult, error) {
+func AnalyzeImageByName(name string, delFlag bool) (*myutils.ImageResult, error) {
 	if DefaultAnalyzerE != nil {
 		return nil, fmt.Errorf("create ImageAnalyzer failed with: %s", DefaultAnalyzerE)
 	}
 
-	return DefaultAnalyzer.AnalyzeImageByName(name)
+	return DefaultAnalyzer.AnalyzeImageByName(name, delFlag)
 }
 
 // AnalyzeImagePartialByName analyzes image partially, currently only metadata.
@@ -123,7 +126,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 // configuration, content of the image.
 //
 // Image needs to be stored in the local Docker environment.
-func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageResult, error) {
+func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*myutils.ImageResult, error) {
 	beginTime := time.Now()
 	beginTimeStr := myutils.GetLocalNowTime()
 
@@ -149,12 +152,18 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string) (*myutils.ImageRe
 		return nil, err
 	}
 	// 结束时删除一切解压内容
-	defer func(dir string) {
+	defer func(name, dir string, cli *client.Client, delFlag bool) {
 		e := os.RemoveAll(dir)
 		if e != nil {
 			myutils.Logger.Error("remove all from dir", dir, "failed with:", e.Error())
 		}
-	}(ci.imgFilepath)
+		if delFlag {
+			_, e = cli.ImageRemove(context.TODO(), name, types.ImageRemoveOptions{})
+			if e != nil {
+				myutils.Logger.Error("remove image", name, "from Docker failed with:", e.Error())
+			}
+		}
+	}(name, ci.imgFilepath, ci.dockerClient, delFlag)
 
 	// 查找数据库中是否已有digest对应的镜像结果
 	analyzeBeginTime := time.Now()

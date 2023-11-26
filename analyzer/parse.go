@@ -14,7 +14,7 @@ func (currI *CurrentImage) ParsePartial() (err error) {
 		return
 	}
 
-	if err = currI.parseMetadata(true); err != nil {
+	if err = currI.parseMetadata(true, false); err != nil {
 		return
 	}
 
@@ -29,7 +29,7 @@ func (currI *CurrentImage) ParseFromFile() (err error) {
 	go currI.pullSaveExtractImage(myutils.GlobalConfig.TmpDir, downloadCh)
 
 	// 解析镜像repo、tag元数据
-	if err = currI.parseMetadata(false); err != nil {
+	if err = currI.parseMetadata(false, false); err != nil {
 		myutils.Logger.Error("get repo-tag-metadata of image", currI.name, "failed with:", err.Error())
 		return
 	}
@@ -49,7 +49,7 @@ func (currI *CurrentImage) ParseFromFile() (err error) {
 	}
 
 	// 解析镜像image元数据
-	if currI.metadata.imageMetadata, err = currI.getImageMetadata(); err != nil {
+	if currI.metadata.imageMetadata, err = currI.getImageMetadata(false); err != nil {
 		myutils.Logger.Error("get image-metadata of image", currI.name, "failed with:", err.Error())
 		return err
 	}
@@ -76,7 +76,7 @@ func (currI *CurrentImage) ParseFromDockerEnv() (err error) {
 	}
 
 	// 获取元数据
-	if err = currI.parseMetadata(false); err != nil {
+	if err = currI.parseMetadata(false, false); err != nil {
 		return err
 	}
 
@@ -88,7 +88,7 @@ func (currI *CurrentImage) ParseFromDockerEnv() (err error) {
 	}
 
 	// 根据镜像配置提取出的平台信息获取image metadata
-	if currI.metadata.imageMetadata, err = currI.getImageMetadata(); err != nil {
+	if currI.metadata.imageMetadata, err = currI.getImageMetadata(false); err != nil {
 		myutils.Logger.Error("parse image metadata of image", currI.name, "failed with:", err.Error())
 		return err
 	}
