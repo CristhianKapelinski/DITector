@@ -20,6 +20,10 @@ var GlobalConfig struct {
 		TagsFile         string `yaml:"tags_file"`
 		ImagesFile       string `yaml:"images_file"`
 	} `yaml:"data_source"`
+	Proxy struct {
+		HTTPProxy  string `yaml:"http_proxy"`
+		HTTPSProxy string `yaml:"https_proxy"`
+	} `yaml:"proxy"`
 	CrawlerConfig struct {
 		LocalProxy bool   `yaml:"local_proxy"`
 		ProxyFile  string `yaml:"proxy_file"`
@@ -89,7 +93,8 @@ func LoadConfigFromFile(configFilepath string, logLevel int) {
 	}
 
 	// 配置http代理
-	configDefaultHTTPProxy()
+	configDefaultHTTPProxy(GlobalConfig.Proxy.HTTPProxy, GlobalConfig.Proxy.HTTPSProxy)
+
 	// 配置tls，跳过https证书验证
 	configTLSConfig()
 

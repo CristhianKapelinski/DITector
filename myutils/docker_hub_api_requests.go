@@ -10,9 +10,13 @@ import (
 )
 
 // configDefaultHTTPProxy configures http and https proxy.
-func configDefaultHTTPProxy() {
-	os.Setenv("http_proxy", "127.0.0.1:7890")
-	os.Setenv("https_proxy", "127.0.0.1:7890")
+func configDefaultHTTPProxy(httpProxy, httpsProxy string) {
+	if httpProxy != "" {
+		os.Setenv("http_proxy", httpProxy)
+	}
+	if httpsProxy != "" {
+		os.Setenv("https_proxy", httpsProxy)
+	}
 }
 
 // configTLSConfig configures not to verify CA for https protocol.

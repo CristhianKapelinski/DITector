@@ -372,7 +372,6 @@ func (m *MyMongo) UpdateTag(tMeta *Tag) error {
 	return err
 }
 
-// FindTagByName TODO: 待单元测试
 func (m *MyMongo) FindTagByName(repoNamespace, repoName, name string) (*Tag, error) {
 	tMeta := new(Tag)
 
