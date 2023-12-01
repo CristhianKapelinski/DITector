@@ -87,3 +87,10 @@ type Layer struct {
 	Size        int64  `json:"size" bson:"size"`
 	Instruction string `json:"instruction" bson:"instruction"`
 }
+
+type TagsPage struct {
+	Count    int    `json:"count"`
+	Next     string `json:"next"`
+	Previous string `json:"previous"`
+	Results  []*Tag `json:"results"`
+}

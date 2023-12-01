@@ -89,6 +89,45 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 	return tMeta, err
 }
 
+// ReqTagsMetadata 利用Docker Hub API获取指定页的tag元数据
+func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag, error) {
+	pageResult := new(TagsPage)
+	res := make([]*Tag, 0)
+
+	url := GetRepoTagsURL(repoNamespace, repoName, page, pageSize)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	Logger.Debug("get tags metadata of image", repoNamespace+"/"+repoName, "from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(body, pageResult)
+	if err != nil {
+		return nil, err
+	}
+
+	// 处理404
+	if len(pageResult.Results) == 0 {
+		return nil, fmt.Errorf("docker hub resp 404 to tag list of repo %s/%s", repoNamespace, repoName)
+	}
+
+	res = pageResult.Results
+
+	for _, tMeta := range res {
+		tMeta.RepositoryNamespace = repoNamespace
+		tMeta.RepositoryName = repoName
+	}
+
+	return res, nil
+}
+
 // ReqImagesMetadata gets image metadata by calling Docker Hub API.
 func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	isMeta := make([]*Image, 0)

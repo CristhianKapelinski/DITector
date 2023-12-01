@@ -1,12 +1,14 @@
 package myutils
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const (
 	RegURLTemplate                = `https://hub.docker.com/api/content/v1/products/search?q=%s&source=%s&page=%s&page_size=%s`
 	NamespaceURLTemplate          = `https://hub.docker.com/v2/repositories/%s?page=%s&page_size=%s&ordering=last_updated`
 	RepositoryMetadataURLTemplate = `https://hub.docker.com/v2/repositories/%s/%s/`
-	RepoTagsURLTemplate           = `https://hub.docker.com/v2/repositories/%s/%s/tags/?page=%s&page_size=%s&name&ordering`
+	RepoTagsURLTemplate           = `https://hub.docker.com/v2/repositories/%s/%s/tags/?page=%d&page_size=%d&name&ordering`
 	TagMetadataURLTemplate        = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s`
 	ImageMetadataURLTemplate      = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s/images`
 )
@@ -37,7 +39,7 @@ func GetRepositoryMetadataURL(namespace, repo string) string {
 // GetRepoTagsURL 返回Repository TagName List的URL
 //
 // 主要包括Tag数量，以及每个Tag的digest、最近拉取时间、最近更新时间等。
-func GetRepoTagsURL(namespace, repo, page, size string) string {
+func GetRepoTagsURL(namespace, repo string, page, size int) string {
 	return fmt.Sprintf(RepoTagsURLTemplate, namespace, repo, page, size)
 }
 

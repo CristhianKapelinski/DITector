@@ -42,6 +42,43 @@ var RootCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// 仅用作测试
+		fmt.Println("Begin repo paged test:")
+		fmt.Println("Page 1, page size 3:")
+		res, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, 1, 3)
+		if err != nil {
+			log.Fatalln("got err:", err)
+		}
+		for _, repo := range res {
+			fmt.Println(repo.Namespace, repo.Name)
+		}
+
+		fmt.Println("Page 2, page size 5:")
+		res, err = myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, 2, 5)
+		if err != nil {
+			log.Fatalln("got err:", err)
+		}
+		for _, repo := range res {
+			fmt.Println(repo.Namespace, repo.Name)
+		}
+
+		fmt.Println("Begin tag paged test:")
+		fmt.Println("mongo Page 1, page size 5:")
+		tagRes, err := myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged("library", "mongo", 1, 5)
+		if err != nil {
+			log.Fatalln("got err:", err)
+		}
+		for _, tag := range tagRes {
+			fmt.Println(tag.RepositoryNamespace, tag.RepositoryName, tag.Name)
+		}
+
+		fmt.Println("non tag Page 1, page size 5:")
+		tagRes, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged("library", "aaaaaaa", 1, 5)
+		if err != nil {
+			log.Fatalln("got err:", err)
+		}
+		for _, tag := range tagRes {
+			fmt.Println(tag.RepositoryNamespace, tag.RepositoryName, tag.Name)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// 所有命令退出前的清理工作
@@ -123,6 +160,11 @@ var executeCmd = &cobra.Command{
 			err := scripts.BatchAnalyzeByName(file, partial)
 			if err != nil {
 				log.Fatalln("batch-analyze file", file, "got error:", err)
+			}
+		case "analyze-all":
+			err := scripts.AnalyzeAll()
+			if err != nil {
+				log.Fatalln("analyze-all got error:", err)
 			}
 		}
 	},

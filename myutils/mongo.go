@@ -357,6 +357,28 @@ func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, err
 	return rMeta, err
 }
 
+func (m *MyMongo) FindRepositoriesByKeywordPaged(KeyMap map[string]any, page, pageSize int64) ([]*Repository, error) {
+	res := make([]*Repository, 0)
+
+	filter := bson.M{}
+	for k, v := range KeyMap {
+		filter[k] = v
+	}
+
+	optLimit := options.Find().SetSkip((page - 1) * pageSize).SetLimit(pageSize)
+	cursor, err := m.RepoColl.Find(context.TODO(), filter, optLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	if err = cursor.All(context.TODO(), &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 func (m *MyMongo) UpdateTag(tMeta *Tag) error {
 	filter := bson.M{
 		"repositories_namespace": tMeta.RepositoryNamespace,
@@ -418,6 +440,53 @@ func (m *MyMongo) FindTagByName(repoNamespace, repoName, name string) (*Tag, err
 	}
 
 	return nil, fmt.Errorf("no metadata of tag %s/%s:%s found in mongo", repoNamespace, repoName, name)
+}
+
+// FindTagsByRepoNamePaged 根据namespace/repo/tag查找tag元数据，按照page, pageSize进行分页查找
+func (m *MyMongo) FindTagsByRepoNamePaged(repoNamespace, repoName string, page, pageSize int64) ([]*Tag, error) {
+	res := make([]*Tag, 0)
+
+	// 创建管道流程，根据名称匹配返回最新的tag信息
+	pipeline := []bson.M{
+		bson.M{
+			"$match": bson.M{
+				"repositories_namespace": repoNamespace,
+				"repositories_name":      repoName,
+			},
+		},
+		bson.M{
+			"$addFields": bson.M{
+				"last_updated_time": bson.M{
+					"$dateFromString": bson.M{
+						"dateString": "$last_updated",
+					},
+				},
+			},
+		},
+		bson.M{
+			"$sort": bson.M{
+				"last_updated_time": -1,
+			},
+		},
+		bson.M{
+			"$skip": (page - 1) * pageSize,
+		},
+		bson.M{
+			"$limit": pageSize,
+		},
+	}
+
+	cursor, err := m.TagColl.Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	if err = cursor.All(context.TODO(), &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (m *MyMongo) UpdateImage(iMeta *Image) error {
