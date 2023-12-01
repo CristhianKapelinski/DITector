@@ -47,6 +47,7 @@ func jobGenerator(jobCh chan<- job, wg *sync.WaitGroup) {
 		log.Fatalln("jobGenerator got error: MongoDB not online")
 	}
 
+	var repoCnt = 0
 	var repoPage int64 = 1
 	var pageSize int64 = 5
 	for {
@@ -62,6 +63,7 @@ func jobGenerator(jobCh chan<- job, wg *sync.WaitGroup) {
 
 		// 根据tag生成任务
 		for _, repoDoc := range repoDocs {
+			repoCnt++
 			tagDocs, err := myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, 1, 10)
 			if err != nil {
 				myutils.Logger.Error(fmt.Sprintf("find tags for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s", repoDoc.Namespace, repoDoc.Name, 1, 10, err))
@@ -69,12 +71,14 @@ func jobGenerator(jobCh chan<- job, wg *sync.WaitGroup) {
 			}
 
 			// 集合中没有tag信息，从API获取
+			fromAPIFlag := false
 			if len(tagDocs) == 0 {
 				tagDocs, err = myutils.ReqTagsMetadata(repoDoc.Namespace, repoDoc.Name, 1, 10)
 				if err != nil {
 					myutils.Logger.Error(fmt.Sprintf("request tags for repository %s/%s from API got error: %s", repoDoc.Namespace, repoDoc.Name, err))
 					continue
 				}
+				fromAPIFlag = true
 				// 从API获取的部分向数据库中备份一下
 				for _, tagDoc := range tagDocs {
 					wg.Add(1)
@@ -84,6 +88,36 @@ func jobGenerator(jobCh chan<- job, wg *sync.WaitGroup) {
 							myutils.Logger.Error("update metadata of tag", tagMetadata.RepositoryNamespace, tagMetadata.RepositoryName, tagMetadata.Name, "failed with:", e.Error())
 						}
 					}(tagDoc)
+				}
+			}
+
+			// 检查时间顺序，顺序不对从API拿新的repo和tags
+			if len(tagDocs) > 0 && tagDocs[0].LastUpdated.After(repoDoc.LastUpdated) {
+				repo, err := myutils.ReqRepoMetadata(repoDoc.Namespace, repoDoc.Name)
+				if err != nil {
+					myutils.Logger.Error(fmt.Sprintf("request metadata of repository %s/%s from API got error: %s", repoDoc.Namespace, repoDoc.Name, err))
+				} else {
+					if e := myutils.GlobalDBClient.Mongo.UpdateRepository(repo); e != nil {
+						myutils.Logger.Error("update metadata of repo", repo.Namespace, repo.Name, "failed with:", e.Error())
+					}
+					// tag已经是从API获取的了，无需重复获取
+					if !fromAPIFlag {
+						tagDocs, err = myutils.ReqTagsMetadata(repoDoc.Namespace, repoDoc.Name, 1, 10)
+						if err != nil {
+							myutils.Logger.Error(fmt.Sprintf("request tags for repository %s/%s from API got error: %s", repoDoc.Namespace, repoDoc.Name, err))
+							continue
+						}
+						// 从API获取的部分向数据库中备份一下
+						for _, tagDoc := range tagDocs {
+							wg.Add(1)
+							go func(tagMetadata *myutils.Tag) {
+								defer wg.Done()
+								if e := myutils.GlobalDBClient.Mongo.UpdateTag(tagMetadata); e != nil {
+									myutils.Logger.Error("update metadata of tag", tagMetadata.RepositoryNamespace, tagMetadata.RepositoryName, tagMetadata.Name, "failed with:", e.Error())
+								}
+							}(tagDoc)
+						}
+					}
 				}
 			}
 
@@ -103,7 +137,13 @@ func jobGenerator(jobCh chan<- job, wg *sync.WaitGroup) {
 				}
 				tagCnt++
 			}
+
+			if repoCnt%100 == 0 {
+				fmt.Println("generated all job for repo:", repoCnt)
+			}
 		}
+
+		repoPage++
 	}
 }
 

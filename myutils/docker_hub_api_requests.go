@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 )
 
 // configDefaultHTTPProxy configures http and https proxy.
@@ -35,7 +37,13 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 	}
 	defer resp.Body.Close()
 
-	Logger.Debug("get repo metadata from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
+	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
+	Logger.Debug("get repo metadata from API:", url, ", remained limit:", limitStr)
+	if limit, e := strconv.Atoi(limitStr); e == nil {
+		if limit <= 10 {
+			time.Sleep(10 * time.Second)
+		}
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -66,7 +74,13 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 	}
 	defer resp.Body.Close()
 
-	Logger.Debug("get tag metadata from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
+	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
+	Logger.Debug("get tag metadata from API:", url, ", remained limit:", limitStr)
+	if limit, e := strconv.Atoi(limitStr); e == nil {
+		if limit <= 10 {
+			time.Sleep(10 * time.Second)
+		}
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -101,7 +115,13 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 	}
 	defer resp.Body.Close()
 
-	Logger.Debug("get tags metadata of image", repoNamespace+"/"+repoName, "from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
+	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
+	Logger.Debug("get tags metadata from API:", url, ", remained limit:", limitStr)
+	if limit, e := strconv.Atoi(limitStr); e == nil {
+		if limit <= 10 {
+			time.Sleep(10 * time.Second)
+		}
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -139,7 +159,13 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	}
 	defer resp.Body.Close()
 
-	Logger.Debug("get image metadata from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
+	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
+	Logger.Debug("get image metadata from API:", url, ", remained limit:", limitStr)
+	if limit, e := strconv.Atoi(limitStr); e == nil {
+		if limit <= 10 {
+			time.Sleep(10 * time.Second)
+		}
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
