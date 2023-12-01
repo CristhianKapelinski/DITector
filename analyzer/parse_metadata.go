@@ -11,26 +11,35 @@ var (
 )
 
 // parseMetadata loads metadata of repository
-func (currI *CurrentImage) parseMetadata(partial, fromAPI bool) (err error) {
-	if currI.metadata.repositoryMetadata, err = currI.getRepositoryMetadata(fromAPI); err != nil {
-		myutils.Logger.Error("parse repository metadata of image", currI.name, "failed with:", err.Error())
+func (currI *CurrentImage) parseMetadata(partial, fromAPI bool) error {
+
+	if err := currI.parseRepoMetadata(fromAPI); err != nil {
 		return err
 	}
 
-	// 提取推荐容器启动命令
-	currI.recommendedCmd = extractRecommendCmd(currI.metadata.repositoryMetadata.FullDescription)
-
-	if currI.metadata.tagMetadata, err = currI.getTagMetadata(fromAPI); err != nil {
-		myutils.Logger.Error("parse tag metadata of image", currI.name, "failed with:", err.Error())
+	if err := currI.parseTagMetadata(fromAPI); err != nil {
 		return err
 	}
 
 	if partial {
-		if currI.metadata.imageMetadata, err = currI.getImageMetadata(fromAPI); err != nil {
-			myutils.Logger.Error("parse image metadata of image", currI.name, "failed with:", err.Error())
+		if err := currI.parseImageMetadata(fromAPI); err != nil {
 			return err
 		}
 	}
+
+	return nil
+}
+
+func (currI *CurrentImage) parseRepoMetadata(fromAPI bool) (err error) {
+	if !currI.repoMetaFromAPI {
+		if currI.metadata.repositoryMetadata, err = currI.getRepositoryMetadata(fromAPI); err != nil {
+			myutils.Logger.Error("parse repository metadata of image", currI.name, "failed with:", err.Error())
+			return err
+		}
+	}
+
+	// 提取推荐容器启动命令
+	currI.recommendedCmd = extractRecommendCmd(currI.metadata.repositoryMetadata.FullDescription)
 
 	return nil
 }
@@ -71,7 +80,21 @@ func (currI *CurrentImage) getRepositoryMetadata(fromAPI bool) (*myutils.Reposit
 		}(rMeta)
 	}
 
+	// 标记元数据来自API
+	currI.repoMetaFromAPI = true
+
 	return rMeta, nil
+}
+
+func (currI *CurrentImage) parseTagMetadata(fromAPI bool) (err error) {
+	if !currI.tagMetaFromAPI {
+		if currI.metadata.tagMetadata, err = currI.getTagMetadata(fromAPI); err != nil {
+			myutils.Logger.Error("parse tag metadata of image", currI.name, "failed with:", err.Error())
+			return err
+		}
+	}
+
+	return nil
 }
 
 // getTagMetadata gets tag metadata from local MongoDB, if tag not maintained
@@ -106,7 +129,21 @@ func (currI *CurrentImage) getTagMetadata(fromAPI bool) (*myutils.Tag, error) {
 		}(tMeta)
 	}
 
+	// 标记元数据来自API
+	currI.tagMetaFromAPI = true
+
 	return tMeta, nil
+}
+
+func (currI *CurrentImage) parseImageMetadata(fromAPI bool) (err error) {
+	if !currI.imgMetaFromAPI {
+		if currI.metadata.imageMetadata, err = currI.getImageMetadata(fromAPI); err != nil {
+			myutils.Logger.Error("parse image metadata of image", currI.name, "failed with:", err.Error())
+			return err
+		}
+	}
+
+	return nil
 }
 
 // getImageMetadata gets image metadata from local MongoDB, if image not
@@ -169,14 +206,19 @@ func (currI *CurrentImage) getImageMetadata(fromAPI bool) (*myutils.Image, error
 
 	// API结果正常，存入数据库，存数据库过程的error不需要返回
 	if myutils.GlobalDBClient.MongoFlag {
-		currI.wg.Add(1)
-		go func(imgMetadata *myutils.Image) {
-			defer currI.wg.Done()
-			if e := myutils.GlobalDBClient.Mongo.UpdateImage(imgMetadata); e != nil {
-				myutils.Logger.Error("update metadata of image", imgMetadata.Digest, "failed with:", e.Error())
-			}
-		}(iMeta)
+		for _, imgMeta := range isMeta {
+			currI.wg.Add(1)
+			go func(imgMetadata *myutils.Image) {
+				defer currI.wg.Done()
+				if e := myutils.GlobalDBClient.Mongo.UpdateImage(imgMetadata); e != nil {
+					myutils.Logger.Error("update metadata of image", imgMetadata.Digest, "failed with:", e.Error())
+				}
+			}(imgMeta)
+		}
 	}
+
+	// 标记元数据来自API
+	currI.imgMetaFromAPI = true
 
 	return iMeta, nil
 }
@@ -185,18 +227,4 @@ func (currI *CurrentImage) getImageMetadata(fromAPI bool) (*myutils.Image, error
 // by the author like `docker run` from full_description in repo metadata.
 func extractRecommendCmd(desc string) []string {
 	return extRecommendCmdRE.FindAllString(desc, -1)
-}
-
-// parseLayersWithContentFromMetadata extracts layer digests from layer metadata.
-func (currI *CurrentImage) parseLayersWithContentFromMetadata() {
-	for _, layer := range currI.metadata.imageMetadata.Layers {
-		if layer.Digest != "" {
-			currI.layerWithContentList = append(currI.layerWithContentList, layer.Digest)
-			currI.layerInfoMap[layer.Digest] = &layerInfo{
-				size:        layer.Size,
-				instruction: layer.Instruction,
-				digest:      layer.Digest,
-			}
-		}
-	}
 }

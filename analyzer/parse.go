@@ -30,7 +30,6 @@ func (currI *CurrentImage) ParseFromFile() (err error) {
 
 	// 解析镜像repo、tag元数据
 	if err = currI.parseMetadata(false, false); err != nil {
-		myutils.Logger.Error("get repo-tag-metadata of image", currI.name, "failed with:", err.Error())
 		return
 	}
 
@@ -49,8 +48,13 @@ func (currI *CurrentImage) ParseFromFile() (err error) {
 	}
 
 	// 解析镜像image元数据
-	if currI.metadata.imageMetadata, err = currI.getImageMetadata(false); err != nil {
-		myutils.Logger.Error("get image-metadata of image", currI.name, "failed with:", err.Error())
+	if err = currI.parseImageMetadata(false); err != nil {
+		return err
+	}
+
+	// 根据时间检查镜像是否发生过更新，如果发生更新则从API获取
+	if err = currI.checkUpdateOrder(); err != nil {
+		myutils.Logger.Error("checkUpdateOrder for image:", currI.name, ", failed with:", err.Error())
 		return err
 	}
 
@@ -112,6 +116,31 @@ func (currI *CurrentImage) parseServerPlatform() error {
 		return err
 	} else {
 		currI.architecture, currI.os = plf.Arch, plf.Os
+	}
+
+	return nil
+}
+
+// checkUpdateOrder 检查镜像创建时间与image, tag, repository元数据间的更新时间关系，
+// 根据时间顺序逻辑判断是否存在数据过时问题，如果有数据过时，则从API获取过时数据补充到
+func (currI *CurrentImage) checkUpdateOrder() error {
+	if currI.configuration.Created.After(currI.metadata.imageMetadata.LastPushed) {
+		if err := currI.parseImageMetadata(true); err != nil {
+			return err
+		}
+	}
+	if currI.configuration.Created.After(currI.metadata.tagMetadata.TagLastPushed) ||
+		currI.metadata.imageMetadata.LastPushed.After(currI.metadata.tagMetadata.TagLastPushed) {
+		if err := currI.parseTagMetadata(true); err != nil {
+			return err
+		}
+	}
+	if currI.configuration.Created.After(currI.metadata.repositoryMetadata.LastUpdated) ||
+		currI.metadata.imageMetadata.LastPushed.After(currI.metadata.repositoryMetadata.LastUpdated) ||
+		currI.metadata.tagMetadata.TagLastPushed.After(currI.metadata.repositoryMetadata.LastUpdated) {
+		if err := currI.parseRepoMetadata(true); err != nil {
+			return err
+		}
 	}
 
 	return nil

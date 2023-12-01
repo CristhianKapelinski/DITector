@@ -35,6 +35,8 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 	}
 	defer resp.Body.Close()
 
+	Logger.Debug("get repo metadata from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -63,6 +65,8 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	Logger.Debug("get tag metadata from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -95,6 +99,8 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	Logger.Debug("get image metadata from API:", url, ", remained limit:", resp.Header.Get("X-Ratelimit-Remaining"))
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -30,8 +30,11 @@ type CurrentImage struct {
 	digest       string
 
 	// metadata of the repository, the tag and the image
-	metadata       *metadata
-	recommendedCmd []string
+	repoMetaFromAPI bool
+	tagMetaFromAPI  bool
+	imgMetaFromAPI  bool
+	metadata        *metadata
+	recommendedCmd  []string
 
 	// configuration of the image
 	configuration   *Configuration
@@ -42,9 +45,9 @@ type CurrentImage struct {
 	imgTarFile                 string // filepath of image tar
 	imgFilepath                string // filepath of uncompressed image file
 	manifest                   manifest
-	layerWithContentList       []string
-	layerLocalRootFilepathList []string // /.../layer-id
-	layerLocalFilepathList     []string // /.../layer-id/layer
+	layerWithContentList       []string // [ layer-digest, ...]
+	layerLocalRootFilepathList []string // [ "/.../layer-id", ... ]
+	layerLocalFilepathList     []string // [ "/.../layer-id/layer", ...  ]
 	layerInfoMap               map[string]*layerInfo
 }
 
