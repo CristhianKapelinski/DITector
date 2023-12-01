@@ -188,6 +188,15 @@ func (analyzer *ImageAnalyzer) analyzeContent(ci *CurrentImage, ir *myutils.Imag
 			res.MaliciousFiles = append(res.MaliciousFiles, malInfo)
 			fileAdded[malInfo.Path] = i
 		}
+
+		// SCA结果
+		for _, appInfo := range ir.LayerResults[layerDigest].Components {
+			if pre, ok := fileAdded[appInfo.Filepath]; ok && pre != i {
+				continue
+			}
+			res.Components = append(res.Components, appInfo)
+			fileAdded[appInfo.Filepath] = i
+		}
 	}
 
 	return res, nil
