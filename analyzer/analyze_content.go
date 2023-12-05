@@ -409,6 +409,7 @@ func postCreateAskYTask(client *http.Client, dest string) (*AskYTask, error) {
 // checkGetAskYReport 查询服务端检测状态，检测完成后获取检测报告
 func checkGetAskYReport(client *http.Client, task *AskYTask) (*AskYReport, error) {
 	// 等待asky服务端检测任务完成
+	waitCnt := 0
 	failCnt := 0
 	for {
 		time.Sleep(1 * time.Second)
@@ -439,16 +440,20 @@ func checkGetAskYReport(client *http.Client, task *AskYTask) (*AskYReport, error
 		}
 
 		// 检测完成时退出循环
-		if state.Data.Status == "2" {
+		if state.Data.Status == "0" {
+			waitCnt++
+			if waitCnt > 300 {
+				return nil, fmt.Errorf("waiting for asky server scanning filepath %s timeout after %d wait retries", task.Data.FileName, waitCnt)
+			}
+		} else if state.Data.Status == "1" {
+			failCnt++
+			if failCnt > 300 {
+				return nil, fmt.Errorf("waiting for asky server scanning filepath %s timeout after %d scan retries", task.Data.FileName, failCnt)
+			}
+		} else if state.Data.Status == "2" {
 			break
 		} else if state.Data.Status == "3" || state.Data.Status == "4" {
 			return nil, fmt.Errorf("asky server response exception (task status %s)", state.Data.Status)
-		}
-
-		// 最多等待一个任务五分钟
-		failCnt++
-		if failCnt > 300 {
-			return nil, fmt.Errorf("waiting for asky server scanning filepath %s timeout after %d retries", task.Data.FileName, failCnt)
 		}
 	}
 

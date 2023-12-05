@@ -159,8 +159,13 @@ func (currI *CurrentImage) getImageMetadata(fromAPI bool) (*myutils.Image, error
 		return nil, fmt.Errorf("no architecture or os parsed in current image")
 	}
 
+	archList := make([]string, 0)
+
 	// 根据arch, os匹配tag元数据中的镜像digest
 	for _, iit := range currI.metadata.tagMetadata.Images {
+		arch := fmt.Sprintf("%s:%s/%s:%s", iit.OS, iit.OSVersion, iit.Architecture, iit.Variant)
+		archList = append(archList, arch)
+
 		// 命中arch和os时覆盖digest
 		if currI.architecture == iit.Architecture && currI.os == iit.OS {
 			currI.digest = iit.Digest
@@ -172,8 +177,8 @@ func (currI *CurrentImage) getImageMetadata(fromAPI bool) (*myutils.Image, error
 	}
 
 	if currI.digest == "" {
-		return nil, fmt.Errorf("no image with the same platform %s was found in tag %s metadata",
-			currI.os+"/"+currI.architecture, currI.registry+"/"+currI.namespace+"/"+currI.repoName+":"+currI.tagName)
+		return nil, fmt.Errorf("no image with the same platform %s:%s/%s:%s was found in tag %s/%s/%s:%s metadata %s",
+			currI.os, currI.osVersion, currI.architecture, currI.variant, currI.registry, currI.namespace, currI.repoName, currI.tagName, archList)
 	}
 
 	// 要求从API获取

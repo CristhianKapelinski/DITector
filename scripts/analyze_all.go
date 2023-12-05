@@ -32,19 +32,20 @@ func AnalyzeAll() error {
 		go analyzeAllWorker(w, jobCh, &wg)
 	}
 
-	go jobGenerator(jobCh, &wg)
+	wg.Add(1)
+	go jobGeneratorAll(jobCh, &wg)
 
 	wg.Wait()
 
 	return nil
 }
 
-// jobGenerator 从MongoDB读取repo数据
-func jobGenerator(jobCh chan<- job, wg *sync.WaitGroup) {
+// jobGeneratorAll 从MongoDB读取repo数据
+func jobGeneratorAll(jobCh chan<- job, wg *sync.WaitGroup) {
 	defer close(jobCh)
 	defer wg.Done()
 	if !myutils.GlobalDBClient.MongoFlag {
-		log.Fatalln("jobGenerator got error: MongoDB not online")
+		log.Fatalln("jobGeneratorAll got error: MongoDB not online")
 	}
 
 	var repoCnt = 0

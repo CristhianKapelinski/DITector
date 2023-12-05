@@ -124,24 +124,35 @@ func (currI *CurrentImage) parseServerPlatform() error {
 // checkUpdateOrder 检查镜像创建时间与image, tag, repository元数据间的更新时间关系，
 // 根据时间顺序逻辑判断是否存在数据过时问题，如果有数据过时，则从API获取过时数据补充到
 func (currI *CurrentImage) checkUpdateOrder() error {
-	if currI.configuration.Created.After(currI.metadata.imageMetadata.LastPushed) {
-		if err := currI.parseImageMetadata(true); err != nil {
-			return err
-		}
-	}
-	if currI.configuration.Created.After(currI.metadata.tagMetadata.TagLastPushed) ||
-		currI.metadata.imageMetadata.LastPushed.After(currI.metadata.tagMetadata.TagLastPushed) {
-		if err := currI.parseTagMetadata(true); err != nil {
-			return err
-		}
-	}
-	if currI.configuration.Created.After(currI.metadata.repositoryMetadata.LastUpdated) ||
+	if currI.configuration.Created.After(currI.metadata.imageMetadata.LastPushed) ||
+		currI.configuration.Created.After(currI.metadata.tagMetadata.TagLastPushed) ||
+		currI.metadata.imageMetadata.LastPushed.After(currI.metadata.tagMetadata.TagLastPushed) ||
+		currI.configuration.Created.After(currI.metadata.repositoryMetadata.LastUpdated) ||
 		currI.metadata.imageMetadata.LastPushed.After(currI.metadata.repositoryMetadata.LastUpdated) ||
 		currI.metadata.tagMetadata.TagLastPushed.After(currI.metadata.repositoryMetadata.LastUpdated) {
-		if err := currI.parseRepoMetadata(true); err != nil {
+		if err := currI.parseMetadata(true, true); err != nil {
 			return err
 		}
 	}
+
+	//if currI.configuration.Created.After(currI.metadata.imageMetadata.LastPushed) {
+	//	if err := currI.parseImageMetadata(true); err != nil {
+	//		return err
+	//	}
+	//}
+	//if currI.configuration.Created.After(currI.metadata.tagMetadata.TagLastPushed) ||
+	//	currI.metadata.imageMetadata.LastPushed.After(currI.metadata.tagMetadata.TagLastPushed) {
+	//	if err := currI.parseTagMetadata(true); err != nil {
+	//		return err
+	//	}
+	//}
+	//if currI.configuration.Created.After(currI.metadata.repositoryMetadata.LastUpdated) ||
+	//	currI.metadata.imageMetadata.LastPushed.After(currI.metadata.repositoryMetadata.LastUpdated) ||
+	//	currI.metadata.tagMetadata.TagLastPushed.After(currI.metadata.repositoryMetadata.LastUpdated) {
+	//	if err := currI.parseRepoMetadata(true); err != nil {
+	//		return err
+	//	}
+	//}
 
 	return nil
 }

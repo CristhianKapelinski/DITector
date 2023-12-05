@@ -15,8 +15,10 @@ func (currI *CurrentImage) parseContentFromFile() error {
 				currI.name, len(currI.layerWithContentList), len(currI.layerLocalFilepathList), err)
 		} else {
 			currI.parseLayersWithContentFromMetadata()
-			return fmt.Errorf("layers number of image %s from metadata %d != from tar manifest %d",
-				currI.name, len(currI.layerWithContentList), len(currI.layerLocalFilepathList))
+			if len(currI.layerWithContentList) != len(currI.layerLocalFilepathList) {
+				return fmt.Errorf("layers number of image %s from metadata %d != from tar manifest %d",
+					currI.name, len(currI.layerWithContentList), len(currI.layerLocalFilepathList))
+			}
 		}
 	}
 	for i, digest := range currI.layerWithContentList {

@@ -357,6 +357,29 @@ func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, err
 	return rMeta, err
 }
 
+func (m *MyMongo) FindRepositoriesByPullCountPaged(threshold, page, pageSize int64) ([]*Repository, error) {
+	res := make([]*Repository, 0)
+
+	filter := bson.M{
+		"pull_count": bson.M{
+			"$gt": threshold,
+		},
+	}
+
+	optLimit := options.Find().SetSkip((page - 1) * pageSize).SetLimit(pageSize)
+	cursor, err := m.RepoColl.Find(context.TODO(), filter, optLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	if err = cursor.All(context.TODO(), &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 func (m *MyMongo) FindRepositoriesByKeywordPaged(KeyMap map[string]any, page, pageSize int64) ([]*Repository, error) {
 	res := make([]*Repository, 0)
 
