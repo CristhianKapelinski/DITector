@@ -10,5 +10,5 @@ var selflogger, _ = os.OpenFile("/data/docker-crawler/results/dependent-weights-
 
 func logself(s ...string) {
 	tmp := strings.Join(s, " ")
-	selflogger.WriteString(myutils.GetLocalNowTime() + " " + tmp + "\n")
+	selflogger.WriteString(myutils.GetLocalNowTimeStr() + " " + tmp + "\n")
 }

@@ -85,12 +85,14 @@ func LoadConfigFromFile(configFilepath string, logLevel int) {
 	relativeToAbsoluteConfig(root)
 
 	// 初始化日志模块
-	logFilepath := GlobalConfig.LogFile
+	logFilepath := genLogFilepath()
 	if err = configLogger(logFilepath, logLevel); err != nil {
 		log.Fatalf("[ERROR] Open %s failed with: %s\n", logFilepath, err)
 	} else {
 		fmt.Println("[+] Open log file: ", logFilepath)
 	}
+	// 引入日志文件按日期轮换
+	go checkAndRotateLogFile()
 
 	// 配置http代理
 	configDefaultHTTPProxy(GlobalConfig.Proxy.HTTPProxy, GlobalConfig.Proxy.HTTPSProxy)

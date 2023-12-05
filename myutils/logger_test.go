@@ -13,5 +13,5 @@ func TestLogDockerCrawlerString(t *testing.T) {
 }
 
 func TestGetLocalNowTime(t *testing.T) {
-	fmt.Println(GetLocalNowTime())
+	fmt.Println(GetLocalNowTimeStr())
 }

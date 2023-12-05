@@ -36,7 +36,7 @@ func AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
 // This will never pull the layers of the image to local env.
 func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.ImageResult, error) {
 	beginTime := time.Now()
-	beginTimeStr := myutils.GetLocalNowTime()
+	beginTimeStr := myutils.GetLocalNowTimeStr()
 
 	// 创建新镜像信息
 	ci, err := NewCurrentImage(name)
@@ -129,7 +129,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 // Image needs to be stored in the local Docker environment.
 func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*myutils.ImageResult, error) {
 	beginTime := time.Now()
-	beginTimeStr := myutils.GetLocalNowTime()
+	beginTimeStr := myutils.GetLocalNowTimeStr()
 
 	// 创建新镜像信息
 	ci, err := NewCurrentImage(name)

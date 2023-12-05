@@ -14,7 +14,11 @@ import (
 
 var shanghai, _ = time.LoadLocation("Asia/Shanghai")
 
-func GetLocalNowTime() string {
+func GetLocalNowTime() time.Time {
+	return time.Now().In(shanghai)
+}
+
+func GetLocalNowTimeStr() string {
 	return time.Now().In(shanghai).Format(time.DateTime)
 }
 
