@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Musso12138/docker-scan/analyzer"
+	"github.com/Musso12138/docker-scan/buildgraph"
 	"github.com/Musso12138/docker-scan/myutils"
 	"github.com/Musso12138/docker-scan/scripts"
 	"github.com/spf13/cobra"
@@ -69,6 +70,11 @@ var crawlCmd = &cobra.Command{
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "read data from crawl results, store metadata to MongoDB, and build dependency graph with Neo4j",
+	Run: func(cmd *cobra.Command, args []string) {
+		format, _ := cmd.Flags().GetString("format")
+		page, _ := cmd.Flags().GetInt64("page")
+		buildgraph.Build(format, page)
+	},
 }
 
 var analyzeCmd = &cobra.Command{
@@ -159,6 +165,10 @@ func init() {
 	RootCmd.PersistentFlags().StringP("config", "c", "config.yaml", "path to config file")
 	RootCmd.PersistentFlags().StringVarP(&logLevelStr, "log_level", "l", "debug", "log level: debug, info, warn, error, critical")
 
+	// buildCmd
+	buildCmd.Flags().String("format", "mongo", "format of the source data, including: json, mongo")
+	buildCmd.Flags().Int64("page", 1, "start page for building from mongo")
+
 	// analyzeCmd
 	analyzeCmd.Flags().Bool("partial", false, "only analyze metadata of the Docker image")
 	analyzeCmd.Flags().StringP("name", "n", "", "analyze Docker image by name")
@@ -169,7 +179,7 @@ func init() {
 	// executeCmd
 	executeCmd.Flags().String("script", "", "execute custom script, including: batch-analyze, analyze-threshold, analyze-all")
 	executeCmd.Flags().Bool("partial", false, "only analyze metadata of the Docker images")
-	executeCmd.Flags().StringP("file", "p", "", "input file for scripts, like batch-analyze")
+	executeCmd.Flags().StringP("file", "f", "", "input file for scripts, like batch-analyze")
 	executeCmd.Flags().Int64("threshold", 1000000, "pull_count threshold to analyze an image")
 	executeCmd.Flags().Int("tags", 3, "the top tag-num recently updated tags to analyze")
 	executeCmd.Flags().Int64("page", 1, "start page for analyzing multiple repos from MongoDB")

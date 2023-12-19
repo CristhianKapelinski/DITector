@@ -38,6 +38,8 @@ func StartFromMongo(page int64) {
 
 func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
 	defer close(ch)
+
+	beginTime := time.Now()
 	if !myutils.GlobalDBClient.MongoFlag {
 		log.Fatalln("loadDataFromMongo got error: MongoDB not online")
 	}
@@ -205,7 +207,7 @@ func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
 		}
 
 		if repoPage%2 == 0 {
-			fmt.Println("generated all job for repo:", repoCnt, ", page:", repoPage)
+			fmt.Println("generated all job for repo:", repoCnt, ", page:", repoPage, ", time used:", time.Since(beginTime))
 		}
 
 		// repo翻页
