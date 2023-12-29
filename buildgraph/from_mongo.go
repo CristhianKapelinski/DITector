@@ -84,8 +84,8 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 							repoDoc.Namespace, repoDoc.Name, 1, 100, err))
 						continue
 					}
-					//// 如果拿满100条，那么已拿到第10页
 					tagFromAPIFlag = true
+					//// 如果拿满100条，那么已拿到第10页
 					//tagPage = 10
 				} else {
 					// 其他镜像从mongodb获取
@@ -213,13 +213,15 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 					}
 				}
 
-				// 从API获取tag列表且没拿满100个，直接退出当前repo
-				if tagFromAPIFlag && len(tagDocs) < 100 {
-					break
-				}
+				break
 
-				// tag翻页
-				tagPage++
+				//// 从API获取tag列表且没拿满100个，直接退出当前repo
+				//if tagFromAPIFlag && len(tagDocs) < 100 {
+				//	break
+				//}
+				//
+				//// tag翻页
+				//tagPage++
 			}
 
 		}
