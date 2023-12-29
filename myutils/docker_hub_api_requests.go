@@ -148,6 +148,76 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 	return res, nil
 }
 
+// ReqTagsAllMetadata 获取指定repo的全部tag信息
+func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag, error) {
+	pageResult := new(TagsPage)
+	res := make([]*Tag, 0)
+
+	url := GetRepoTagsURL(repoNamespace, repoName, page, pageSize)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
+	Logger.Debug("get tags metadata from API:", url, ", remained limit:", limitStr)
+	if limit, e := strconv.Atoi(limitStr); e == nil {
+		if limit <= 10 {
+			time.Sleep(10 * time.Second)
+		}
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(body, pageResult)
+	if err != nil {
+		return nil, err
+	}
+
+	res = append(res, pageResult.Results...)
+
+	for pageResult.Next != "" {
+		newResp, err := http.Get(pageResult.Next)
+		if err != nil {
+			Logger.Error("http get", pageResult.Next, "failed with:", err.Error())
+			break
+		}
+
+		body, err = io.ReadAll(newResp.Body)
+		if err != nil {
+			Logger.Error("io.ReadAll contents from resp of", pageResult.Next, "failed with:", err.Error())
+			break
+		}
+
+		err = json.Unmarshal(body, pageResult)
+		if err != nil {
+			Logger.Error("json unmarshal contents from resp of", pageResult.Next, "failed with:", err.Error())
+			break
+		}
+
+		res = append(res, pageResult.Results...)
+
+		// 手动关闭resp
+		newResp.Body.Close()
+	}
+
+	// 处理404
+	if len(res) == 0 {
+		return nil, fmt.Errorf("docker hub resp 404 to tag list of repo %s/%s", repoNamespace, repoName)
+	}
+
+	for _, tMeta := range res {
+		tMeta.RepositoryNamespace = repoNamespace
+		tMeta.RepositoryName = repoName
+	}
+
+	return res, nil
+}
+
 // ReqImagesMetadata gets image metadata by calling Docker Hub API.
 func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	isMeta := make([]*Image, 0)

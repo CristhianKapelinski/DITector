@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"log"
 	"os"
+	"sync"
 )
 
 var logLevelStr string
@@ -52,14 +53,25 @@ var RootCmd = &cobra.Command{
 		//		fmt.Println("analyze image", img, "succeeded")
 		//	}
 		//}
-		mongoMetas, _ := myutils.ReqImagesMetadata("library", "mongo", "latest")
-		for _, mongoMeta := range mongoMetas {
-			myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "mongo", "latest", mongoMeta.Digest), mongoMeta)
-		}
+		//mongoMetas, _ := myutils.ReqImagesMetadata("library", "mongo", "latest")
+		//for _, mongoMeta := range mongoMetas {
+		//	myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "mongo", "latest", mongoMeta.Digest), mongoMeta)
+		//}
 		ubuntuMetas, _ := myutils.ReqImagesMetadata("library", "ubuntu", "22.04")
-		for _, ubuntuMeta := range ubuntuMetas {
-			myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "ubuntu", "22.04", ubuntuMeta.Digest), ubuntuMeta)
+		//for _, ubuntuMeta := range ubuntuMetas {
+		//	myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "ubuntu", "22.04", ubuntuMeta.Digest), ubuntuMeta)
+		//}
+		wg := sync.WaitGroup{}
+		for i := 0; i < 10; i++ {
+			for _, ubuntuMeta := range ubuntuMetas {
+				wg.Add(1)
+				go func(digest string, img *myutils.Image) {
+					defer wg.Done()
+					myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "ubuntu", "22.04", digest), img)
+				}(ubuntuMeta.Digest, ubuntuMeta)
+			}
 		}
+
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// 所有命令退出前的清理工作
@@ -78,7 +90,9 @@ var buildCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		format, _ := cmd.Flags().GetString("format")
 		page, _ := cmd.Flags().GetInt64("page")
-		buildgraph.Build(format, page)
+		pageSize, _ := cmd.Flags().GetInt("page_size")
+		pullCountThreshold, _ := cmd.Flags().GetInt64("threshold")
+		buildgraph.Build(format, page, pageSize, pullCountThreshold)
 	},
 }
 
@@ -173,6 +187,8 @@ func init() {
 	// buildCmd
 	buildCmd.Flags().String("format", "mongo", "format of the source data, including: json, mongo")
 	buildCmd.Flags().Int64("page", 1, "start page for building from mongo")
+	buildCmd.Flags().Int("page_size", 20, "page size of each tag metadata API for custom repo")
+	buildCmd.Flags().Int64("threshold", 1000000, "threshold of pull_count for getting all tags from API")
 
 	// analyzeCmd
 	analyzeCmd.Flags().Bool("partial", false, "only analyze metadata of the Docker image")

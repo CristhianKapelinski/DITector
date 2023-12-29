@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/Musso12138/docker-scan/myutils"
 	"log"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -17,16 +18,19 @@ type GraphJob struct {
 }
 
 var (
-	chanGraphJob = make(chan GraphJob)
+	chanGraphJob = make(chan GraphJob, runtime.NumCPU())
 	chanDone     = make(chan struct{})
 )
 
-func StartFromMongo(page int64) {
+// StartFromMongo
+// page是遍历mongodb时，以5个repo为1页对应的当前page
+// pageSize是查询非library repo的tag API时，一页返回的tag数量
+func StartFromMongo(page int64, pageSize int, pullCountThreshold int64) {
 	beginTime := time.Now()
 	fmt.Println("build from Mongo begin at:", myutils.GetLocalNowTimeStr())
 
 	wg := sync.WaitGroup{}
-	go loadDataFromMongo(page, chanGraphJob, &wg)
+	go loadDataFromMongo(page, pageSize, pullCountThreshold, chanGraphJob, &wg)
 	go buildGraphFromMongo(chanGraphJob, chanDone)
 	<-chanDone
 
@@ -36,7 +40,7 @@ func StartFromMongo(page int64) {
 	return
 }
 
-func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
+func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch chan GraphJob, wg *sync.WaitGroup) {
 	defer close(ch)
 
 	beginTime := time.Now()
@@ -47,11 +51,11 @@ func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
 	// 逐页查找repo
 	var repoCnt = 0
 	var repoPage int64 = page
-	var pageSize int64 = 5
+	var repoPageSize int64 = 5
 	for {
-		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, repoPage, pageSize)
+		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, repoPage, repoPageSize)
 		if err != nil {
-			myutils.Logger.Error(fmt.Sprintf("find repository in MongoDB page: %d, pagesize: %d, got error: %s", repoPage, pageSize, err))
+			myutils.Logger.Error(fmt.Sprintf("find repository in MongoDB page: %d, pagesize: %d, got error: %s", repoPage, repoPageSize, err))
 			continue
 		}
 		// 进程结束标志，没有更多repo了
@@ -64,36 +68,40 @@ func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
 			repoCnt++
 
 			// 对repo逐页查找tag
+			// 修改：仅对library和下载量>1000000的repo的全部tag进行构建，其他的仓库只构建前20tag
+			// 修改：过滤掉windows系统的镜像
 			var tagPage int64 = 1
 			for {
 				var tagDocs []*myutils.Tag
 				tagFromAPIFlag := false
 
-				// 下载量大的镜像的第一页交给API获取
-				if repoDoc.PullCount > 100000 && tagPage == 1 {
-					tagDocs, err = myutils.ReqTagsMetadata(repoDoc.Namespace, repoDoc.Name, 1, 100)
+				// 下载量大的镜像/library镜像全量交给API获取
+				if repoDoc.PullCount > pullCountThreshold || repoDoc.Namespace == "library" {
+					//if repoDoc.PullCount > 100000 && tagPage == 1 {
+					tagDocs, err = myutils.ReqTagsAllMetadata(repoDoc.Namespace, repoDoc.Name, 1, 100)
 					if err != nil {
-						myutils.Logger.Error(fmt.Sprintf("request tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
+						myutils.Logger.Error(fmt.Sprintf("request all tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
 							repoDoc.Namespace, repoDoc.Name, 1, 100, err))
 						continue
 					}
-					// 如果拿满100条，那么已拿到第10页
+					//// 如果拿满100条，那么已拿到第10页
 					tagFromAPIFlag = true
-					tagPage = 10
+					//tagPage = 10
 				} else {
-					tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, tagPage, 10)
+					// 其他镜像从mongodb获取
+					tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, tagPage, int64(pageSize))
 					if err != nil {
-						myutils.Logger.Error(fmt.Sprintf("find tags for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s", repoDoc.Namespace, repoDoc.Name, tagPage, 10, err))
+						myutils.Logger.Error(fmt.Sprintf("find tags for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s", repoDoc.Namespace, repoDoc.Name, tagPage, pageSize, err))
 						break
 					}
 
 					if len(tagDocs) == 0 {
-						// 还是第一页，说明数据库里没记录到tag，从API拿100个够了
+						// 还是第一页，说明数据库里没记录到tag，从API拿pageSize个
 						if tagPage == 1 {
-							tagDocs, err = myutils.ReqTagsMetadata(repoDoc.Namespace, repoDoc.Name, 1, 100)
+							tagDocs, err = myutils.ReqTagsMetadata(repoDoc.Namespace, repoDoc.Name, 1, pageSize)
 							if err != nil {
 								myutils.Logger.Error(fmt.Sprintf("request tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
-									repoDoc.Namespace, repoDoc.Name, 1, 100, err))
+									repoDoc.Namespace, repoDoc.Name, 1, pageSize, err))
 								break
 							}
 							tagFromAPIFlag = true
@@ -117,13 +125,18 @@ func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
 					}
 				}
 
-				// 遍历repo的tag信息
+				// 遍历repo的每个tag
 				for _, tagDoc := range tagDocs {
 					tagNeedUpdateFlag := false
 					tagLastPushedTime, _ := time.Parse(time.RFC3339Nano, tagDoc.TagLastPushed)
 
-					// 遍历tag的image信息
+					// 遍历tag的每个image信息
 					for _, imgOfTag := range tagDoc.Images {
+						// 跳过windows镜像，以及其他unknown镜像
+						if imgOfTag.OS == "windows" || (imgOfTag.Architecture == "unknown" && imgOfTag.OS == "unknown") {
+							continue
+						}
+
 						imgDigest := imgOfTag.Digest
 						// 尝试从数据库拿image元数据
 						imgMeta, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(imgDigest)
@@ -173,6 +186,11 @@ func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
 
 								// tag已经是最新，image完全从API获取，遍历API获取的image元数据生产任务
 								for _, imgAPIMeta := range imgAPIMetas {
+									// 跳过windows镜像，以及其他unknown镜像
+									if imgAPIMeta.OS == "windows" || (imgAPIMeta.Architecture == "unknown" && imgAPIMeta.OS == "unknown") {
+										continue
+									}
+
 									ch <- GraphJob{
 										Registry:      "docker.io",
 										RepoNamespace: repoDoc.Namespace,
@@ -216,8 +234,22 @@ func loadDataFromMongo(page int64, ch chan GraphJob, wg *sync.WaitGroup) {
 }
 
 func buildGraphFromMongo(ch chan GraphJob, chDone chan struct{}) {
+	wg := sync.WaitGroup{}
+	for i := 0; i < myutils.GlobalConfig.MaxThread; i++ {
+		wg.Add(1)
+		go func(workerId int) {
+			defer wg.Done()
+			buildGraphFromMongoWorker(workerId, ch, chDone)
+		}(i)
+	}
+	wg.Wait()
+	chDone <- struct{}{}
+}
+
+func buildGraphFromMongoWorker(i int, ch chan GraphJob, chDone chan struct{}) {
 	for job := range ch {
+		// 是否并发安全？？？？？
+		// 亟需测试！！！
 		myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", job.Registry, job.RepoNamespace, job.RepoName, job.TagName, job.ImageMeta.Digest), job.ImageMeta)
 	}
-	chDone <- struct{}{}
 }

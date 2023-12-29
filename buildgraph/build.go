@@ -1,13 +1,13 @@
 package buildgraph
 
-func Build(format string, page int64) {
+func Build(format string, page int64, pageSize int, pullCountThreshold int64) {
 	config(format)
 
 	switch format {
 	case "json":
 		BuildFromJSON()
 	case "mongo":
-		BuildFromMongo(page)
+		BuildFromMongo(page, pageSize, pullCountThreshold)
 	}
 }
 
@@ -17,6 +17,6 @@ func BuildFromJSON() {
 }
 
 // BuildFromMongo 根据crawler爬到的mysql内容建立信息库
-func BuildFromMongo(page int64) {
-	StartFromMongo(page)
+func BuildFromMongo(page int64, pageSize int, pullCountThreshold int64) {
+	StartFromMongo(page, pageSize, pullCountThreshold)
 }
