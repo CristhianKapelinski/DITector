@@ -247,9 +247,11 @@ func buildGraphFromMongo(ch chan GraphJob, chDone chan struct{}) {
 }
 
 func buildGraphFromMongoWorker(i int, ch chan GraphJob, chDone chan struct{}) {
+	myutils.Logger.Debug(fmt.Sprintf("start buildGraphFromMongoWorker %d succeeded", i))
 	for job := range ch {
 		// 是否并发安全？？？？？
 		// 亟需测试！！！
+		// 在Neo4j建立unique constraint之后并发安全！！！
 		myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", job.Registry, job.RepoNamespace, job.RepoName, job.TagName, job.ImageMeta.Digest), job.ImageMeta)
 	}
 }
