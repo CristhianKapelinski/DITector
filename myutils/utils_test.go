@@ -30,7 +30,7 @@ func TestSha256File(t *testing.T) {
 }
 
 func TestSha256Str(t *testing.T) {
-	configDefaultHTTPProxy("http://127.0.0.1:7890", "http://127.0.0.1:7890")
+	configEnvHTTPProxy("http://127.0.0.1:7890", "http://127.0.0.1:7890")
 	imgs, _ := ReqImagesMetadata("library", "mongo", "latest")
 	img := imgs[0]
 

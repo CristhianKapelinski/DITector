@@ -1,6 +1,7 @@
 package myutils
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -11,8 +12,8 @@ import (
 	"time"
 )
 
-// configDefaultHTTPProxy configures http and https proxy.
-func configDefaultHTTPProxy(httpProxy, httpsProxy string) {
+// configEnvHTTPProxy configures http and https proxy.
+func configEnvHTTPProxy(httpProxy, httpsProxy string) {
 	if httpProxy != "" {
 		os.Setenv("http_proxy", httpProxy)
 	}
@@ -31,7 +32,13 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 	rMeta := new(Repository)
 
 	url := GetRepositoryMetadataURL(namespace, name)
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Transport: &http.Transport{
+			// DisableKeepAlives: true,
+			Proxy: http.ProxyFromEnvironment,
+		},
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -45,12 +52,13 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 		}
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	repoBuf := bytes.Buffer{}
+	_, err = io.Copy(&repoBuf, resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(body, rMeta)
+	err = json.Unmarshal(repoBuf.Bytes(), rMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +76,13 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 	tMeta := new(Tag)
 
 	url := GetTagMetadataURL(repoNamespace, repoName, name)
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Transport: &http.Transport{
+			// DisableKeepAlives: true,
+			Proxy: http.ProxyFromEnvironment,
+		},
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -82,12 +96,13 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 		}
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	var tagBuf bytes.Buffer
+	_, err = io.Copy(&tagBuf, resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(body, tMeta)
+	err = json.Unmarshal(tagBuf.Bytes(), tMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +124,13 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 	res := make([]*Tag, 0)
 
 	url := GetRepoTagsURL(repoNamespace, repoName, page, pageSize)
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Transport: &http.Transport{
+			// DisableKeepAlives: true,
+			Proxy: http.ProxyFromEnvironment,
+		},
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -123,19 +144,21 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 		}
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// body, err := io.ReadAll(resp.Body)
+	tagsBuf := bytes.Buffer{}
+	_, err = io.Copy(&tagsBuf, resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(body, pageResult)
+	err = json.Unmarshal(tagsBuf.Bytes(), pageResult)
 	if err != nil {
 		return nil, err
 	}
 
 	// 处理404
-	if len(pageResult.Results) == 0 {
-		return nil, fmt.Errorf("docker hub resp 404 to tag list of repo %s/%s", repoNamespace, repoName)
+	if pageResult.Count == 0 && len(pageResult.Results) == 0 {
+		return nil, fmt.Errorf("docker hub resp 0 tag to repo %s/%s", repoNamespace, repoName)
 	}
 
 	res = pageResult.Results
@@ -154,7 +177,13 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 	res := make([]*Tag, 0)
 
 	url := GetRepoTagsURL(repoNamespace, repoName, page, pageSize)
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Transport: &http.Transport{
+			// DisableKeepAlives: true,
+			Proxy: http.ProxyFromEnvironment,
+		},
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -168,12 +197,14 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 		}
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// body, err := io.ReadAll(resp.Body)
+	tagsBuf := bytes.Buffer{}
+	_, err = io.Copy(&tagsBuf, resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(body, pageResult)
+	err = json.Unmarshal(tagsBuf.Bytes(), pageResult)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +212,7 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 	res = append(res, pageResult.Results...)
 
 	for pageResult.Next != "" {
-		newResp, err := http.Get(pageResult.Next)
+		newResp, err := client.Get(pageResult.Next)
 		if err != nil {
 			Logger.Error("http get", pageResult.Next, "failed with:", err.Error())
 			break
@@ -195,13 +226,15 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 			}
 		}
 
-		body, err = io.ReadAll(newResp.Body)
+		// body, err = io.ReadAll(newResp.Body)
+		tmpBuf := bytes.Buffer{}
+		_, err = io.Copy(&tmpBuf, newResp.Body)
 		if err != nil {
 			Logger.Error("io.ReadAll contents from resp of", pageResult.Next, "failed with:", err.Error())
 			break
 		}
 
-		err = json.Unmarshal(body, pageResult)
+		err = json.Unmarshal(tmpBuf.Bytes(), pageResult)
 		if err != nil {
 			Logger.Error("json unmarshal contents from resp of", pageResult.Next, "failed with:", err.Error())
 			break
@@ -215,7 +248,7 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 
 	// 处理404
 	if len(res) == 0 {
-		return nil, fmt.Errorf("docker hub resp 404 to tag list of repo %s/%s", repoNamespace, repoName)
+		return nil, fmt.Errorf("docker hub resp 0 tag to repo %s/%s", repoNamespace, repoName)
 	}
 
 	for _, tMeta := range res {
@@ -231,7 +264,13 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	isMeta := make([]*Image, 0)
 
 	url := GetImageMetadataURL(repoNamespace, repoName, name)
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Transport: &http.Transport{
+			// DisableKeepAlives: true,
+			Proxy: http.ProxyFromEnvironment,
+		},
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -245,12 +284,15 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 		}
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// body, err := io.ReadAll(resp.Body)
+	imgsBuf := bytes.Buffer{}
+	_, err = io.Copy(&imgsBuf, resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(body, &isMeta)
+	err = json.Unmarshal(imgsBuf.Bytes(), &isMeta)
+	// err = json.Unmarshal(body, &isMeta)
 	if err != nil {
 		return nil, err
 	}

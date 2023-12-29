@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"log"
 	"os"
-	"sync"
 )
 
 var logLevelStr string
@@ -57,22 +56,36 @@ var RootCmd = &cobra.Command{
 		//for _, mongoMeta := range mongoMetas {
 		//	myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "mongo", "latest", mongoMeta.Digest), mongoMeta)
 		//}
-		ubuntuMetas, _ := myutils.ReqImagesMetadata("library", "ubuntu", "22.04")
-		//for _, ubuntuMeta := range ubuntuMetas {
-		//	myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "ubuntu", "22.04", ubuntuMeta.Digest), ubuntuMeta)
-		//}
-		wg := sync.WaitGroup{}
-		for i := 0; i < 10; i++ {
-			for _, ubuntuMeta := range ubuntuMetas {
-				wg.Add(1)
-				go func(digest string, img *myutils.Image) {
-					defer wg.Done()
-					myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "ubuntu", "22.04", digest), img)
-				}(ubuntuMeta.Digest, ubuntuMeta)
-			}
+		// ubuntuMetas, _ := myutils.ReqImagesMetadata("library", "ubuntu", "22.04")
+		// //for _, ubuntuMeta := range ubuntuMetas {
+		// //	myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "ubuntu", "22.04", ubuntuMeta.Digest), ubuntuMeta)
+		// //}
+		// wg := sync.WaitGroup{}
+		// for i := 0; i < 10; i++ {
+		// 	for _, ubuntuMeta := range ubuntuMetas {
+		// 		wg.Add(1)
+		// 		go func(digest string, img *myutils.Image) {
+		// 			defer wg.Done()
+		// 			myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", "docker.io", "library", "ubuntu", "22.04", digest), img)
+		// 		}(ubuntuMeta.Digest, ubuntuMeta)
+		// 	}
+		// }
+		// wg.Wait()
+		// print("Done")
+		tagMetas, err := myutils.ReqTagsMetadata("ustclug", "debian", 1, 20)
+		if err != nil {
+			log.Fatalln("tags got error", err)
 		}
-		wg.Wait()
-		print("Done")
+		for _, tagMeta := range tagMetas {
+			fmt.Println(tagMeta.Name)
+		}
+		imgMetas, err := myutils.ReqImagesMetadata("ustclug", "centos", "7.2.1511")
+		if err != nil {
+			log.Fatalln("got error:", err)
+		}
+		for _, imgMeta := range imgMetas {
+			fmt.Println(imgMeta.Digest)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// 所有命令退出前的清理工作

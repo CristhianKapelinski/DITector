@@ -102,7 +102,7 @@ func LoadConfigFromFile(configFilepath string, logLevel int) {
 	go checkAndRotateLogFile()
 
 	// 配置http代理
-	configDefaultHTTPProxy(GlobalConfig.Proxy.HTTPProxy, GlobalConfig.Proxy.HTTPSProxy)
+	configEnvHTTPProxy(GlobalConfig.Proxy.HTTPProxy, GlobalConfig.Proxy.HTTPSProxy)
 
 	// 配置tls，跳过https证书验证
 	configTLSConfig()

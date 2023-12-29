@@ -82,7 +82,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 					if err != nil {
 						myutils.Logger.Error(fmt.Sprintf("request all tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
 							repoDoc.Namespace, repoDoc.Name, 1, 100, err))
-						continue
+						break
 					}
 					tagFromAPIFlag = true
 					//// 如果拿满100条，那么已拿到第10页
