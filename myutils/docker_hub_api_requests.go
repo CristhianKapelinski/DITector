@@ -40,7 +40,7 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
 	Logger.Debug("get repo metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
-		if limit <= 10 {
+		if limit <= 20 {
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -77,7 +77,7 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
 	Logger.Debug("get tag metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
-		if limit <= 10 {
+		if limit <= 20 {
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -118,7 +118,7 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
 	Logger.Debug("get tags metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
-		if limit <= 10 {
+		if limit <= 20 {
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -163,7 +163,7 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
 	Logger.Debug("get all tags metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
-		if limit <= 10 {
+		if limit <= 20 {
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -190,7 +190,7 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 		limitStr = newResp.Header.Get("X-Ratelimit-Remaining")
 		Logger.Debug("get all tags metadata from API:", pageResult.Next, ", remained limit:", limitStr)
 		if limit, e := strconv.Atoi(limitStr); e == nil {
-			if limit <= 10 {
+			if limit <= 20 {
 				time.Sleep(20 * time.Second)
 			}
 		}
@@ -240,7 +240,7 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
 	Logger.Debug("get image metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
-		if limit <= 10 {
+		if limit <= 20 {
 			time.Sleep(20 * time.Second)
 		}
 	}
