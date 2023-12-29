@@ -212,7 +212,7 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 	res = append(res, pageResult.Results...)
 
 	for pageResult.Next != "" {
-		fmt.Println(pageResult.Next)
+		// fmt.Println(pageResult.Next)
 		newResp, err := client.Get(pageResult.Next)
 		if err != nil {
 			Logger.Error("http get", pageResult.Next, "failed with:", err.Error())

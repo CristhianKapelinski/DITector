@@ -147,6 +147,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 								myutils.Logger.Error(fmt.Sprintf("get images metadata of tag %s/%s:%s from API failed with: %s", repoDoc.Namespace, repoDoc.Name, tagDoc.Name, e))
 								continue
 							} else {
+								// 从API获取image元数据成功
 								for _, imgAPIMeta := range imgAPIMetas {
 									// 检查tag数据是否需要更新
 									// 存在至少一个image上传时间比tag上传时间靠后，tag元数据需要更新
@@ -155,7 +156,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 										tagNeedUpdateFlag = true
 									}
 
-									// 将元数据存入数据库
+									// 将新获取的image元数据存入数据库
 									wg.Add(1)
 									go func(imgMeta *myutils.Image) {
 										defer wg.Done()
@@ -199,6 +200,8 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 										ImageMeta:     imgAPIMeta,
 									}
 								}
+								// 结束后结束本轮image循环
+								break
 							}
 						} else {
 							// 数据库中有，生成对应的任务
