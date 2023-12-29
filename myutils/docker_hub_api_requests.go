@@ -41,7 +41,7 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 	Logger.Debug("get repo metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
 		if limit <= 10 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(20 * time.Second)
 		}
 	}
 
@@ -78,7 +78,7 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 	Logger.Debug("get tag metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
 		if limit <= 10 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(20 * time.Second)
 		}
 	}
 
@@ -119,7 +119,7 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 	Logger.Debug("get tags metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
 		if limit <= 10 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(20 * time.Second)
 		}
 	}
 
@@ -161,10 +161,10 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 	defer resp.Body.Close()
 
 	limitStr := resp.Header.Get("X-Ratelimit-Remaining")
-	Logger.Debug("get tags metadata from API:", url, ", remained limit:", limitStr)
+	Logger.Debug("get all tags metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
 		if limit <= 10 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(20 * time.Second)
 		}
 	}
 
@@ -185,6 +185,14 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 		if err != nil {
 			Logger.Error("http get", pageResult.Next, "failed with:", err.Error())
 			break
+		}
+
+		limitStr = newResp.Header.Get("X-Ratelimit-Remaining")
+		Logger.Debug("get all tags metadata from API:", pageResult.Next, ", remained limit:", limitStr)
+		if limit, e := strconv.Atoi(limitStr); e == nil {
+			if limit <= 10 {
+				time.Sleep(20 * time.Second)
+			}
 		}
 
 		body, err = io.ReadAll(newResp.Body)
@@ -233,7 +241,7 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	Logger.Debug("get image metadata from API:", url, ", remained limit:", limitStr)
 	if limit, e := strconv.Atoi(limitStr); e == nil {
 		if limit <= 10 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(20 * time.Second)
 		}
 	}
 
