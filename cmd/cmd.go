@@ -3,13 +3,14 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/Musso12138/docker-scan/analyzer"
 	"github.com/Musso12138/docker-scan/buildgraph"
 	"github.com/Musso12138/docker-scan/myutils"
 	"github.com/Musso12138/docker-scan/scripts"
 	"github.com/spf13/cobra"
-	"log"
-	"os"
 )
 
 var logLevelStr string
@@ -72,10 +73,10 @@ var RootCmd = &cobra.Command{
 		// }
 		// wg.Wait()
 		// print("Done")
-		_, err := myutils.ReqTagsAllMetadata("verdaccio", "verdaccio", 1, 100)
-		if err != nil {
-			log.Fatalln("tags got error", err)
-		}
+		// _, err := myutils.ReqTagsAllMetadata("verdaccio", "verdaccio", 1, 100)
+		// if err != nil {
+		// 	log.Fatalln("tags got error", err)
+		// }
 		// for _, tagMeta := range tagMetas {
 		// 	fmt.Println(tagMeta.Name)
 		// }
@@ -185,7 +186,10 @@ var executeCmd = &cobra.Command{
 			}
 		case "analyze-all":
 			page, _ := cmd.Flags().GetInt64("page")
-			err := scripts.AnalyzeAll(page)
+			pageSize, _ := cmd.Flags().GetInt64("page_size")
+			tagCnt, _ := cmd.Flags().GetInt("tags")
+			partial, _ := cmd.Flags().GetBool("partial")
+			err := scripts.AnalyzeAll(page, pageSize, tagCnt, partial)
 			if err != nil {
 				log.Fatalln("analyze-all got error:", err)
 			}
@@ -218,6 +222,7 @@ func init() {
 	executeCmd.Flags().Int64("threshold", 1000000, "pull_count threshold to analyze an image")
 	executeCmd.Flags().Int("tags", 3, "the top tag-num recently updated tags to analyze")
 	executeCmd.Flags().Int64("page", 1, "start page for analyzing multiple repos from MongoDB")
+	executeCmd.Flags().Int64("page_size", 5, "page size of finding multiple repos from MongoDB")
 
 	// 向root命令中注册命令
 	RootCmd.AddCommand(

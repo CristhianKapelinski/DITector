@@ -38,7 +38,6 @@ func StartFromMongo(page int64, pageSize int, pullCountThreshold int64) {
 	wg.Wait()
 	fmt.Println("build from Mongo finished at:", myutils.GetLocalNowTimeStr())
 	fmt.Println("total used time:", time.Since(beginTime))
-	return
 }
 
 func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch chan GraphJob, wg *sync.WaitGroup) {
@@ -54,13 +53,15 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 	var repoPage int64 = page
 	var repoPageSize int64 = 5
 	for {
-		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, repoPage, repoPageSize)
+		// 先改成只插入library的
+		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"namespace": "library"}, repoPage, repoPageSize)
 		if err != nil {
 			myutils.Logger.Error(fmt.Sprintf("find repository in MongoDB page: %d, pagesize: %d, got error: %s", repoPage, repoPageSize, err))
 			continue
 		}
 		// 进程结束标志，没有更多repo了
 		if len(repoDocs) == 0 {
+			fmt.Println(myutils.GetLocalNowTimeStr(), "all repo finished")
 			break
 		}
 
@@ -241,7 +242,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 		}
 
 		if repoPage%2 == 0 {
-			fmt.Println("generated all job for repo:", repoCnt, ", page:", repoPage, ", time used:", time.Since(beginTime))
+			fmt.Println(myutils.GetLocalNowTimeStr(), "generated all job for repo:", repoCnt, ", page:", repoPage, ", time used:", time.Since(beginTime))
 		}
 
 		// repo翻页
