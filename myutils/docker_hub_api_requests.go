@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// 创建一个文件用于记录tag数目过多的repo名称（目前以10000为阈值）
+var repoNameWithManyTagsFile, _ = NewRepoNameRecordFile("/data/docker-proj/logs/repo_with_over_10000_tags.log")
+
 // configEnvHTTPProxy configures http and https proxy.
 func configEnvHTTPProxy(httpProxy, httpsProxy string) {
 	if httpProxy != "" {
@@ -159,6 +162,9 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 	// 处理404
 	if pageResult.Count == 0 && len(pageResult.Results) == 0 {
 		return nil, fmt.Errorf("docker hub resp 0 tag to repo %s/%s", repoNamespace, repoName)
+	} else if pageResult.Count > 10000 {
+		// 记录tag过多的镜像名
+		repoNameWithManyTagsFile.Write("repo with tags over 10000:", repoNamespace, repoName)
 	}
 
 	res = pageResult.Results

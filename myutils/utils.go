@@ -9,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -158,4 +159,27 @@ func ExtractTar(src, dst string) error {
 	}
 
 	return nil
+}
+
+// RepoNameRecordFile 每行用来记录一个镜像名
+type RepoNameRecordFile struct {
+	file *os.File
+	lock sync.Mutex
+}
+
+func NewRepoNameRecordFile(filepath string) (*RepoNameRecordFile, error) {
+	var err error
+	rnf := new(RepoNameRecordFile)
+	rnf.file, err = os.OpenFile(filepath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
+	if err != nil {
+		return nil, err
+	}
+	rnf.lock = sync.Mutex{}
+	return rnf, nil
+}
+
+func (rnf *RepoNameRecordFile) Write(ss ...string) {
+	rnf.lock.Lock()
+	defer rnf.lock.Unlock()
+	rnf.file.WriteString(strings.Join(ss, " ") + "\n")
 }
