@@ -2,8 +2,9 @@ package analyzer
 
 import (
 	"fmt"
-	"github.com/Musso12138/docker-scan/myutils"
 	"regexp"
+
+	"github.com/Musso12138/docker-scan/myutils"
 )
 
 var (
@@ -162,15 +163,27 @@ func (currI *CurrentImage) getImageMetadata(fromAPI bool) (*myutils.Image, error
 	archList := make([]string, 0)
 
 	// 根据arch, os匹配tag元数据中的镜像digest
+	osMatched := false
 	for _, iit := range currI.metadata.tagMetadata.Images {
 		arch := fmt.Sprintf("%s:%s/%s:%s", iit.OS, iit.OSVersion, iit.Architecture, iit.Variant)
 		archList = append(archList, arch)
 
-		// 命中arch和os时覆盖digest
-		if currI.architecture == iit.Architecture && currI.os == iit.OS {
-			currI.digest = iit.Digest
+		// 命中arch时覆盖digest
+		if currI.architecture == iit.Architecture {
+			// 有os命中更好，更覆盖
+			if currI.os == iit.OS {
+				if iit.Digest != "" {
+					currI.digest = iit.Digest
+				}
+				osMatched = true
+			} else if !osMatched && (iit.OS == "" || iit.OS == "unknown") {
+				// os尚未命中时，如果tag的arch命中且os为空或unknown，可以暂存一个digest
+				if iit.Digest != "" {
+					currI.digest = iit.Digest
+				}
+			}
 			// 信息全部命中时直接退出
-			if currI.variant == iit.Variant && currI.osVersion == iit.OSVersion {
+			if osMatched && currI.variant == iit.Variant && currI.osVersion == iit.OSVersion {
 				break
 			}
 		}
