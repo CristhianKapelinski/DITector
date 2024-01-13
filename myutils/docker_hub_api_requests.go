@@ -15,6 +15,15 @@ import (
 // 创建一个文件用于记录tag数目过多的repo名称（目前以10000为阈值）
 var repoNameWithManyTagsFile, _ = NewRepoNameRecordFile("/data/docker-proj/logs/repo_with_over_10000_tags.log")
 
+// 创建一个通用的client，用于请求Docker Hub资源
+// 是否能够修复socket: open too many files？？？？？？
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		// DisableKeepAlives: true,
+		Proxy: http.ProxyFromEnvironment,
+	},
+}
+
 // configEnvHTTPProxy configures http and https proxy.
 func configEnvHTTPProxy(httpProxy, httpsProxy string) {
 	if httpProxy != "" {
@@ -35,13 +44,8 @@ func ReqRepoMetadata(namespace, name string) (*Repository, error) {
 	rMeta := new(Repository)
 
 	url := GetRepositoryMetadataURL(namespace, name)
-	client := &http.Client{
-		Transport: &http.Transport{
-			// DisableKeepAlives: true,
-			Proxy: http.ProxyFromEnvironment,
-		},
-	}
-	resp, err := client.Get(url)
+
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -79,13 +83,8 @@ func ReqTagMetadata(repoNamespace, repoName, name string) (*Tag, error) {
 	tMeta := new(Tag)
 
 	url := GetTagMetadataURL(repoNamespace, repoName, name)
-	client := &http.Client{
-		Transport: &http.Transport{
-			// DisableKeepAlives: true,
-			Proxy: http.ProxyFromEnvironment,
-		},
-	}
-	resp, err := client.Get(url)
+
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -127,13 +126,8 @@ func ReqTagsMetadata(repoNamespace, repoName string, page, pageSize int) ([]*Tag
 	res := make([]*Tag, 0)
 
 	url := GetRepoTagsURL(repoNamespace, repoName, page, pageSize)
-	client := &http.Client{
-		Transport: &http.Transport{
-			// DisableKeepAlives: true,
-			Proxy: http.ProxyFromEnvironment,
-		},
-	}
-	resp, err := client.Get(url)
+
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -183,13 +177,8 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 	res := make([]*Tag, 0)
 
 	url := GetRepoTagsURL(repoNamespace, repoName, page, pageSize)
-	client := &http.Client{
-		Transport: &http.Transport{
-			// DisableKeepAlives: true,
-			Proxy: http.ProxyFromEnvironment,
-		},
-	}
-	resp, err := client.Get(url)
+
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +208,7 @@ func ReqTagsAllMetadata(repoNamespace, repoName string, page, pageSize int) ([]*
 
 	for pageResult.Next != "" {
 		// fmt.Println(pageResult.Next)
-		newResp, err := client.Get(pageResult.Next)
+		newResp, err := httpClient.Get(pageResult.Next)
 		if err != nil {
 			Logger.Error("http get", pageResult.Next, "failed with:", err.Error())
 			break
@@ -273,13 +262,8 @@ func ReqImagesMetadata(repoNamespace, repoName, name string) ([]*Image, error) {
 	isMeta := make([]*Image, 0)
 
 	url := GetImageMetadataURL(repoNamespace, repoName, name)
-	client := &http.Client{
-		Transport: &http.Transport{
-			// DisableKeepAlives: true,
-			Proxy: http.ProxyFromEnvironment,
-		},
-	}
-	resp, err := client.Get(url)
+
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}

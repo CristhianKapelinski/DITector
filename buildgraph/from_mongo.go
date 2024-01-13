@@ -99,7 +99,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 				if err != nil {
 					myutils.Logger.Error(fmt.Sprintf("request tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
 						repoDoc.Namespace, repoDoc.Name, 1, 100, err))
-					break
+					continue
 				}
 				tagFromAPIFlag = true
 			} else {
@@ -107,7 +107,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 				tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, tagPage, int64(pageSize))
 				if err != nil {
 					myutils.Logger.Error(fmt.Sprintf("find tags for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s", repoDoc.Namespace, repoDoc.Name, tagPage, pageSize, err))
-					break
+					continue
 				}
 
 				// mongodb没有tag记录，从API获取pageSize个
@@ -118,12 +118,12 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 						if err != nil {
 							myutils.Logger.Error(fmt.Sprintf("request tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
 								repoDoc.Namespace, repoDoc.Name, 1, pageSize, err))
-							break
+							continue
 						}
 						tagFromAPIFlag = true
 					} else {
 						// 不是第一页，已遍历全部tag，退出当前repo
-						break
+						continue
 					}
 				}
 			}
@@ -232,7 +232,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 				}
 			}
 
-			break
+			// break
 
 			//// 从API获取tag列表且没拿满100个，直接退出当前repo
 			//if tagFromAPIFlag && len(tagDocs) < 100 {
@@ -274,5 +274,6 @@ func buildGraphFromMongoWorker(i int, ch chan GraphJob, chDone chan struct{}) {
 		// 亟需测试！！！
 		// 在Neo4j建立unique constraint之后并发安全！！！
 		myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(fmt.Sprintf("%s/%s/%s:%s@%s", job.Registry, job.RepoNamespace, job.RepoName, job.TagName, job.ImageMeta.Digest), job.ImageMeta)
+		myutils.Logger.Info(fmt.Sprintf("inserted image to neo4j: %s/%s/%s:%s@%s", job.Registry, job.RepoNamespace, job.RepoName, job.TagName, job.ImageMeta.Digest))
 	}
 }
