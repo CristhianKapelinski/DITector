@@ -44,44 +44,45 @@ var RootCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// 仅用作测试
-		for _, imgDigest := range []string{
-			// "sha256:5d72b1eb9d3bc467affdf723a3c6adfe893ac291cc8d0bfeb5152ff44769568b",
-			// "sha256:8fbeee158a9d9ddfaf118b54136ef696b86c9611847ad99abcb27f78a9bb8f86",
-			// "sha256:811e890d0d7b76c0ffcc188905066633f7379c652a460738d2a9d0107e3a4c4f",
-			// "sha256:1d48fd47fd497077ced19f0973e45a5da34ce936a99158680d64032028854fc0",
-			// "sha256:7cd4e9005ca2273607275817151ccdba0bbd414c63bde8cda58ec14b4f2ee3f1",
-			"sha256:3317fc0c3f0bb200d85ef9f3ce455dd045f675c5d0a4792178325cacbbd73169",
-			// "sha256:9bfe813d9fdb7bca3f003a8bce3355eb04a2771ce5da6f9b89f018737627d58f",
-			// "sha256:e4a2989262c72e4b3eaf7263dae716a548d73c9b4c7cd1718dc3ac96d21ebaf9",
-			// "sha256:8089ad2b9b3284a48047f886e61a1b8475dca72227dc94e82f0f704c7aa09939",
-			// "sha256:33670cf348538020d957149302af5c92e12b1976ab62bb549729c379905c5593",
-		} {
-			img, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(imgDigest)
-			if err != nil {
-				fmt.Println("find image by digest:", imgDigest, "failed with:", err)
-				continue
-			}
-			preID := ""
-			for _, layer := range img.Layers {
-				fmt.Println(layer.Digest, layer.Instruction)
-				dig := ""
+		myutils.Logger.Info("start test")
+		// for _, imgDigest := range []string{
+		// 	// "sha256:5d72b1eb9d3bc467affdf723a3c6adfe893ac291cc8d0bfeb5152ff44769568b",
+		// 	// "sha256:8fbeee158a9d9ddfaf118b54136ef696b86c9611847ad99abcb27f78a9bb8f86",
+		// 	// "sha256:811e890d0d7b76c0ffcc188905066633f7379c652a460738d2a9d0107e3a4c4f",
+		// 	// "sha256:1d48fd47fd497077ced19f0973e45a5da34ce936a99158680d64032028854fc0",
+		// 	// "sha256:7cd4e9005ca2273607275817151ccdba0bbd414c63bde8cda58ec14b4f2ee3f1",
+		// 	"sha256:3317fc0c3f0bb200d85ef9f3ce455dd045f675c5d0a4792178325cacbbd73169",
+		// 	// "sha256:9bfe813d9fdb7bca3f003a8bce3355eb04a2771ce5da6f9b89f018737627d58f",
+		// 	// "sha256:e4a2989262c72e4b3eaf7263dae716a548d73c9b4c7cd1718dc3ac96d21ebaf9",
+		// 	// "sha256:8089ad2b9b3284a48047f886e61a1b8475dca72227dc94e82f0f704c7aa09939",
+		// 	// "sha256:33670cf348538020d957149302af5c92e12b1976ab62bb549729c379905c5593",
+		// } {
+		// 	img, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(imgDigest)
+		// 	if err != nil {
+		// 		fmt.Println("find image by digest:", imgDigest, "failed with:", err)
+		// 		continue
+		// 	}
+		// 	preID := ""
+		// 	for _, layer := range img.Layers {
+		// 		fmt.Println(layer.Digest, layer.Instruction)
+		// 		dig := ""
 
-				if layer.Digest != "" {
-					dig = myutils.Sha256Str(layer.Digest)
-				} else {
-					dig = myutils.Sha256Str(layer.Instruction)
-				}
-				if dig == "" {
-					fmt.Printf("digest of image %s still none after calculating SHA256\n", imgDigest)
-					break
-				}
+		// 		if layer.Digest != "" {
+		// 			dig = myutils.Sha256Str(layer.Digest)
+		// 		} else {
+		// 			dig = myutils.Sha256Str(layer.Instruction)
+		// 		}
+		// 		if dig == "" {
+		// 			fmt.Printf("digest of image %s still none after calculating SHA256\n", imgDigest)
+		// 			break
+		// 		}
 
-				preID = myutils.Sha256Str(preID + dig)
-			}
+		// 		preID = myutils.Sha256Str(preID + dig)
+		// 	}
 
-			fmt.Println(imgDigest, ":", preID)
-		}
-
+		// 	fmt.Println(imgDigest, ":", preID)
+		// }
+		myutils.Logger.Info("finish test")
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// 所有命令退出前的清理工作

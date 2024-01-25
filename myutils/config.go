@@ -3,19 +3,21 @@ package myutils
 import (
 	"context"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 	"path"
 	"runtime"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 var GlobalConfig struct {
-	MaxThread  int    `yaml:"max_thread"`
-	LogFile    string `yaml:"log_file"`
-	TmpDir     string `yaml:"tmp_dir"`
-	DataSource struct {
+	MaxThread            int    `yaml:"max_thread"`
+	LogFile              string `yaml:"log_file"`
+	RepoWithManyTagsFile string `yaml:"repo_with_many_tags_file"`
+	TmpDir               string `yaml:"tmp_dir"`
+	DataSource           struct {
 		RepositoriesFile string `yaml:"repositories_file"`
 		TagsFile         string `yaml:"tags_file"`
 		ImagesFile       string `yaml:"images_file"`
@@ -100,6 +102,9 @@ func LoadConfigFromFile(configFilepath string, logLevel int) {
 	}
 	// 引入日志文件按日期轮换
 	go checkAndRotateLogFile()
+
+	// 初始化包含过多tag的repo名称列表
+	repoNameWithManyTagsFile, _ = NewRepoNameRecordFile(GlobalConfig.RepoWithManyTagsFile)
 
 	// 配置http代理
 	configEnvHTTPProxy(GlobalConfig.Proxy.HTTPProxy, GlobalConfig.Proxy.HTTPSProxy)

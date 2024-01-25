@@ -172,6 +172,7 @@ func NewRepoNameRecordFile(filepath string) (*RepoNameRecordFile, error) {
 	rnf := new(RepoNameRecordFile)
 	rnf.file, err = os.OpenFile(filepath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0744)
 	if err != nil {
+		Logger.Error("open repo name record file", filepath, "failed with:", err.Error())
 		return nil, err
 	}
 	rnf.lock = sync.Mutex{}

@@ -13,7 +13,7 @@ import (
 )
 
 // 创建一个文件用于记录tag数目过多的repo名称（目前以10000为阈值）
-var repoNameWithManyTagsFile, _ = NewRepoNameRecordFile("/data2/docker-proj/logs/repo_with_over_10000_tags.log")
+var repoNameWithManyTagsFile *RepoNameRecordFile
 
 // 创建一个通用的client，用于请求Docker Hub资源
 // 是否能够修复socket: open too many files？？？？？？
