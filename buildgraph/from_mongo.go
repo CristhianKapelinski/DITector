@@ -71,8 +71,8 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 			repoCnt++
 
 			// 对repo逐页查找tag
-			// 修改：仅对library和下载量>1000000的repo的全部tag进行构建，其他的仓库只构建前20tag
-			// 修改：过滤掉windows系统的镜像
+			// 对library全部tag、下载量>1000000的repo的前100最近更新tag、其他的仓库的前20最近更新tag构建依赖图
+			// 过滤掉windows系统的镜像
 			var tagPage int64 = 1
 			// for {
 			var tagDocs []*myutils.Tag

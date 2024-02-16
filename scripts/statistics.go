@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Musso12138/docker-scan/myutils"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"io"
 	"log"
 	"os"
@@ -16,6 +13,10 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/Musso12138/docker-scan/myutils"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Record is used for store a piece of JSON record
@@ -269,7 +270,7 @@ func StatisticRepositoriesDependentWeights() {
 			myutils.Logger.Error("mongo find image by digest failed with:", err.Error())
 			continue
 		}
-		record.NodeId = myutils.CalculateImageNodeId(image)
+		record.NodeId = myutils.CalculateImageNodeIdOld(image)
 
 		// recalculate top 100 up
 		if !top100Up.CheckNodeId(record.NodeId) {

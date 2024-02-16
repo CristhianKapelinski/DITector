@@ -5,8 +5,8 @@ import (
 	"net/http"
 )
 
-func StartServer() {
-	configServer(false)
+func StartServer(port string) {
+	configServer()
 
 	router := gin.Default()
 
@@ -20,5 +20,5 @@ func StartServer() {
 	router.GET("/repositories", handleRepositoriesSearch())
 	router.GET("/results", handleResultSearch())
 
-	router.Run(":23434")
+	router.Run(":" + port)
 }

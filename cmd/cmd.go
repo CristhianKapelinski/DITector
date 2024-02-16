@@ -45,43 +45,45 @@ var RootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// 仅用作测试
 		myutils.Logger.Info("start test")
-		// for _, imgDigest := range []string{
-		// 	// "sha256:5d72b1eb9d3bc467affdf723a3c6adfe893ac291cc8d0bfeb5152ff44769568b",
-		// 	// "sha256:8fbeee158a9d9ddfaf118b54136ef696b86c9611847ad99abcb27f78a9bb8f86",
-		// 	// "sha256:811e890d0d7b76c0ffcc188905066633f7379c652a460738d2a9d0107e3a4c4f",
-		// 	// "sha256:1d48fd47fd497077ced19f0973e45a5da34ce936a99158680d64032028854fc0",
-		// 	// "sha256:7cd4e9005ca2273607275817151ccdba0bbd414c63bde8cda58ec14b4f2ee3f1",
-		// 	"sha256:3317fc0c3f0bb200d85ef9f3ce455dd045f675c5d0a4792178325cacbbd73169",
-		// 	// "sha256:9bfe813d9fdb7bca3f003a8bce3355eb04a2771ce5da6f9b89f018737627d58f",
-		// 	// "sha256:e4a2989262c72e4b3eaf7263dae716a548d73c9b4c7cd1718dc3ac96d21ebaf9",
-		// 	// "sha256:8089ad2b9b3284a48047f886e61a1b8475dca72227dc94e82f0f704c7aa09939",
-		// 	// "sha256:33670cf348538020d957149302af5c92e12b1976ab62bb549729c379905c5593",
-		// } {
-		// 	img, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(imgDigest)
-		// 	if err != nil {
-		// 		fmt.Println("find image by digest:", imgDigest, "failed with:", err)
-		// 		continue
-		// 	}
-		// 	preID := ""
-		// 	for _, layer := range img.Layers {
-		// 		fmt.Println(layer.Digest, layer.Instruction)
-		// 		dig := ""
+		tags, err := myutils.GlobalDBClient.Mongo.FindAllTagsByRepoName("library", "mongo")
+		if err != nil {
+			log.Fatalln("获取全部tag失败:", err)
+		}
+		fmt.Println(len(tags))
+		for _, imgDigest := range []string{
+			"sha256:fc023e8dd56e83da64030ca599ecd1fbeea8f6c8f3c4d91d00f54d0d6318c575",
+		} {
+			img, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(imgDigest)
+			if err != nil {
+				fmt.Println("find image by digest:", imgDigest, "failed with:", err)
+				continue
+			}
+			preID := ""
+			for _, layer := range img.Layers {
+				// fmt.Println(layer.Digest, layer.Instruction)
+				dig := ""
 
-		// 		if layer.Digest != "" {
-		// 			dig = myutils.Sha256Str(layer.Digest)
-		// 		} else {
-		// 			dig = myutils.Sha256Str(layer.Instruction)
-		// 		}
-		// 		if dig == "" {
-		// 			fmt.Printf("digest of image %s still none after calculating SHA256\n", imgDigest)
-		// 			break
-		// 		}
+				if layer.Digest != "" {
+					dig = myutils.Sha256Str(layer.Digest)
+				} else {
+					dig = myutils.Sha256Str(layer.Instruction)
+				}
+				if dig == "" {
+					fmt.Printf("digest of image %s still none after calculating SHA256\n", imgDigest)
+					break
+				}
 
-		// 		preID = myutils.Sha256Str(preID + dig)
-		// 	}
+				preID = myutils.Sha256Str(preID + dig)
+			}
 
-		// 	fmt.Println(imgDigest, ":", preID)
-		// }
+			fmt.Println(imgDigest, ":", preID)
+			node, err := myutils.GlobalDBClient.Neo4j.FindLayerByNodeId(preID)
+			if err != nil {
+				log.Fatalf("find Layer node with id: %s, failed with: %s\n", preID, err)
+			}
+			fmt.Println(myutils.GetNodeProps(node))
+			fmt.Println(myutils.GlobalDBClient.Neo4j.FindUpstreamImagesByNodeId(preID))
+		}
 		myutils.Logger.Info("finish test")
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -159,6 +161,16 @@ var analyzeCmd = &cobra.Command{
 	},
 }
 
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "start backend server",
+	Run: func(cmd *cobra.Command, args []string) {
+		port, _ := cmd.Flags().GetString("port")
+		// server.StartServer(port)
+		fmt.Println(port)
+	},
+}
+
 var executeCmd = &cobra.Command{
 	Use:   "execute",
 	Short: "execute custom scripts",
@@ -189,6 +201,15 @@ var executeCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalln("analyze-all got error:", err)
 			}
+		case "calculate-node-weights":
+			file, _ := cmd.Flags().GetString("file")
+			page, _ := cmd.Flags().GetInt64("page")
+			pageSize, _ := cmd.Flags().GetInt64("page_size")
+			threshold, _ := cmd.Flags().GetInt64("threshold")
+			err := scripts.CalculateNodeRelyWeights(file, page, int(pageSize), threshold)
+			if err != nil {
+				log.Fatalln("calculate-node-weights got error:", err)
+			}
 		}
 	},
 }
@@ -211,6 +232,9 @@ func init() {
 	analyzeCmd.Flags().Bool("json", true, "output in JSON")
 	analyzeCmd.Flags().StringP("output", "o", fmt.Sprintf("%s_result.json", myutils.GetLocalNowTimeNoSpace()), "analysis result output filepath")
 
+	// startCmd
+	startCmd.Flags().StringP("port", "p", "23434", "port listening by backend server")
+
 	// executeCmd
 	executeCmd.Flags().String("script", "", "execute custom script, including: batch-analyze, analyze-threshold, analyze-all")
 	executeCmd.Flags().Bool("partial", false, "only analyze metadata of the Docker images")
@@ -225,60 +249,7 @@ func init() {
 		crawlCmd,
 		buildCmd,
 		analyzeCmd,
+		startCmd,
 		executeCmd,
 	)
 }
-
-// Deprecated: 旧版main函数实现，转为使用cobra实现
-
-//// 命令行参数定义与绑定
-//var (
-//	crawl       bool   // 是否要爬镜像仓库数据
-//	registry    string // 指定要爬的镜像仓库，比如dockerhub
-//	libraryFlag bool   // 爬虫是否爬官方镜像
-//	buildGraph  bool   // 是否要建信息库
-//	format      string // 爬虫存储格式/信息库从什么格式中取内容，json、mysql
-//	startServer bool   // 启动前端服务器
-//	execScript  bool   // 执行特制脚本
-//	rulePath    string // filepath of rules
-//	scan        bool   // 是否要扫描镜像
-//	image       string // 待扫描镜像名称
-//	file        string // 待扫描镜像文件
-//)
-//
-//flag.BoolVar(&crawl, "crawl", false, "crawl images metadata if not nil")
-//flag.StringVar(&registry, "registry", "dockerhub", "registry the register if not nil, e.g. dockerhub")
-//flag.BoolVar(&libraryFlag, "official", false, "true for crawling official images; false for crawling community images")
-//flag.BoolVar(&buildGraph, "build-graph", false, "true for building graph based on crawler results")
-//flag.StringVar(&format, "format", "json", "format for crawling or building graph, e.g. json, mysql, clear")
-//flag.BoolVar(&startServer, "start-server", false, "true for building graph based on crawler results")
-//flag.BoolVar(&execScript, "exec-script", false, "true for specific script execution")
-//flag.StringVar(&rulePath, "rule-path", "rules/secret_rules.yaml", "yaml file path storing rules")
-//flag.BoolVar(&scan, "scan", false, "true for scanning image")
-//flag.StringVar(&image, "image", "", "image name to be scanned, e.g. ")
-//flag.StringVar(&file, "file", "", "image file to be scanned, formatted like file from `docker save`")
-//flag.Parse()
-//
-//// 主函数退出前清理工作（最后一个执行的defer函数）
-//defer myutils.CloseAllConnections()
-//
-//if crawl {
-//if registry == "dockerhub" {
-//crawler.StartRecursive(format, libraryFlag)
-//}
-//} else if buildGraph {
-//buildgraph.Build(format)
-//} else if startServer {
-//// 10.10.21.122:23434
-//server.StartServer()
-//} else if scan {
-//
-//} else if execScript {
-//scripts.ScanTop100DownstreamImagesVul()
-////scripts.StatisticRepositoriesDependentWeights()
-////scripts.ScanAllSecretsInImageMetadata()
-////scripts.CalculateRepositoriesDependentWeights()
-//} else {
-//flag.Usage()
-//os.Exit(-1)
-//}

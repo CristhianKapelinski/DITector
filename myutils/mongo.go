@@ -3,14 +3,17 @@ package myutils
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"time"
 )
 
 type MyMongo struct {
 	Client          *mongo.Client
+	DockerHubDB     *mongo.Database
 	RepoColl        *mongo.Collection
 	TagColl         *mongo.Collection
 	ImgColl         *mongo.Collection
@@ -45,12 +48,12 @@ func NewMongo(uri, database, repositories, tags, images, imgResults, layerResult
 		return mymongo, err
 	}
 
-	dockerhubDB := mymongo.Client.Database(database)
-	mymongo.RepoColl = dockerhubDB.Collection(repositories)
-	mymongo.TagColl = dockerhubDB.Collection(tags)
-	mymongo.ImgColl = dockerhubDB.Collection(images)
-	mymongo.ImgResultColl = dockerhubDB.Collection(imgResults)
-	mymongo.LayerResultColl = dockerhubDB.Collection(layerResults)
+	mymongo.DockerHubDB = mymongo.Client.Database(database)
+	mymongo.RepoColl = mymongo.DockerHubDB.Collection(repositories)
+	mymongo.TagColl = mymongo.DockerHubDB.Collection(tags)
+	mymongo.ImgColl = mymongo.DockerHubDB.Collection(images)
+	mymongo.ImgResultColl = mymongo.DockerHubDB.Collection(imgResults)
+	mymongo.LayerResultColl = mymongo.DockerHubDB.Collection(layerResults)
 
 	// TODO: 初次使用建立索引
 	if initFlag {
@@ -402,6 +405,30 @@ func (m *MyMongo) FindRepositoriesByKeywordPaged(KeyMap map[string]any, page, pa
 	return res, nil
 }
 
+func (m *MyMongo) FindRepositoriesByText(search string, page, pageSize int64) ([]*Repository, error) {
+	res := make([]*Repository, 0)
+
+	filter := bson.D{{"$text", bson.D{{"$search", sanitizeSearchString(search)}}}}
+
+	optLimit := options.Find().SetSkip((page - 1) * pageSize).SetLimit(pageSize)
+	cursor, err := m.RepoColl.Find(context.TODO(), filter, optLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	if err = cursor.All(context.TODO(), &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (m *MyMongo) CountRepoByText(search string) (int64, error) {
+	filter := bson.D{{"$text", bson.D{{"$search", sanitizeSearchString(search)}}}}
+	return m.RepoColl.CountDocuments(context.TODO(), filter)
+}
+
 func (m *MyMongo) UpdateTag(tMeta *Tag) error {
 	filter := bson.M{
 		"repositories_namespace": tMeta.RepositoryNamespace,
@@ -512,6 +539,38 @@ func (m *MyMongo) FindTagsByRepoNamePaged(repoNamespace, repoName string, page, 
 	return res, nil
 }
 
+// FindAllTagsByRepoName 查询返回指定repo名称下的全部tag
+func (m *MyMongo) FindAllTagsByRepoName(repoNamespace, repoName string) ([]*Tag, error) {
+	res := make([]*Tag, 0)
+
+	var page int64 = 1
+	var pageSize int64 = 100
+
+	for {
+		tmp, err := m.FindTagsByRepoNamePaged(repoNamespace, repoName, page, pageSize)
+		if err != nil {
+			Logger.Error("FindTagsByRepoNamePaged for repo", repoNamespace, repoName, "failed with:", err.Error())
+			if page == 1 {
+				return nil, err
+			} else {
+				break
+			}
+		}
+		if len(tmp) == 0 {
+			break
+		} else if len(tmp) < int(pageSize) {
+			res = append(res, tmp...)
+			break
+		} else {
+			res = append(res, tmp...)
+			page++
+			continue
+		}
+	}
+
+	return res, nil
+}
+
 func (m *MyMongo) UpdateImage(iMeta *Image) error {
 	filter := bson.M{
 		"digest": iMeta.Digest,
@@ -579,6 +638,21 @@ func (m *MyMongo) FindImgResultByName(namespace, repoName, tagName string) (*Ima
 	return res, err
 }
 
+func (m *MyMongo) FindImgResultByText(search string, page, pageSize int64) ([]*ImageResult, error) {
+	res := make([]*ImageResult, 0)
+
+	filter := bson.D{}
+
+	err := m.ImgResultColl.FindOne(context.TODO(), filter).Decode(res)
+
+	return res, err
+}
+
+func (m *MyMongo) CountImgResByText(search string) (int64, error) {
+	filter := bson.D{{"$text", bson.D{{"$search", sanitizeSearchString(search)}}}}
+	return m.ImgResultColl.CountDocuments(context.TODO(), filter)
+}
+
 func (m *MyMongo) UpdateLayerResult(layerRes *LayerResult) error {
 	filter := bson.M{
 		"digest": layerRes.Digest,
@@ -602,4 +676,11 @@ func (m *MyMongo) FindLayerResultByDigest(digest string) (*LayerResult, error) {
 	err := m.LayerResultColl.FindOne(context.Background(), filter).Decode(res)
 
 	return res, err
+}
+
+// sanitizeSearchString 净化用于text索引检索的用户输入字符串
+func sanitizeSearchString(search string) string {
+	clean := strings.ToLower(search)
+
+	return clean
 }

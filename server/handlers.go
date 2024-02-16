@@ -121,9 +121,9 @@ func handleRepositoriesSearch() func(c *gin.Context) {
 		totalCnt := totalRepositoriesCnt
 		if search != "" {
 			// time costs too much
-			totalCnt, _ = myMongo.GetRepositoriesCountByText(search)
+			totalCnt, _ = myutils.GlobalDBClient.Mongo.CountRepoByText(search)
 		}
-		results, err := myMongo.FindRepositoriesByText(search, int64(page), int64(pageSize))
+		results, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByText(search, int64(page), int64(pageSize))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"msg": err.Error(),
@@ -135,7 +135,7 @@ func handleRepositoriesSearch() func(c *gin.Context) {
 				"count":     totalCnt,
 				"page":      page,
 				"page_size": pageSize,
-				"results":   RepositoriesToForServer(results),
+				"results":   results,
 			})
 		}
 	}
@@ -165,11 +165,11 @@ type LayerWithResults struct {
 	Results     string `json:"results"`
 }
 
-func ImagesToWithResults(imgs []*myutils.ImageOld) []*ImageWithResults {
+func ImagesToWithResults(imgs []*myutils.Image) []*ImageWithResults {
 	imgWithRes := make([]*ImageWithResults, 0)
 
 	for _, img := range imgs {
-		results, err := myMongo.FindResultByDigest(img.Digest)
+		results, err := myutils.GlobalDBClient.Mongo.FindImgResultByDigest(img.Digest)
 		if err != nil {
 			continue
 		}
@@ -181,7 +181,7 @@ func ImagesToWithResults(imgs []*myutils.ImageOld) []*ImageWithResults {
 	return imgWithRes
 }
 
-func combineImageAndResult(img *myutils.ImageOld, res *myutils.ImageResult) *ImageWithResults {
+func combineImageAndResult(img *myutils.Image, res *myutils.ImageResult) *ImageWithResults {
 	imgres := &ImageWithResults{
 		Architecture: img.Architecture, Features: img.Features, Variant: img.Variant,
 		Digest: img.Digest, OS: img.OS, Size: img.Size, Status: img.Status,
@@ -200,7 +200,8 @@ func combineImageAndResult(img *myutils.ImageOld, res *myutils.ImageResult) *Ima
 	re, _ := regexp.Compile(`layer\[(\d+)]\.instruction`)
 
 	// add results to layer according to result.Path
-	for _, result := range res.Results {
+	// TODO: 这里只是为了编译通过，后面要改
+	for _, result := range res.MetadataResult.SecretLeakages {
 		if result.Type == "in-dockerfile-command" {
 			layerIndex := re.FindStringSubmatch(result.Path)
 			if len(layerIndex) > 1 {
@@ -246,14 +247,14 @@ func handleImagesSearch() func(c *gin.Context) {
 		totalCnt := totalImagesCnt
 		if search != "" && !strings.Contains(search, "sha256:") {
 			// time costs too much
-			totalCnt, _ = myMongo.GetImagesCountByText(search)
+			totalCnt, _ = myutils.GlobalDBClient.Mongo.CountRepoByText(search)
 		}
 		pageSize, err := strconv.Atoi(pageSizeStr)
 		if err != nil || pageSize < 1 {
 			pageSize = 10
 		}
 
-		results, err := myMongo.FindImagesByText(search, int64(page), int64(pageSize))
+		results, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(search)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"msg": err.Error(),
@@ -265,7 +266,8 @@ func handleImagesSearch() func(c *gin.Context) {
 				"count":     totalCnt,
 				"page":      page,
 				"page_size": pageSize,
-				"results":   ImagesToWithResults(results),
+				// "results":   ImagesToWithResults(results),
+				"results": results,
 			})
 		}
 	}
@@ -275,7 +277,7 @@ func ResultsToImagesWithResults(imgRes []*myutils.ImageResult) []*ImageWithResul
 	imgWithRes := make([]*ImageWithResults, 0)
 
 	for _, res := range imgRes {
-		img, err := myMongo.FindImageByDigest(res.Digest)
+		img, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(res.Digest)
 		if err != nil {
 			continue
 		}
@@ -312,14 +314,14 @@ func handleResultSearch() func(c *gin.Context) {
 		totalCnt := totalImagesCnt
 		if search != "" {
 			// time costs too much
-			totalCnt, _ = myMongo.GetResultsCountByText(search)
+			totalCnt, _ = myutils.GlobalDBClient.Mongo.CountImgResByText(search)
 		}
 		pageSize, err := strconv.Atoi(pageSizeStr)
 		if err != nil || pageSize < 1 {
 			pageSize = 10
 		}
 
-		results, err := myMongo.FindResultsByText(search, int64(page), int64(pageSize))
+		results, err := myutils.GlobalDBClient.Mongo.FindImgResultByText(search, int64(page), int64(pageSize))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"msg": err.Error(),

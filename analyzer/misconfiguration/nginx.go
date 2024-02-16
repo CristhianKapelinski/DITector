@@ -3,10 +3,11 @@ package misconfiguration
 import (
 	"bufio"
 	"fmt"
-	"github.com/Musso12138/docker-scan/myutils"
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/Musso12138/docker-scan/myutils"
 )
 
 const (
@@ -17,6 +18,7 @@ var (
 	nginxConfFileRe    = regexp.MustCompile(`nginx\.conf$`)
 	nginxCurLocRe      = regexp.MustCompile(`location\s+(\S+)`)
 	nginxAutoIndexOnRe = regexp.MustCompile(`autoindex\s+on`)
+	nginxAliasRe       = regexp.MustCompile(`alias\s+(\S+)`)
 )
 
 func isNginxConfFile(filepath string) bool {
@@ -27,6 +29,7 @@ func ScanNginxConfFile(filepath string) ([]*myutils.Misconfiguration, error) {
 	res := make([]*myutils.Misconfiguration, 0)
 	dirClosure := false
 	dirTraversal := false
+	dirAlias := false
 
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -52,6 +55,10 @@ func ScanNginxConfFile(filepath string) ([]*myutils.Misconfiguration, error) {
 			} else {
 				dirClosure = false
 			}
+		}
+		if !dirAlias && nginxAliasRe.MatchString(line) {
+			dirAlias = true
+			break
 		}
 		if !dirClosure && nginxAutoIndexOnRe.MatchString(line) {
 			dirTraversal = true

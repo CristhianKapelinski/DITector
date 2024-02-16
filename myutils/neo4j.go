@@ -3,6 +3,7 @@ package myutils
 import (
 	"context"
 	"fmt"
+
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j/dbtype"
 )
@@ -292,6 +293,42 @@ func addImageToLayerFunc(ctx context.Context, imageName, idHash string) neo4j.Ma
 	}
 }
 
+// FindLayerByNodeId 根据node id查找Layer节点
+func (neo4jDriver *MyNeo4j) FindLayerByNodeId(nodeId string) (*neo4j.Record, error) {
+	ctx := context.Background()
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	node, err := session.ExecuteRead(ctx, findLayerByNodeIdFunc(ctx, nodeId))
+	if err != nil {
+		return nil, err
+	}
+
+	return node.(*neo4j.Record), nil
+}
+
+// findLayerByNodeIdFunc 返回可用于session.ExecuteRead的func，根据节点id查找Layer节点
+func findLayerByNodeIdFunc(ctx context.Context, nodeId string) neo4j.ManagedTransactionWork {
+
+	return func(tx neo4j.ManagedTransaction) (any, error) {
+		var result, err = tx.Run(ctx,
+			"MATCH (l:Layer {id: $nodeId}) RETURN l",
+			map[string]any{"nodeId": nodeId},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		// 必须通过Next消费获取下一个Record
+		if result.Next(context.TODO()) {
+			return result.Record(), nil
+		} else {
+			return nil, fmt.Errorf("ExecuteRead got no record of (:Layer {id: %s}) in neo4j", nodeId)
+		}
+	}
+}
+
 //// FindRawLayerByDigest TODO: 待测试
 //func (neo4jDriver *MyNeo4j) FindRawLayerByDigest(digest string) (*LayerResult, error) {
 //	ctx := context.Background()
@@ -330,8 +367,7 @@ func findRawLayerByDigestFunc(ctx context.Context, digest string) neo4j.ManagedT
 
 	return func(tx neo4j.ManagedTransaction) (any, error) {
 		var result, err = tx.Run(ctx,
-			"MATCH (l:RawLayer {id: $digest}) "+
-				"RETURN l",
+			"MATCH (l:RawLayer {id: $digest}) RETURN l",
 			map[string]any{"digest": digest},
 		)
 
@@ -350,17 +386,22 @@ func (neo4jDriver *MyNeo4j) FindUpstreamImagesByNodeId(nodeId string) ([]string,
 	result := make([]string, 0)
 	imageSet := make(map[string]struct{})
 
-	upNodes, err := neo4jDriver.FindUpstreamLayerNodesByNodeId(nodeId)
+	ctx := context.TODO()
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	nodes, err := session.ExecuteRead(ctx, findUpstreamNodesWithImagesByNodeIdFunc(ctx, nodeId))
 	if err != nil {
+		Logger.Error("Neo4j find upstream Layer nodes with images by node id", nodeId, "failed with:", err.Error())
 		return nil, err
 	}
 
-	for _, upNode := range upNodes.([]*neo4j.Record) {
-		prop := GetNodeProps(upNode)
+	for _, node := range nodes.([]*neo4j.Record) {
+		prop := GetNodeProps(node)
 		if imagesList, ok := prop["images"]; ok && len(imagesList.([]interface{})) > 0 {
 			for _, imageName := range imagesList.([]interface{}) {
-				strName := imageName.(string)
-				imageSet[strName] = struct{}{}
+				imgNameStr := imageName.(string)
+				imageSet[imgNameStr] = struct{}{}
 			}
 		}
 	}
@@ -372,42 +413,28 @@ func (neo4jDriver *MyNeo4j) FindUpstreamImagesByNodeId(nodeId string) ([]string,
 	return result, nil
 }
 
-// FindDownstreamImagesByNodeId 根据hash(1-2-5)发现Layer节点的下游镜像，组织为[]string并返回
-func (neo4jDriver *MyNeo4j) FindDownstreamImagesByNodeId(nodeId string) ([]string, error) {
-	result := make([]string, 0)
-	imageSet := make(map[string]struct{})
+// findUpstreamNodesWithImagesByNodeIdFunc 返回可用于session.ExecuteRead的func，
+// 查询返回images属性非空的上游Layer节点according to hash(1-2-5)
+func findUpstreamNodesWithImagesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.ManagedTransactionWork {
 
-	downNodes, err := neo4jDriver.FindDownstreamLayerNodesByNodeId(nodeId)
-	if err != nil {
-		return nil, err
-	}
+	return func(tx neo4j.ManagedTransaction) (any, error) {
+		var result, err = tx.Run(ctx,
+			"MATCH (l:Layer {id: $idHash}) "+
+				"WITH l "+
+				"MATCH (up:Layer)-[:IS_BASE_OF*]->(l) "+
+				"WHERE size(up.images)>0 "+
+				"RETURN up",
+			map[string]any{"idHash": nodeId},
+		)
 
-	for _, downNode := range downNodes.([]*neo4j.Record) {
-		prop := GetNodeProps(downNode)
-		if imagesList, ok := prop["images"]; ok && len(imagesList.([]interface{})) > 0 {
-			for _, imageName := range imagesList.([]interface{}) {
-				strName := imageName.(string)
-				imageSet[strName] = struct{}{}
-			}
+		if err != nil {
+			return nil, err
 		}
+
+		records, err := result.Collect(ctx)
+
+		return records, err
 	}
-
-	for k, _ := range imageSet {
-		result = append(result, k)
-	}
-
-	return result, nil
-}
-
-// GetNodeProps 解析neo4j driver ExecuteRead返回*neo4j.Record节点属性
-func GetNodeProps(n *neo4j.Record) map[string]any {
-	keys := n.Keys
-	if len(keys) == 1 {
-		prop, _ := n.Get(keys[0])
-		return prop.(dbtype.Node).Props
-	}
-
-	return nil
 }
 
 // FindUpstreamLayerNodesByNodeId 根据hash(1-2-5)发现所有上游Layer节点
@@ -448,6 +475,62 @@ func findUpstreamNodesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.Man
 	}
 }
 
+// FindDownstreamImagesByNodeId 根据hash(1-2-5)发现Layer节点的下游镜像，组织为[]string并返回
+func (neo4jDriver *MyNeo4j) FindDownstreamImagesByNodeId(nodeId string) ([]string, error) {
+	result := make([]string, 0)
+	imageSet := make(map[string]struct{})
+
+	ctx := context.TODO()
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	nodes, err := session.ExecuteRead(ctx, findDownstreamNodesWithImagesByNodeIdFunc(ctx, nodeId))
+	if err != nil {
+		Logger.Error("Neo4j find downstream Layer nodes with images by node id", nodeId, "failed with:", err.Error())
+		return nil, err
+	}
+
+	for _, node := range nodes.([]*neo4j.Record) {
+		prop := GetNodeProps(node)
+		if imagesList, ok := prop["images"]; ok && len(imagesList.([]interface{})) > 0 {
+			for _, imageName := range imagesList.([]interface{}) {
+				strName := imageName.(string)
+				imageSet[strName] = struct{}{}
+			}
+		}
+	}
+
+	for k, _ := range imageSet {
+		result = append(result, k)
+	}
+
+	return result, nil
+}
+
+// findDownstreamNodesWithImagesByNodeIdFunc 返回可用于session.ExecuteRead的func，
+// 查询返回images属性非空的下游Layer节点according to hash(1-2-5)
+func findDownstreamNodesWithImagesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.ManagedTransactionWork {
+
+	return func(tx neo4j.ManagedTransaction) (any, error) {
+		var result, err = tx.Run(ctx,
+			"MATCH (l:Layer {id: $idHash}) "+
+				"WITH l "+
+				"MATCH (l)-[:IS_BASE_OF*]->(down:Layer) "+
+				"WHERE size(down.images)>0 "+
+				"RETURN down",
+			map[string]any{"idHash": nodeId},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		records, err := result.Collect(ctx)
+
+		return records, err
+	}
+}
+
 // FindDownstreamLayerNodesByNodeId 根据hash(1-2-5)发现所有下游Layer节点
 func (neo4jDriver *MyNeo4j) FindDownstreamLayerNodesByNodeId(nodeId string) (any, error) {
 
@@ -455,13 +538,13 @@ func (neo4jDriver *MyNeo4j) FindDownstreamLayerNodesByNodeId(nodeId string) (any
 	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
-	upNodes, err := session.ExecuteRead(ctx, findDownstreamNodesByNodeIdFunc(ctx, nodeId))
+	nodes, err := session.ExecuteRead(ctx, findDownstreamNodesByNodeIdFunc(ctx, nodeId))
 	if err != nil {
 		Logger.Error("Neo4j find downstream Layer nodes by node id", nodeId, "failed with:", err.Error())
 		return nil, err
 	}
 
-	return upNodes, nil
+	return nodes, nil
 }
 
 // findDownstreamNodesByNodeIdFunc 返回可用于session.ExecuteRead的func，find downstream Layer Nodes according to hash(1-2-5)
@@ -486,6 +569,17 @@ func findDownstreamNodesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.M
 	}
 }
 
+// GetNodeProps 解析neo4j driver ExecuteRead返回*neo4j.Record节点属性
+func GetNodeProps(n *neo4j.Record) map[string]any {
+	keys := n.Keys
+	if len(keys) == 1 {
+		prop, _ := n.Get(keys[0])
+		return prop.(dbtype.Node).Props
+	}
+
+	return nil
+}
+
 // DropNodesAndRelationshipsFromNeo4j 将neo4j数据库清空
 func (neo4jDriver *MyNeo4j) DropNodesAndRelationshipsFromNeo4j() {
 	ctx := context.TODO()
@@ -504,9 +598,31 @@ func (neo4jDriver *MyNeo4j) DropNodesAndRelationshipsFromNeo4j() {
 	})
 }
 
-// CalculateImageNodeId calculates node-id of top layer
+func CalculateImageNodeId(img *Image) string {
+	preId := ""
+
+	for _, layer := range img.Layers {
+		dig := ""
+
+		if layer.Digest != "" {
+			dig = Sha256Str(layer.Digest)
+		} else {
+			dig = Sha256Str(layer.Instruction)
+		}
+		if dig == "" {
+			break
+		}
+
+		preId = Sha256Str(preId + dig)
+	}
+
+	return preId
+}
+
+// CalculateImageNodeIdOld 用于计算镜像顶层节点所在的node id，未考虑镜像中的配置层，为旧版依赖图实现
+// CalculateImageNodeIdOld calculates node-id of top layer
 // (with real file contents) in the image layer-to-layer chain.
-func CalculateImageNodeId(image *ImageOld) string {
+func CalculateImageNodeIdOld(image *ImageOld) string {
 	accumulateLayerID := ""
 	for _, layer := range image.Layers {
 		if layer.Size == 0 {

@@ -1,16 +1,15 @@
 package server
 
 import (
+	"context"
 	"fmt"
-	"github.com/Musso12138/docker-scan/myutils"
-	"log"
 	"sync"
+
+	"github.com/Musso12138/docker-scan/myutils"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 var (
-	myMongo       *myutils.MyMongoOld
-	myNeo4jDriver *myutils.MyNeo4j
-
 	// totalCnt is the number of documents in each collection,
 	// used for calculate table pages
 	totalRepositoriesCnt int64
@@ -18,20 +17,7 @@ var (
 	configLock           = sync.WaitGroup{}
 )
 
-func configServer(initFlag bool) {
-	var err error
-	myMongo, err = myutils.ConfigMongoClient(initFlag)
-	if err != nil {
-		log.Fatalln("[ERROR] connect to and config MongoDB failed with err: ", err)
-	}
-	fmt.Println("[+] Connect to MongoDB succeed")
-
-	myNeo4jDriver, err = myutils.NewNeo4jDriver("neo4j://localhost:7687", "neo4j", "qazwsxedc", false)
-	if err != nil {
-		log.Fatalln("[ERROR] Connect to neo4j failed with:", err)
-	}
-	fmt.Println("[+] Connect to Neo4j succeed")
-
+func configServer() {
 	configLock.Add(2)
 	go func() {
 		defer configLock.Done()
@@ -44,14 +30,30 @@ func configServer(initFlag bool) {
 	configLock.Wait()
 }
 
-func updateRepositoriesCnt() {
+func updateRepositoriesCnt() error {
 	//totalRepositoriesCnt, _ = myMongo.GetRepositoriesCountByText("")
-	totalRepositoriesCnt = 2576742
-	fmt.Println(totalRepositoriesCnt)
+	result := myutils.GlobalDBClient.Mongo.DockerHubDB.RunCommand(context.TODO(), bson.M{"collStats": myutils.GlobalConfig.MongoConfig.Collections.Repositories})
+	stats := bson.M{}
+	err := result.Decode(&stats)
+	if err != nil {
+		return err
+	}
+	totalRepositoriesCnt = stats["count"].(int64)
+	fmt.Println("total repositories count:", totalRepositoriesCnt)
+
+	return nil
 }
 
-func updateImagesCnt() {
+func updateImagesCnt() error {
 	//totalImagesCnt, _ = myMongo.GetImagesCountByText("")
-	totalImagesCnt = 7111908
-	fmt.Println(totalImagesCnt)
+	result := myutils.GlobalDBClient.Mongo.DockerHubDB.RunCommand(context.TODO(), bson.M{"collStats": myutils.GlobalConfig.MongoConfig.Collections.Images})
+	stats := bson.M{}
+	err := result.Decode(&stats)
+	if err != nil {
+		return err
+	}
+	totalImagesCnt = stats["count"].(int64)
+	fmt.Println("total images count:", totalImagesCnt)
+
+	return nil
 }
