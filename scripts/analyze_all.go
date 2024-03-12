@@ -107,6 +107,7 @@ func jobGeneratorAll(page int64, pageSize int64, tagCnt int, partial bool, jobCh
 						// 从API获取的repo新描述信息存入mongodb
 						wg.Add(1)
 						go func(repo *myutils.Repository) {
+							defer wg.Done()
 							if e := myutils.GlobalDBClient.Mongo.UpdateRepository(repo); e != nil {
 								myutils.Logger.Error("update metadata of repo", repo.Namespace, repo.Name, "failed with:", e.Error())
 							}
@@ -135,10 +136,8 @@ func jobGeneratorAll(page int64, pageSize int64, tagCnt int, partial bool, jobCh
 			}
 
 			// 生产任务
-			// 根据下载量，>10000的repo的最近3个tag分析内容，其他全部tag都是部分分析
-			tagCnt := 1
-			// var partial bool
 			for _, tagDoc := range tagDocs {
+				// 根据下载量，>10000的repo的最近3个tag分析内容，其他全部tag都是部分分析
 				// if repoDoc.PullCount > 10000 && tagCnt <= 3 {
 				// 	partial = false
 				// } else {
@@ -148,12 +147,7 @@ func jobGeneratorAll(page int64, pageSize int64, tagCnt int, partial bool, jobCh
 					name:    fmt.Sprintf("%s/%s:%s", repoDoc.Namespace, repoDoc.Name, tagDoc.Name),
 					partial: partial,
 				}
-				tagCnt++
 			}
-
-			// if repoCnt%100 == 0 {
-			// 	fmt.Println("generated all job for repo:", repoCnt, ", page:", repoPage)
-			// }
 		}
 
 		fmt.Printf("[%s] generatied all job for repo page: %d, page_size: %d\n", myutils.GetLocalNowTimeStr(), repoPage, pageSize)

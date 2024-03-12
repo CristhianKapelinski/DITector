@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Musso12138/docker-scan/myutils"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type GraphJob struct {
@@ -55,7 +56,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 	for {
 		// 先改成只插入library的
 		// repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"namespace": "library"}, repoPage, repoPageSize)
-		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, repoPage, repoPageSize)
+		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"pull_count": bson.M{"$gte": 100}}, repoPage, repoPageSize)
 		if err != nil {
 			myutils.Logger.Error(fmt.Sprintf("find repository in MongoDB page: %d, pagesize: %d, got error: %s", repoPage, repoPageSize, err))
 			continue
@@ -71,10 +72,9 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 			repoCnt++
 
 			// 对repo逐页查找tag
-			// 对library全部tag、下载量>1000000的repo的前100最近更新tag、其他的仓库的前20最近更新tag构建依赖图
+			// 对library全部tag、下载量>1000000的repo的前100最近更新tag、其他的仓库的前10最近更新tag构建依赖图
 			// 过滤掉windows系统的镜像
 			var tagPage int64 = 1
-			// for {
 			var tagDocs []*myutils.Tag
 			tagFromAPIFlag := false
 
@@ -93,16 +93,17 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 				tagFromAPIFlag = true
 				//// 如果拿满100条，那么已拿到第10页
 				//tagPage = 10
-			} else if repoDoc.PullCount > pullCountThreshold {
-				// 下载量大的镜像交给API获取前100个tag
-				tagDocs, err = myutils.ReqTagsMetadata(repoDoc.Namespace, repoDoc.Name, 1, 100)
-				if err != nil {
-					myutils.Logger.Error(fmt.Sprintf("request tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
-						repoDoc.Namespace, repoDoc.Name, 1, 100, err))
-					continue
-				}
-				tagFromAPIFlag = true
 			} else {
+				// } else if repoDoc.PullCount > pullCountThreshold {
+				// 	// 下载量大的镜像交给API获取前100个tag
+				// 	tagDocs, err = myutils.ReqTagsMetadata(repoDoc.Namespace, repoDoc.Name, 1, 100)
+				// 	if err != nil {
+				// 		myutils.Logger.Error(fmt.Sprintf("request tags list of repository %s/%s, page: %d, pagesize: %d from Docker Hub API failed with: %s",
+				// 			repoDoc.Namespace, repoDoc.Name, 1, 100, err))
+				// 		continue
+				// 	}
+				// 	tagFromAPIFlag = true
+				// } else {
 				// 其他镜像先尝试从mongodb获取pageSize个
 				tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, tagPage, int64(pageSize))
 				if err != nil {
@@ -232,22 +233,9 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 				}
 			}
 
-			// break
-
-			//// 从API获取tag列表且没拿满100个，直接退出当前repo
-			//if tagFromAPIFlag && len(tagDocs) < 100 {
-			//	break
-			//}
-			//
-			//// tag翻页
-			//tagPage++
-			// }
-
 		}
 
-		if repoPage%2 == 0 {
-			fmt.Println(myutils.GetLocalNowTimeStr(), "generated all job for repo:", repoCnt, ", page:", repoPage, ", time used:", time.Since(beginTime))
-		}
+		fmt.Println(myutils.GetLocalNowTimeStr(), "generated all job for repo page:", repoPage, ", page size:", repoPageSize, ", time used:", time.Since(beginTime))
 
 		// repo翻页
 		repoPage++
