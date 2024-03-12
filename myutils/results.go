@@ -55,21 +55,21 @@ type ContentResult struct {
 }
 
 type LayerResult struct {
-	Instruction string
-	Size        int64
-	Digest      string
+	Instruction string `bson:"instruction"`
+	Size        int64  `bson:"size"`
+	Digest      string `bson:"digest"`
 
 	LastAnalyzed string `bson:"last_analyzed"`
 	AnalyzeTime  string `bson:"analyze_time"`
 
-	Total        int // from qianxin asky
-	ComponentNum int
-	Components   []*Component
+	Total        int          `bson:"total"` // from qianxin asky
+	ComponentNum int          `bson:"component_num"`
+	Components   []*Component `bson:"components"`
 
-	SecretLeakages    []*SecretLeakage
-	Vulnerabilities   []*Vulnerability
-	Misconfigurations []*Misconfiguration
-	MaliciousFiles    []*MaliciousFile
+	SecretLeakages    []*SecretLeakage    `bson:"secret_leakages"`
+	Vulnerabilities   []*Vulnerability    `bson:"vulnerabilities"`
+	Misconfigurations []*Misconfiguration `bson:"misconfigurations"`
+	MaliciousFiles    []*MaliciousFile    `bson:"malicious_files"`
 
 	// 奇安信扫描taskid
 	TaskID string
