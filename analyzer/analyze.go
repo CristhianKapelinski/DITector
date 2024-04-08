@@ -151,11 +151,23 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 			} else {
 				tmpBeginTime := time.Now()
 				if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByDigest(ci.digest); err == nil && res.ConfigurationAnalyzed && res.ContentAnalyzed {
+					// 只有digest对应的镜像有结果
+					// 只需要补充获取和分析repo和tag的metadata
 					res.Name = name
 					res.Registry = ci.registry
 					res.Namespace = ci.namespace
 					res.RepoName = ci.repoName
 					res.TagName = ci.tagName
+
+					// 获取和分析repo和tag的metadata
+					if err := ci.parseMetadata(false, false); err != nil {
+						myutils.Logger.Error("ImageAnalyzer.AnalyzeImageByName parse metadata of repo and tag failed with", err.Error())
+					} else {
+						repoMetaRes, err := analyzer.analyzeRepoMetadata(ci)
+						if err == nil {
+							res.MetadataResult.SensitiveParams = repoMetaRes.SensitiveParams
+						}
+					}
 
 					res.TotalTime = time.Since(beginTime).String()
 					res.AnalyzeTime = time.Since(tmpBeginTime).String()

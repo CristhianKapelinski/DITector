@@ -16,6 +16,7 @@ func StartServer(port string) {
 		})
 	})
 
+	// router.Get("/imageresult", handleImgResultSearch())
 	router.GET("/images", handleImagesSearch())
 	router.GET("/repositories", handleRepositoriesSearch())
 	router.GET("/results", handleResultSearch())

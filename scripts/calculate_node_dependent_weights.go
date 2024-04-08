@@ -57,15 +57,16 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 	var repoPage int64 = page
 	var repoPageSize int64 = 5
 	for {
-		// 根据build日志卡
-		if repoPage > 318206 {
-			fmt.Println(myutils.GetLocalNowTimeStr(), "finish: calculated all dependent weights for page:", repoPage-1, "page_size:", 5)
-			return
-		}
+		// // 根据build日志卡
+		// if repoPage > 318206 {
+		// 	fmt.Println(myutils.GetLocalNowTimeStr(), "finish: calculated all dependent weights for page:", repoPage-1, "page_size:", 5)
+		// 	return
+		// }
 
 		// 先改成只统计library的
-		// repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"namespace": "library"}, repoPage, repoPageSize)
-		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, repoPage, repoPageSize)
+		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"namespace": "library"}, repoPage, repoPageSize)
+		// repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, repoPage, repoPageSize)
+		// repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"pull_count": bson.M{"$gte": 100}}, repoPage, repoPageSize)
 		if err != nil {
 			myutils.Logger.Error(fmt.Sprintf("find repository in MongoDB page: %d, pagesize: %d, got error: %s", repoPage, repoPageSize, err))
 			repoPage++
@@ -88,7 +89,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 			var tagDocs []*myutils.Tag
 
 			if repoDoc.Namespace == "library" {
-				continue
+				// continue
 				// library镜像的tag全量获取
 				tagDocs, err = myutils.GlobalDBClient.Mongo.FindAllTagsByRepoName(repoDoc.Namespace, repoDoc.Name)
 				if err != nil {
@@ -96,14 +97,15 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 						repoDoc.Namespace, repoDoc.Name, err))
 					continue
 				}
-			} else if repoDoc.PullCount > pullCountThreshold {
-				// 下载量大的镜像获取前100个tag
-				tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, 1, 100)
-				if err != nil {
-					myutils.Logger.Error(fmt.Sprintf("find tags list for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s",
-						repoDoc.Namespace, repoDoc.Name, 1, 100, err))
-					continue
-				}
+				// } else if repoDoc.PullCount > pullCountThreshold {
+				// 	// 下载量大的镜像获取前100个tag
+				// 	tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, 1, 100)
+				// 	if err != nil {
+				// 		myutils.Logger.Error(fmt.Sprintf("find tags list for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s",
+				// 			repoDoc.Namespace, repoDoc.Name, 1, 100, err))
+				// 		continue
+				// 	}
+				// } else {
 			} else {
 				// 其他镜像获取pageSize个
 				tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, tagPage, int64(pageSize))

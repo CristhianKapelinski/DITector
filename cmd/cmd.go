@@ -13,6 +13,7 @@ import (
 	"github.com/Musso12138/docker-scan/buildgraph"
 	"github.com/Musso12138/docker-scan/myutils"
 	"github.com/Musso12138/docker-scan/scripts"
+	"github.com/Musso12138/docker-scan/server"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
@@ -190,7 +191,7 @@ var startCmd = &cobra.Command{
 	Short: "start backend server",
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetString("port")
-		// server.StartServer(port)
+		server.StartServer(port)
 		fmt.Println(port)
 	},
 }

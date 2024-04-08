@@ -62,14 +62,14 @@ type LayerResult struct {
 	LastAnalyzed string `bson:"last_analyzed"`
 	AnalyzeTime  string `bson:"analyze_time"`
 
-	Total        int          `bson:"total"` // from qianxin asky
-	ComponentNum int          `bson:"component_num"`
-	Components   []*Component `bson:"components"`
+	Total        int
+	ComponentNum int
+	Components   []*Component
 
-	SecretLeakages    []*SecretLeakage    `bson:"secret_leakages"`
-	Vulnerabilities   []*Vulnerability    `bson:"vulnerabilities"`
-	Misconfigurations []*Misconfiguration `bson:"misconfigurations"`
-	MaliciousFiles    []*MaliciousFile    `bson:"malicious_files"`
+	SecretLeakages    []*SecretLeakage
+	Vulnerabilities   []*Vulnerability
+	Misconfigurations []*Misconfiguration
+	MaliciousFiles    []*MaliciousFile
 
 	// 奇安信扫描taskid
 	TaskID string

@@ -2,12 +2,13 @@ package server
 
 import (
 	"encoding/json"
-	"github.com/Musso12138/docker-scan/myutils"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/Musso12138/docker-scan/myutils"
+	"github.com/gin-gonic/gin"
 )
 
 // =========================================================
@@ -338,3 +339,14 @@ func handleResultSearch() func(c *gin.Context) {
 		}
 	}
 }
+
+// func handleImgResultSearch() func(c *gin.Context) {
+// 	return func(c *gin.Context) {
+// 		repoNamespace := c.DefaultQuery("repo_namespace", "")
+// 		repoName := c.DefaultQuery("repo_name", "")
+// 		tagName := c.DefaultQuery("tag_name", "")
+// 		digest := c.DefaultQuery("digest", "")
+
+// 		imgRes := myutils.GlobalDBClient.Mongo.FindImgResultByExactName()
+// 	}
+// }
