@@ -49,7 +49,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 
 	// 数据库已有检测结果，跳过下载和检测
 	if myutils.GlobalDBClient.MongoFlag {
-		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err == nil {
+		if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName, ci.digest); err == nil {
 			myutils.Logger.Info("AnalyzeImagePartial", name, "succeeded")
 			return res, nil
 		}
@@ -76,6 +76,15 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 			imgRes.RepoName = ci.repoName
 			imgRes.TagName = ci.tagName
 
+			// 有digest相同的也需要补充分析针对当前repo的描述信息分析
+			repoMetaRes, err := analyzer.analyzeRepoMetadata(ci)
+			if err != nil {
+				imgRes.MetadataResult.SensitiveParams = make([]*myutils.SensitiveParam, 0)
+				myutils.Logger.Error("ImageAnalyzer.AnalyzeImageByName analyze repo metadata failed with", err.Error())
+			} else {
+				imgRes.MetadataResult.SensitiveParams = repoMetaRes.SensitiveParams
+			}
+
 			imgRes.TotalTime = time.Since(beginTime).String()
 			imgRes.AnalyzeTime = time.Since(analyzeBeginTime).String()
 
@@ -88,7 +97,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImagePartialByName(name string) (*myutils.
 			}(imgRes)
 
 			ci.wg.Wait()
-			myutils.Logger.Info("AnalyzeImagePartial", name, "succeeded")
+			myutils.Logger.Info("AnalyzeImagePartial", name, "succeeded: image with same digest previously analyzed")
 			return imgRes, nil
 		}
 	}
@@ -164,7 +173,10 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 						myutils.Logger.Error("ImageAnalyzer.AnalyzeImageByName parse metadata of repo and tag failed with", err.Error())
 					} else {
 						repoMetaRes, err := analyzer.analyzeRepoMetadata(ci)
-						if err == nil {
+						if err != nil {
+							res.MetadataResult.SensitiveParams = make([]*myutils.SensitiveParam, 0)
+							myutils.Logger.Error("ImageAnalyzer.AnalyzeImageByName analyze repo metadata failed with", err.Error())
+						} else {
 							res.MetadataResult.SensitiveParams = repoMetaRes.SensitiveParams
 						}
 					}
@@ -186,7 +198,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 				}
 			}
 		} else {
-			if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName); err == nil && res.ConfigurationAnalyzed && res.ContentAnalyzed {
+			if res, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(ci.namespace, ci.repoName, ci.tagName, ci.digest); err == nil && res.ConfigurationAnalyzed && res.ContentAnalyzed {
 				myutils.Logger.Info("AnalyzeImage", name, "succeeded: repo:tag previously analyzed")
 				return res, nil
 			}
@@ -219,6 +231,15 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 				imgRes.OS = ci.os
 				imgRes.OSVersion = ci.osVersion
 
+				// 需要补充对repo描述信息的分析
+				repoMetaRes, err := analyzer.analyzeRepoMetadata(ci)
+				if err != nil {
+					imgRes.MetadataResult.SensitiveParams = make([]*myutils.SensitiveParam, 0)
+					myutils.Logger.Error("ImageAnalyzer.AnalyzeImageByName analyze repo metadata failed with", err.Error())
+				} else {
+					imgRes.MetadataResult.SensitiveParams = repoMetaRes.SensitiveParams
+				}
+
 				imgRes.TotalTime = time.Since(beginTime).String()
 				imgRes.AnalyzeTime = time.Since(analyzeBeginTime).String()
 
@@ -230,7 +251,7 @@ func (analyzer *ImageAnalyzer) AnalyzeImageByName(name string, delFlag bool) (*m
 					}
 				}(imgRes)
 				ci.wg.Wait()
-				myutils.Logger.Info("AnalyzeImage", name, "succeeded")
+				myutils.Logger.Info("AnalyzeImage", name, "succeeded: image with same digest previously analyzed")
 				return imgRes, nil
 			}
 		}

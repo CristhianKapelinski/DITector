@@ -639,13 +639,21 @@ func (m *MyMongo) FindImgResultByExactName(namespace, repoName, tagName, digest 
 	return res, err
 }
 
-func (m *MyMongo) FindImgResultByName(namespace, repoName, tagName string) (*ImageResult, error) {
+func (m *MyMongo) FindImgResultByName(namespace, repoName, tagName, digest string) (*ImageResult, error) {
 	res := new(ImageResult)
 
-	filter := bson.M{
-		"namespace":       namespace,
-		"repository_name": repoName,
-		"tag_name":        tagName,
+	filter := bson.M{}
+	if namespace != "" {
+		filter["namespace"] = namespace
+	}
+	if repoName != "" {
+		filter["repository_name"] = repoName
+	}
+	if tagName != "" {
+		filter["tag_name"] = tagName
+	}
+	if digest != "" {
+		filter["digest"] = digest
 	}
 
 	err := m.ImgResultColl.FindOne(context.TODO(), filter).Decode(res)
