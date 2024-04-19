@@ -49,14 +49,14 @@ func countNodesWithUpstreamImages(ch chan buildgraph.GraphJob, file *os.File, ch
 			ImageDigest:   job.ImageMeta.Digest,
 		}
 
-		downstreamImgNames, err := myutils.GlobalDBClient.Neo4j.FindUpstreamImagesByNodeId(myutils.CalculateImageNodeId(job.ImageMeta))
+		upstreamImgNames, err := myutils.GlobalDBClient.Neo4j.FindUpstreamImagesByNodeId(myutils.CalculateImageNodeId(job.ImageMeta))
 		if err != nil {
 			myutils.Logger.Error("FindDownstreamImagesByNodeId for image:", job.RepoNamespace, job.RepoNamespace, job.TagName, job.ImageMeta.Digest,
 				", nodeId:", myutils.CalculateImageNodeId(job.ImageMeta), ", failed with:", err.Error())
 			continue
 		}
-		tmp.UpstreamCount = len(downstreamImgNames)
-		tmp.UpstreamImages = downstreamImgNames
+		tmp.UpstreamCount = len(upstreamImgNames)
+		tmp.UpstreamImages = upstreamImgNames
 
 		b, err := json.Marshal(tmp)
 		if err != nil {

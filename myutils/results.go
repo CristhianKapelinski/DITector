@@ -48,7 +48,7 @@ type ContentResult struct {
 
 	SecretLeakages    []*SecretLeakage    `json:"secret_leakages" bson:"secret_leakages"`
 	Vulnerabilities   []*Vulnerability    `json:"vulnerabilities" bson:"vulnerabilities"`
-	Misconfigurations []*Misconfiguration `json:"misconfiguration" bson:"misconfigurations"`
+	Misconfigurations []*Misconfiguration `json:"misconfigurations" bson:"misconfigurations"`
 	MaliciousFiles    []*MaliciousFile    `json:"malicious_files" bson:"malicious_files"`
 
 	LayersGotErr []string `json:"layers_got_err" bson:"layers_got_err"`

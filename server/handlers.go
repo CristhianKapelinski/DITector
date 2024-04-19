@@ -11,8 +11,8 @@ import (
 
 func handleRepositoriesSearch() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST")
+		// c.Header("Access-Control-Allow-Origin", "*")
+		// c.Header("Access-Control-Allow-Methods", "GET, POST")
 
 		repoNamespace := c.DefaultQuery("repo_namespace", "")
 		repoName := c.DefaultQuery("repo_name", "")
@@ -51,11 +51,13 @@ func handleRepositoriesSearch() func(c *gin.Context) {
 		}
 
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{
-				"msg": err.Error(),
+			c.JSON(http.StatusOK, gin.H{
+				"code": 404,
+				"msg":  err.Error(),
 			})
 		} else {
 			c.JSON(http.StatusOK, gin.H{
+				"code":      200,
 				"count":     totalCnt,
 				"page":      page,
 				"page_size": pageSize,
@@ -67,8 +69,8 @@ func handleRepositoriesSearch() func(c *gin.Context) {
 
 func handleTagsSearch() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST")
+		// c.Header("Access-Control-Allow-Origin", "*")
+		// c.Header("Access-Control-Allow-Methods", "GET, POST")
 
 		repoNamespace := c.DefaultQuery("repo_namespace", "")
 		repoName := c.DefaultQuery("repo_name", "")
@@ -116,12 +118,14 @@ func handleTagsSearch() func(c *gin.Context) {
 		}
 
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{
-				"msg": err.Error(),
+			c.JSON(http.StatusOK, gin.H{
+				"code": 404,
+				"msg":  err.Error(),
 			})
 		} else {
 			// used to handle CORS requests
 			c.JSON(http.StatusOK, gin.H{
+				"code":      200,
 				"count":     totalCnt,
 				"page":      page,
 				"page_size": pageSize,
@@ -159,8 +163,9 @@ func handleImagesSearch() func(c *gin.Context) {
 			results, err = myutils.GlobalDBClient.Mongo.FindImageByKeywordPaged(map[string]any{}, page, pageSize)
 		} else {
 			if len(search) != 71 || !strings.HasPrefix(search, "sha256:") {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"msg": "invalid input string for search, need to be a valid digest start with sha256:",
+				c.JSON(http.StatusOK, gin.H{
+					"code": 400,
+					"msg":  "invalid input string for search, need to be a valid digest start with sha256:",
 				})
 				return
 			} else {
@@ -174,11 +179,13 @@ func handleImagesSearch() func(c *gin.Context) {
 		}
 
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{
-				"msg": err.Error(),
+			c.JSON(http.StatusOK, gin.H{
+				"code": 404,
+				"msg":  err.Error(),
 			})
 		} else {
 			c.JSON(http.StatusOK, gin.H{
+				"code":      200,
 				"count":     totalCnt,
 				"page":      page,
 				"page_size": pageSize,
@@ -224,11 +231,13 @@ func handleResultsSearch() func(c *gin.Context) {
 		}
 
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{
-				"msg": err.Error(),
+			c.JSON(http.StatusOK, gin.H{
+				"code": 404,
+				"msg":  err.Error(),
 			})
 		} else {
 			c.JSON(http.StatusOK, gin.H{
+				"code":      200,
 				"count":     totalCnt,
 				"page":      page,
 				"page_size": pageSize,
@@ -250,11 +259,13 @@ func handleResultSearch() func(c *gin.Context) {
 
 		result, err := myutils.GlobalDBClient.Mongo.FindImgResultByName(repoNamespace, repoName, tagName, imgDigest)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"msg": err.Error(),
+			c.JSON(http.StatusOK, gin.H{
+				"code": 400,
+				"msg":  err.Error(),
 			})
 		} else {
 			c.JSON(http.StatusOK, gin.H{
+				"code":    200,
 				"results": result,
 			})
 		}

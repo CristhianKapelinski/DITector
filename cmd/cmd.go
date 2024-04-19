@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -14,11 +11,7 @@ import (
 	"github.com/Musso12138/docker-scan/myutils"
 	"github.com/Musso12138/docker-scan/scripts"
 	"github.com/Musso12138/docker-scan/server"
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/registry"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 var logLevelStr string
@@ -53,59 +46,6 @@ var RootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// 仅用作测试
 		myutils.Logger.Info("start test")
-
-		repoDocs, _ := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"pull_count": bson.M{"$gte": 100}}, 10000, 5)
-		for _, repo := range repoDocs {
-			fmt.Println(repo.Namespace, repo.Name, repo.PullCount)
-		}
-
-		os.Exit(-1)
-
-		dockerClient, err := client.NewClientWithOpts(client.FromEnv)
-		if err != nil {
-			log.Fatalln("create docker client failed with:", err)
-		}
-
-		authConfig := registry.AuthConfig{
-			Username:      myutils.GlobalConfig.DockerConfig.Username,
-			Password:      myutils.GlobalConfig.DockerConfig.Password,
-			Auth:          myutils.GlobalConfig.DockerConfig.Auth,
-			ServerAddress: myutils.GlobalConfig.DockerConfig.ServerAddress,
-			IdentityToken: myutils.GlobalConfig.DockerConfig.IdentityToken,
-			RegistryToken: myutils.GlobalConfig.DockerConfig.RegistryToken,
-		}
-
-		encodedJSON, err := json.Marshal(authConfig)
-		if err != nil {
-			log.Fatalln("json marshal Docker auth config failed with:", err)
-		}
-		authConfigStr := base64.URLEncoding.EncodeToString(encodedJSON)
-
-		rc, err := dockerClient.ImagePull(context.Background(), "alpine:3.6.5", types.ImagePullOptions{RegistryAuth: authConfigStr})
-		if err != nil {
-			log.Fatalln("imagePull failed with:", err)
-		}
-		decoder := json.NewDecoder(rc)
-		for {
-			event := new(struct {
-				ID             string `json:"id"`
-				Status         string `json:"status"`
-				ProgressDetail struct {
-					Current int64 `json:"current"`
-					Total   int64 `json:"total"`
-				} `json:"progressDetail"`
-				Progress string `json:"progress"`
-			})
-			if err = decoder.Decode(event); err != nil {
-				if err == io.EOF {
-					fmt.Println("EOF gotten")
-					break
-				}
-				fmt.Println("decode JSON when pulling image failed with:", err.Error())
-			}
-
-			fmt.Println(event)
-		}
 
 		myutils.Logger.Info("finish test")
 	},

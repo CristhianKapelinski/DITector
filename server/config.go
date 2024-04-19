@@ -3,11 +3,15 @@ package server
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/Musso12138/docker-scan/myutils"
 )
+
+const JWTENV = "JWT_SECRET"
 
 var (
 	// totalCnt is the number of documents in each collection,
@@ -45,6 +49,17 @@ func configServer() {
 			fmt.Println("failed to get totalResultCnt, failed with:", err)
 		}
 	}()
+
+	// 初始化服务器生成jwt的secret
+	token := os.Getenv(JWTENV)
+	if token == "" {
+		secretRand := myutils.GetRandStr(64)
+		secret := myutils.Sha256Str(secretRand)
+		err := os.Setenv(JWTENV, secret)
+		if err != nil {
+			log.Fatalln("generate and save jwt secret failed with:", err)
+		}
+	}
 	configLock.Wait()
 }
 

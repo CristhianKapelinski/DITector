@@ -19,17 +19,18 @@ type MyMongo struct {
 	ImgColl         *mongo.Collection
 	ImgResultColl   *mongo.Collection
 	LayerResultColl *mongo.Collection
+	UserColl        *mongo.Collection
 }
 
 func NewMongoGlobalConfig() (*MyMongo, error) {
 	return NewMongo(GlobalConfig.MongoConfig.URI, GlobalConfig.MongoConfig.Database,
 		GlobalConfig.MongoConfig.Collections.Repositories, GlobalConfig.MongoConfig.Collections.Tags,
 		GlobalConfig.MongoConfig.Collections.Images, GlobalConfig.MongoConfig.Collections.ImageResults,
-		GlobalConfig.MongoConfig.Collections.LayerResults, false)
+		GlobalConfig.MongoConfig.Collections.LayerResults, GlobalConfig.MongoConfig.Collections.User, false)
 }
 
 // NewMongo returns a new mongo client
-func NewMongo(uri, database, repositories, tags, images, imgResults, layerResults string, initFlag bool) (*MyMongo, error) {
+func NewMongo(uri, database, repositories, tags, images, imgResults, layerResults, user string, initFlag bool) (*MyMongo, error) {
 	var mymongo = new(MyMongo)
 	var err error
 
@@ -54,6 +55,7 @@ func NewMongo(uri, database, repositories, tags, images, imgResults, layerResult
 	mymongo.ImgColl = mymongo.DockerHubDB.Collection(images)
 	mymongo.ImgResultColl = mymongo.DockerHubDB.Collection(imgResults)
 	mymongo.LayerResultColl = mymongo.DockerHubDB.Collection(layerResults)
+	mymongo.UserColl = mymongo.DockerHubDB.Collection(user)
 
 	// TODO: 初次使用建立索引
 	if initFlag {
@@ -864,8 +866,10 @@ func (m *MyMongo) FindImgResultByTextPaged(search string, page, pageSize int64) 
 
 	filter := bson.D{{"$text", bson.D{{"$search", search}}}}
 	optLimit := options.Find().SetSkip((page - 1) * pageSize).SetLimit(pageSize)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
-	cursor, err := m.ImgResultColl.Find(context.TODO(), filter, optLimit)
+	cursor, err := m.ImgResultColl.Find(ctx, filter, optLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -880,7 +884,9 @@ func (m *MyMongo) FindImgResultByTextPaged(search string, page, pageSize int64) 
 
 func (m *MyMongo) CountImgResByText(search string) (int64, error) {
 	filter := bson.D{{"$text", bson.D{{"$search", search}}}}
-	return m.ImgResultColl.CountDocuments(context.TODO(), filter)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	return m.ImgResultColl.CountDocuments(ctx, filter)
 }
 
 func (m *MyMongo) UpdateLayerResult(layerRes *LayerResult) error {
@@ -906,6 +912,48 @@ func (m *MyMongo) FindLayerResultByDigest(digest string) (*LayerResult, error) {
 	err := m.LayerResultColl.FindOne(context.Background(), filter).Decode(res)
 
 	return res, err
+}
+
+func (m *MyMongo) FindUserByKeyword(keyMap map[string]any) (*User, error) {
+	if len(keyMap) == 0 {
+		return nil, fmt.Errorf("find user with empty keyword")
+	}
+
+	res := new(User)
+	filter := bson.M{}
+	for k, v := range keyMap {
+		if k != "" {
+			filter[k] = v
+		}
+	}
+
+	err := m.UserColl.FindOne(context.TODO(), filter).Decode(res)
+
+	return res, err
+}
+
+// TODO: 以后再加修改密码、新增用户、修改状态什么的
+
+func (m *MyMongo) UpdateUserLogin(keyMap map[string]any, loginTime time.Time) error {
+	if len(keyMap) == 0 {
+		return fmt.Errorf("update user with empty keyword")
+	}
+
+	filter := bson.M{}
+	for k, v := range keyMap {
+		if k != "" {
+			filter[k] = v
+		}
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"last_login_time": loginTime,
+		},
+	}
+
+	_, err := m.UserColl.UpdateOne(context.TODO(), filter, update)
+	return err
 }
 
 // sanitizeSearchString 净化用于text索引检索的用户输入字符串

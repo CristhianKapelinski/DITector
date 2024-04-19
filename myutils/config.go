@@ -48,6 +48,7 @@ var GlobalConfig struct {
 			Images       string `yaml:"images"`
 			ImageResults string `yaml:"image_results"`
 			LayerResults string `yaml:"layer_results"`
+			User         string `yaml:"user"`
 		} `yaml:"collections"`
 	} `yaml:"mongo_config"`
 	Neo4jConfig struct {

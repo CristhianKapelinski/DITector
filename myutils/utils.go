@@ -2,9 +2,11 @@ package myutils
 
 import (
 	"archive/tar"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"math/rand"
 	"os"
 	"path"
 	"regexp"
@@ -25,6 +27,22 @@ func GetLocalNowTimeStr() string {
 
 func GetLocalNowTimeNoSpace() string {
 	return time.Now().In(shanghai).Format("20060102T150405")
+}
+
+// 生成n位随机字符串
+func GetRandStr(n int) string {
+	str := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	result := make([]byte, n)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < n; i++ {
+		result[i] = str[r.Intn(len(str))]
+	}
+	return string(result)
+}
+
+func Md5Str(s string) string {
+	hash := md5.Sum([]byte(s))
+	return hex.EncodeToString(hash[:])
 }
 
 // Sha256Str 对字符串计算sha256，并返回string

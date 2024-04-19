@@ -11,6 +11,7 @@ import (
 
 	"github.com/Musso12138/docker-scan/buildgraph"
 	"github.com/Musso12138/docker-scan/myutils"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // 用于统计镜像的依赖权重
@@ -64,9 +65,9 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 		// }
 
 		// 先改成只统计library的
-		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"namespace": "library"}, repoPage, repoPageSize)
+		// repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"namespace": "library"}, repoPage, repoPageSize)
 		// repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(nil, repoPage, repoPageSize)
-		// repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"pull_count": bson.M{"$gte": 100}}, repoPage, repoPageSize)
+		repoDocs, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(map[string]any{"pull_count": bson.M{"$gte": 100}}, repoPage, repoPageSize)
 		if err != nil {
 			myutils.Logger.Error(fmt.Sprintf("find repository in MongoDB page: %d, pagesize: %d, got error: %s", repoPage, repoPageSize, err))
 			repoPage++
@@ -89,7 +90,7 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 			var tagDocs []*myutils.Tag
 
 			if repoDoc.Namespace == "library" {
-				// continue
+				continue
 				// library镜像的tag全量获取
 				tagDocs, err = myutils.GlobalDBClient.Mongo.FindAllTagsByRepoName(repoDoc.Namespace, repoDoc.Name)
 				if err != nil {
