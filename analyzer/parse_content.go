@@ -44,6 +44,7 @@ func (currI *CurrentImage) parseContentFromDockerEnv() error {
 
 // parseLayersWithContentFromMetadata extracts layer digests from layer metadata.
 func (currI *CurrentImage) parseLayersWithContentFromMetadata() {
+	currI.layerWithContentList = []string{}
 	for _, layer := range currI.metadata.imageMetadata.Layers {
 		if layer.Digest != "" {
 			currI.layerWithContentList = append(currI.layerWithContentList, layer.Digest)

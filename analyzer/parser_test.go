@@ -2,14 +2,52 @@ package analyzer
 
 import (
 	"fmt"
-	"github.com/Musso12138/docker-scan/myutils"
 	"log"
 	"testing"
 	"time"
+
+	"github.com/Musso12138/docker-scan/myutils"
 )
 
+func TestParseMetadataFromAPI(t *testing.T) {
+	ci, err := NewCurrentImage("library/groovy:latest")
+	if err != nil {
+		log.Fatalln("create new current image got error:", err)
+	}
+
+	ci.parseServerPlatform()
+	err = ci.parseMetadata(false, false)
+	if err != nil {
+		log.Fatalln("parse metadata got error:", err)
+	}
+
+	ci.metadata.imageMetadata, err = ci.getImageMetadata(false)
+	if err != nil {
+		log.Fatalln("get image metadata got error:", err)
+	}
+
+	ci.parseLayersWithContentFromMetadata()
+	fmt.Println(len(ci.layerWithContentList))
+
+	if err := ci.parseMetadata(true, true); err != nil {
+		log.Fatalln("333333333333")
+	}
+
+	ci.parseLayersWithContentFromMetadata()
+	fmt.Println(len(ci.layerWithContentList))
+
+	nonNilLayerCnt := 0
+	for _, layer := range ci.metadata.imageMetadata.Layers {
+		if layer.Digest != "" {
+			nonNilLayerCnt++
+		}
+	}
+	fmt.Println(nonNilLayerCnt)
+}
+
 func TestPullSaveExtractImage(t *testing.T) {
-	ci, err := NewCurrentImage("mongo:latest")
+
+	ci, err := NewCurrentImage("library/groovy:latest")
 	if err != nil {
 		log.Fatalln("create new current image got error:", err)
 	}

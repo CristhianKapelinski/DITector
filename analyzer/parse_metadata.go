@@ -16,7 +16,7 @@ type ImageUpdatedAfterTagError struct {
 }
 
 func (e *ImageUpdatedAfterTagError) Error() string {
-	return fmt.Sprint("images of tag: %s may have updated after tag", e.tagName)
+	return fmt.Sprintf("images of tag: %s may have updated after tag", e.tagName)
 }
 
 func isImageUpdatedAfterTagError(e error) bool {

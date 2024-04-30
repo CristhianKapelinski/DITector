@@ -13,7 +13,6 @@ import (
 	"github.com/Musso12138/docker-scan/scripts"
 	"github.com/Musso12138/docker-scan/server"
 	"github.com/spf13/cobra"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 var logLevelStr string
@@ -49,22 +48,6 @@ var RootCmd = &cobra.Command{
 		// 仅用作测试
 		myutils.Logger.Info("start test")
 		beginTime := time.Now()
-
-		filter := bson.M{"namespace": "library", "repository_name": "bash", "tag_name": "5.2"}
-		qb, _ := json.Marshal(filter)
-		qs := string(qb)
-		fmt.Println(qs)
-
-		if err := scripts.ExportMongoDocJSON(
-			myutils.GlobalConfig.MongoConfig.URI,
-			myutils.GlobalConfig.MongoConfig.Database,
-			myutils.GlobalConfig.MongoConfig.Collections.ImageResults,
-			qs,
-			"test_exported.json"); err != nil {
-			fmt.Println("export image results of image failed with:", err.Error())
-		} else {
-			fmt.Println("export image results of image success")
-		}
 
 		myutils.Logger.Info("finish test")
 		fmt.Println("time used:", time.Since(beginTime))
