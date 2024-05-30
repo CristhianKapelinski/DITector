@@ -63,6 +63,19 @@ var crawlCmd = &cobra.Command{
 	Short: "crawl metadata of repositories and images from specific Docker registry, now supports Docker Hub only",
 }
 
+var calculateCmd = &cobra.Command{
+	Use:   "calculate",
+	Short: "calculate node id of specific image",
+	Run: func(cmd *cobra.Command, args []string) {
+		digest, _ := cmd.Flags().GetString("digest")
+		img, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(digest)
+		if err != nil {
+			log.Fatalln("mongo find image", digest, "failed with:", err)
+		}
+		fmt.Println(myutils.CalculateImageNodeId(img))
+	},
+}
+
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "read data from crawl results, store metadata to MongoDB, and build dependency graph with Neo4j",
@@ -219,6 +232,9 @@ func init() {
 	// RootCmd
 	RootCmd.PersistentFlags().StringP("config", "c", "config.yaml", "path to config file")
 	RootCmd.PersistentFlags().StringVarP(&logLevelStr, "log_level", "l", "debug", "log level: debug, info, warn, error, critical")
+
+	// calculateCmd
+	calculateCmd.Flags().String("digest", "", "digest of the image to calculate the node id in Neo4j")
 
 	// buildCmd
 	buildCmd.Flags().String("format", "mongo", "format of the source data, including: json, mongo")
