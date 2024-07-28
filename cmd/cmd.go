@@ -207,6 +207,15 @@ var executeCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalln("calculate-node-weights got error:", err)
 			}
+		case "count-images-with-downstream":
+			file, _ := cmd.Flags().GetString("file")
+			output, _ := cmd.Flags().GetString("output")
+			form, _ := cmd.Flags().GetString("format")
+			fmt.Println("count-images-with-downstream with file:", file, "output:", output, "format:", form)
+			err := scripts.CountNodeWithDownstreamImages(file, output, form)
+			if err != nil {
+				log.Fatalln("count-images-with-downstream got error:", err)
+			}
 		case "supplement-image-analysis":
 			page, _ := cmd.Flags().GetInt64("page")
 			pageSize, _ := cmd.Flags().GetInt64("page_size")
@@ -223,6 +232,22 @@ var executeCmd = &cobra.Command{
 			err := scripts.ExportImgResultsJSON(file, output)
 			if err != nil {
 				log.Fatalln("export-mongo-result-docs got error:", err)
+			}
+		case "check-same-node-as-high-dependent-images":
+			file, _ := cmd.Flags().GetString("file")
+			output, _ := cmd.Flags().GetString("output")
+			fmt.Printf("begin to check-same-node-as-high-dependent-images with arguements, file: %s, output: %s\n", file, output)
+			err := scripts.CheckSameNodeAsHighDependentImages(file, output)
+			if err != nil {
+				log.Fatalln("check-same-node-as-high-dependent-images got error:", err)
+			}
+		case "find-earliest-updated-images":
+			file, _ := cmd.Flags().GetString("file")
+			output, _ := cmd.Flags().GetString("output")
+			fmt.Printf("begin to find-earliest-updated-images with arguements, file: %s, output: %s\n", file, output)
+			err := scripts.FindEarliestUpdatedImgs(file, output)
+			if err != nil {
+				log.Fatalln("find-earliest-updated-images got error:", err)
 			}
 		}
 	},
@@ -258,6 +283,7 @@ func init() {
 	executeCmd.Flags().Bool("partial", false, "only analyze metadata of the Docker images")
 	executeCmd.Flags().StringP("file", "f", "", "input file for scripts, like batch-analyze")
 	executeCmd.Flags().StringP("output", "o", "", "output file for scripts")
+	executeCmd.Flags().String("format", "", "json")
 	executeCmd.Flags().Int64("threshold", 1000000, "pull_count threshold to analyze an image")
 	executeCmd.Flags().Int("tags", 3, "the top tag-num recently updated tags to analyze")
 	executeCmd.Flags().Int64("page", 1, "start page for analyzing multiple repos from MongoDB")
@@ -266,6 +292,7 @@ func init() {
 	// 向root命令中注册命令
 	RootCmd.AddCommand(
 		crawlCmd,
+		calculateCmd,
 		buildCmd,
 		analyzeCmd,
 		startCmd,

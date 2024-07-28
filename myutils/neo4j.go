@@ -329,45 +329,53 @@ func findLayerByNodeIdFunc(ctx context.Context, nodeId string) neo4j.ManagedTran
 	}
 }
 
-//// FindRawLayerByDigest TODO: 待测试
-//func (neo4jDriver *MyNeo4j) FindRawLayerByDigest(digest string) (*LayerResult, error) {
-//	ctx := context.Background()
-//	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-//	defer session.Close(ctx)
-//
-//	layerNode, err := session.ExecuteRead(ctx, findRawLayerByDigestFunc(ctx, digest))
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	prop := GetNodeProps(layerNode.(*neo4j.Record))
-//	if scanned, ok := prop["scanned"]; ok {
-//		if !scanned.(bool) {
-//			return nil, &LayerNotScannedError{Msg: digest}
-//		}
-//
-//		lr := &LayerResult{}
-//		if analyzedFiles, ok := prop["analyzed_files"]; ok {
-//			fmt.Println("RawLayer", digest, "analyzed_files:", analyzedFiles)
-//			lr.AnalyzedFiles = analyzedFiles.([]string)
-//		}
-//		if fileIssues, ok := prop["file_issues"]; ok {
-//			fmt.Println("RawLayer", digest, "file_issues:", fileIssues)
-//			lr.FileIssues = fileIssues.(map[string][]*Issue)
-//		}
-//
-//		return lr, nil
-//	}
-//
-//	return nil, &LayerNotExistsError{Msg: digest}
-//}
+// FindSrcImgNameByDigest 根据layer digest找到更有可能是创建该层的源镜像的名称
+// 返回的[]string包含由RawLayer相距最近的每个Layer节点下游的第一个包含images属性的节点的全部镜像名称
+func (neo4jDriver *MyNeo4j) FindSrcImgNamesByDigest(digest string) ([]string, error) {
+	ctx := context.Background()
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
 
-// findRawLayerByDigestFunc 返回可用于session.ExecuteRead的func，find RawLayer Nodes according to digest
-func findRawLayerByDigestFunc(ctx context.Context, digest string) neo4j.ManagedTransactionWork {
+	layerNodes, err := session.ExecuteRead(ctx, findLayerNodesByRawLayerDigestFunc(ctx, digest))
+	if err != nil {
+		Logger.Error("Neo4j find Layer nodes IS_SAME_AS RawLayer node with digest", digest, "failed with:", err.Error())
+		return nil, err
+	}
+
+	ans := []string{}
+	for _, layerNode := range layerNodes.([]*neo4j.Record) {
+		prop := GetNodeProps(layerNode)
+		if nodeId, ok := prop["id"]; ok {
+			Logger.Debug("find Layer node id", nodeId.(string), "of layer digest", digest)
+			if nodeId == "" {
+				Logger.Error("got empty node id for Layer node IS_SAME_AS RawLayer node with digest:", digest)
+				continue
+			}
+
+			firstImgNames, e := neo4jDriver.FindFirstDownstreamImagesByNodeId(nodeId.(string))
+			if e != nil {
+				Logger.Error("find first image name list for Layer node id", nodeId.(string), "fail with error:", e.Error())
+				continue
+			}
+
+			ans = append(ans, firstImgNames...)
+		} else {
+			Logger.Error(fmt.Sprintf("Layer node have keys: %s", layerNode.Keys))
+			continue
+		}
+	}
+
+	return ans, nil
+}
+
+// findLayerNodesByRawLayerDigestFunc 返回可用于session.ExecuteRead的func
+// 根据digest找到指定RawLayer关联的全部Layer节点
+func findLayerNodesByRawLayerDigestFunc(ctx context.Context, digest string) neo4j.ManagedTransactionWork {
 
 	return func(tx neo4j.ManagedTransaction) (any, error) {
 		var result, err = tx.Run(ctx,
-			"MATCH (l:RawLayer {id: $digest}) RETURN l",
+			"MATCH (l:Layer)-[:IS_SAME_AS]-(rl:RawLayer {id: $digest}) "+
+				"RETURN l",
 			map[string]any{"digest": digest},
 		)
 
@@ -375,9 +383,9 @@ func findRawLayerByDigestFunc(ctx context.Context, digest string) neo4j.ManagedT
 			return nil, err
 		}
 
-		record := result.Record()
+		records, err := result.Collect(ctx)
 
-		return record, nil
+		return records, err
 	}
 }
 
@@ -462,6 +470,63 @@ func findUpstreamNodesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.Man
 				"WITH l "+
 				"MATCH (up:Layer)-[:IS_BASE_OF*]->(l) "+
 				"RETURN up",
+			map[string]any{"idHash": nodeId},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		records, err := result.Collect(ctx)
+
+		return records, err
+	}
+}
+
+// FindFirstDownstreamImagesByNodeId 根据hash(1-2-5)发现Layer节点的第一批下游镜像，组织为[]string并返回
+func (neo4jDriver *MyNeo4j) FindFirstDownstreamImagesByNodeId(nodeId string) ([]string, error) {
+	result := make([]string, 0)
+	imageSet := make(map[string]struct{})
+
+	ctx := context.TODO()
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	nodes, err := session.ExecuteRead(ctx, findFirstDownstreamNodesWithImagesByNodeIdFunc(ctx, nodeId))
+	if err != nil {
+		Logger.Error("Neo4j find first downstream Layer nodes with images by node id", nodeId, "failed with:", err.Error())
+		return nil, err
+	}
+
+	for _, node := range nodes.([]*neo4j.Record) {
+		prop := GetNodeProps(node)
+		if imagesList, ok := prop["images"]; ok && len(imagesList.([]interface{})) > 0 {
+			for _, imageName := range imagesList.([]interface{}) {
+				strName := imageName.(string)
+				imageSet[strName] = struct{}{}
+			}
+		}
+	}
+
+	for k, _ := range imageSet {
+		result = append(result, k)
+	}
+
+	return result, nil
+}
+
+// findFirstDownstreamNodesWithImagesByNodeIdFunc 返回可用于session.ExecuteRead的func，
+// 查询返回images属性的第一个非空的下游Layer节点according to hash(1-2-5)
+func findFirstDownstreamNodesWithImagesByNodeIdFunc(ctx context.Context, nodeId string) neo4j.ManagedTransactionWork {
+
+	return func(tx neo4j.ManagedTransaction) (any, error) {
+		var result, err = tx.Run(ctx,
+			"MATCH (l:Layer {id: $idHash}) "+
+				"WITH l "+
+				"MATCH (l)-[:IS_BASE_OF*]->(down:Layer) "+
+				"WHERE size(down.images)>0 "+
+				"RETURN down "+
+				"LIMIT 1",
 			map[string]any{"idHash": nodeId},
 		)
 
