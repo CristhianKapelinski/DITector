@@ -39,6 +39,7 @@ var RootCmd = &cobra.Command{
 		configFile, _ := cmd.Flags().GetString("config")
 		if logLevel, ok := validLogLevel[logLevelStr]; ok {
 			myutils.LoadConfigFromFile(configFile, logLevel)
+			// 初始化analyzer
 			analyzer.DefaultAnalyzer, analyzer.DefaultAnalyzerE = analyzer.NewImageAnalyzerGlobalConfig()
 		} else {
 			log.Fatalln("invalid log_level:", logLevelStr)

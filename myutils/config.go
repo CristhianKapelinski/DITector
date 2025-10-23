@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -90,9 +91,15 @@ var GlobalDBClient struct {
 }
 
 func LoadConfigFromFile(configFilepath string, logLevel int) {
-	// 获取程序根目录
-	_, filename, _, _ := runtime.Caller(0)
-	root := path.Dir(path.Dir(filename))
+	// 获取程序根目录，这个好像不太对，换了一个实现
+	// _, filename, _, _ := runtime.Caller(0)
+	// root := path.Dir(path.Dir(filename))
+
+	root, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		log.Fatalln("[ERROR] get executable dir path failed, got err:", err)
+	}
+	// fmt.Println(root)
 
 	// 加载config.yaml
 	fb, err := os.ReadFile(configFilepath)
@@ -102,6 +109,8 @@ func LoadConfigFromFile(configFilepath string, logLevel int) {
 	if err = yaml.Unmarshal(fb, &GlobalConfig); err != nil {
 		log.Fatalf("[ERROR] Json failed to unmarshal %s with err: %v\n", configFilepath, err)
 	}
+
+	fmt.Println(GlobalConfig.MongoConfig.URI, GlobalConfig.MongoConfig.Database, GlobalConfig.MongoConfig.Collections)
 
 	// 配置最大线程数
 	if GlobalConfig.MaxThread > 0 && GlobalConfig.MaxThread < runtime.NumCPU() {
@@ -149,6 +158,9 @@ func relativeToAbsoluteConfig(root string) {
 	}
 	if !strings.HasPrefix(GlobalConfig.RulesConfig.SensitiveParamRulesFile, "/") {
 		GlobalConfig.RulesConfig.SensitiveParamRulesFile = path.Join(root, GlobalConfig.RulesConfig.SensitiveParamRulesFile)
+	}
+	if !strings.HasPrefix(GlobalConfig.NSSLLicenseConfig.Filepath, "/") {
+		GlobalConfig.NSSLLicenseConfig.Filepath = path.Join(root, GlobalConfig.NSSLLicenseConfig.Filepath)
 	}
 }
 

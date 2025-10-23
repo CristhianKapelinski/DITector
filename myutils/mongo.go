@@ -54,7 +54,7 @@ func NewMongo(uri, database, repositories, tags, images, imgResults, layerResult
 	mymongo.TagColl = mymongo.DockerHubDB.Collection(tags)
 	mymongo.ImgColl = mymongo.DockerHubDB.Collection(images)
 	mymongo.ImgResultColl = mymongo.DockerHubDB.Collection(imgResults)
-	mymongo.LayerResultColl = mymongo.DockerHubDB.Collection(layerResults)
+	// mymongo.LayerResultColl = mymongo.DockerHubDB.Collection(layerResults)
 	mymongo.UserColl = mymongo.DockerHubDB.Collection(user)
 
 	// TODO: 初次使用建立索引
@@ -337,7 +337,7 @@ func (m *MyMongo) createLayerResultCollIndexes() (err error) {
 }
 
 func (m *MyMongo) createUserCollIndexes() (err error) {
-	indexView := m.LayerResultColl.Indexes()
+	indexView := m.UserColl.Indexes()
 
 	var model mongo.IndexModel
 
