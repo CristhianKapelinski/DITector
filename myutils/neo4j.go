@@ -325,7 +325,7 @@ func findLayerNodesByRawLayerDigestFunc(ctx context.Context, digest string) neo4
 
 	return func(tx neo4j.ManagedTransaction) (any, error) {
 		var result, err = tx.Run(ctx,
-			"MATCH (l:Layer)-[:IS_SAME_AS]-(rl:RawLayer {id: $digest}) "+
+			"MATCH (l:Layer)-[:IS_SAME_AS]-(rl:RawLayer {digest: $digest}) "+
 				"RETURN l",
 			map[string]any{"digest": digest},
 		)

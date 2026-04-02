@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,12 +35,16 @@ type IdentityManager struct {
 func LoadIdentities(proxyFile, accountFile string) (*IdentityManager, error) {
 	im := &IdentityManager{}
 
-	// Load Proxies (simple text file with one proxy per line)
+	// Load Proxies (one proxy URL per line, e.g. "http://user:pass@host:port")
 	if proxyFile != "" {
-		_, err := os.ReadFile(proxyFile)
+		data, err := os.ReadFile(proxyFile)
 		if err == nil {
-			// In a real scenario, you'd parse proxies here
-			fmt.Println("Loaded proxies from", proxyFile)
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				if line = strings.TrimSpace(line); line != "" {
+					im.Proxies = append(im.Proxies, line)
+				}
+			}
+			fmt.Printf("Loaded %d proxies from %s\n", len(im.Proxies), proxyFile)
 		}
 	}
 

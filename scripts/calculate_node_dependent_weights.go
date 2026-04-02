@@ -90,28 +90,17 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 			var tagDocs []*myutils.Tag
 
 			if repoDoc.Namespace == "library" {
-				continue
-				// library镜像的tag全量获取
+				// Official library images: fetch all tags for full coverage.
 				tagDocs, err = myutils.GlobalDBClient.Mongo.FindAllTagsByRepoName(repoDoc.Namespace, repoDoc.Name)
 				if err != nil {
-					myutils.Logger.Error(fmt.Sprintf("find all tags list of repository %s/%s from MongoDB failed with: %s",
-						repoDoc.Namespace, repoDoc.Name, err))
+					myutils.Logger.Error(fmt.Sprintf("find all tags for library/%s failed: %s", repoDoc.Name, err))
 					continue
 				}
-				// } else if repoDoc.PullCount > pullCountThreshold {
-				// 	// 下载量大的镜像获取前100个tag
-				// 	tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, 1, 100)
-				// 	if err != nil {
-				// 		myutils.Logger.Error(fmt.Sprintf("find tags list for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s",
-				// 			repoDoc.Namespace, repoDoc.Name, 1, 100, err))
-				// 		continue
-				// 	}
-				// } else {
 			} else {
-				// 其他镜像获取pageSize个
+				// Community images: fetch the most-recently-updated pageSize tags.
 				tagDocs, err = myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repoDoc.Namespace, repoDoc.Name, tagPage, int64(pageSize))
 				if err != nil {
-					myutils.Logger.Error(fmt.Sprintf("find tags for repository %s/%s in MongoDB page: %d, pagesize: %d, got error: %s", repoDoc.Namespace, repoDoc.Name, tagPage, pageSize, err))
+					myutils.Logger.Error(fmt.Sprintf("find tags for %s/%s page %d size %d failed: %s", repoDoc.Namespace, repoDoc.Name, tagPage, pageSize, err))
 					continue
 				}
 			}

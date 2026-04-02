@@ -4,11 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/NSSL-SJTU/DITector/myutils"
 )
+
+// parseRepoName splits "namespace/name" from the V2 API repo_name field.
+// Official images (e.g. "nginx") are treated as "library/nginx".
+func parseRepoName(repoName string) (namespace, name string) {
+	parts := strings.SplitN(repoName, "/", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "library", repoName
+}
 
 // Alphabet for DFS keyword generation
 const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789-_"
@@ -93,8 +104,9 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		myutils.Logger.Warn(fmt.Sprintf("Keyword [%s] got 429. Sleeping 30s...", keyword))
-		time.Sleep(30 * time.Second)
+		myutils.Logger.Warn(fmt.Sprintf("Keyword [%s] got 429. Sleeping 60s then re-queuing...", keyword))
+		time.Sleep(60 * time.Second)
+		pc.KeywordChan <- keyword // re-enqueue so no keyword is permanently lost
 		return
 	}
 
@@ -159,12 +171,17 @@ func (pc *ParallelCrawler) processPage(url string, client *http.Client, token st
 	}
 
 	for _, v2repo := range searchRes.Repositories {
+		if v2repo.RepoName == "" {
+			continue
+		}
+		// V2 API returns repo_name as "namespace/name" (e.g. "library/nginx").
+		// repo_owner is often null for official images, so we parse from repo_name.
+		ns, name := parseRepoName(v2repo.RepoName)
 		repo := &myutils.Repository{
-			Namespace: v2repo.RepoOwner,
-			Name:      v2repo.RepoName,
+			Namespace: ns,
+			Name:      name,
 			PullCount: v2repo.PullCount,
 		}
-		if repo.Name == "" { continue }
 
 		myutils.Logger.Info(fmt.Sprintf("Discovered repository: %s/%s (%d pulls)", repo.Namespace, repo.Name, repo.PullCount))
 		if myutils.GlobalDBClient.MongoFlag {
