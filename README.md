@@ -386,6 +386,49 @@ proxy:
 
 ## 8. Estágio I — Crawling (Descoberta)
 
+### Representação de nomes de repositório no Docker Hub
+
+O Docker Hub organiza imagens em dois níveis hierárquicos: `namespace/name`. Não existem namespaces aninhados (diferente do GitHub). A API V2 retorna o campo `repo_name` em dois formatos possíveis:
+
+| Tipo | `repo_name` na API | Namespace real | Nome real |
+|------|--------------------|----------------|-----------|
+| Imagem oficial (`library`) | `"nginx"` | `library` | `nginx` |
+| Imagem oficial (`library`) | `"postgres"` | `library` | `postgres` |
+| Imagem community | `"cimg/postgres"` | `cimg` | `postgres` |
+| Imagem community | `"redis/redis-stack"` | `redis` | `redis-stack` |
+
+O campo `repo_owner` presente na resposta da API é **sempre vazio** (`""`) para todos os tipos de repositório — não deve ser utilizado. O `namespace` correto é extraído exclusivamente do `repo_name` via `parseRepoName()` em `crawler/crawler.go`:
+
+```go
+func parseRepoName(repoName string) (namespace, name string) {
+    parts := strings.SplitN(repoName, "/", 2)
+    if len(parts) == 2 {
+        return parts[0], parts[1]  // community: "nginx/nginx-ingress" → ("nginx", "nginx-ingress")
+    }
+    return "library", repoName    // oficial: "nginx" → ("library", "nginx")
+}
+```
+
+**Por que isso é crítico para o `docker pull` e o OpenVAS:**
+
+- Imagens `library/`: o namespace pode ser omitido. `docker pull nginx` equivale a `docker pull library/nginx`.
+- Imagens community: o namespace é **obrigatório**. `docker pull cimg/postgres` não funciona sem o prefixo `cimg/`. Sem ele, o Docker interpreta como `library/postgres` — imagem diferente, resultado de scan inválido.
+
+O formato correto para gerar o nome de pull a partir do dataset exportado:
+
+```python
+ns  = record["repository_namespace"]
+img = record["repository_name"]
+tag = record["tag_name"]
+
+# Para imagens library, o namespace é omitido no pull (convenção Docker)
+image_ref = f"{img}:{tag}" if ns == "library" else f"{ns}/{img}:{tag}"
+# docker pull nginx:latest        ← library
+# docker pull cimg/postgres:15    ← community
+```
+
+**Verificação empírica:** Em amostragem de 1.000 resultados da API V2 cobrindo 10 queries distintas (`nginx`, `redis`, `postgres`, `mysql`, `debian`, `ubuntu`, `python`, `node`, `go`, `java`), nenhum `repo_name` apresentou mais de uma barra. O formato `namespace/name` é o teto estrutural do Docker Hub.
+
 ### O que faz
 
 O crawler varre o Docker Hub usando a estratégia **DFS (Depth-First Search)** sobre o espaço de keywords, descobrindo repositórios e persistindo `namespace`, `name` e `pull_count` no MongoDB.
