@@ -72,6 +72,7 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 	// 1. Check first page to get count
 	url := myutils.GetRegURL(keyword, "community", "1", "100")
 	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	if token != "" {
 		req.Header.Add("Authorization", "JWT "+token)
 	}
@@ -119,6 +120,7 @@ func (pc *ParallelCrawler) scrapeAllPages(keyword string, totalCount int, client
 
 func (pc *ParallelCrawler) processPage(url string, client *http.Client, token string) {
 	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	if token != "" {
 		req.Header.Add("Authorization", "JWT "+token)
 	}

@@ -64,7 +64,16 @@ func (im *IdentityManager) LoginDockerHub(acc *Account) error {
 		"password": acc.Password,
 	})
 
-	resp, err := http.Post(loginURL, "application/json", bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", loginURL, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	// Use a clean client for login to avoid proxy issues during auth
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
