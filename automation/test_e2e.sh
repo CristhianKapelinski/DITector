@@ -20,11 +20,11 @@ echo "[0/3] Cleaning test data..."
 # If mongosh is not installed on the host, fall back to docker exec.
 if command -v mongosh &>/dev/null; then
   mongosh localhost:27017/dockerhub_data --quiet \
-    --eval "db.repositories_data.drop(); db.tags_data.drop(); db.images_data.drop();" \
+    --eval "db.repositories_data.drop(); db.tags_data.drop(); db.images_data.drop(); db.crawler_keywords.drop();" \
     > /dev/null 2>&1 || true
 else
   docker exec ditector_mongo mongosh localhost:27017/dockerhub_data --quiet \
-    --eval "db.repositories_data.drop(); db.tags_data.drop(); db.images_data.drop();" \
+    --eval "db.repositories_data.drop(); db.tags_data.drop(); db.images_data.drop(); db.crawler_keywords.drop();" \
     > /dev/null 2>&1 || true
 fi
 rm -f "$OUTPUT"
