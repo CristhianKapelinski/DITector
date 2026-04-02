@@ -21,3 +21,4 @@ pkg/
 *result.json
 ditector
 accounts.json
+docker-scan
