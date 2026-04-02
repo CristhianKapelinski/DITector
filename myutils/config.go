@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"runtime"
 	"strings"
 
