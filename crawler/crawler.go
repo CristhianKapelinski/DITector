@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/NSSL-SJTU/DITector/myutils"
 )
@@ -143,5 +142,8 @@ func (pc *ParallelCrawler) processPage(url string, client *http.Client, token st
 				myutils.Logger.Error(fmt.Sprintf("Failed to upsert repo %s/%s: %v", repo.Namespace, repo.Name, err))
 			}
 		}
+	}
+}
+	}
 	}
 }

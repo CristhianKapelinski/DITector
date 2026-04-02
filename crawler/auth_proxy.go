@@ -35,7 +35,7 @@ func LoadIdentities(proxyFile, accountFile string) (*IdentityManager, error) {
 
 	// Load Proxies (simple text file with one proxy per line)
 	if proxyFile != "" {
-		data, err := os.ReadFile(proxyFile)
+		_, err := os.ReadFile(proxyFile)
 		if err == nil {
 			// In a real scenario, you'd parse proxies here
 			fmt.Println("Loaded proxies from", proxyFile)
