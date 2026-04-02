@@ -71,7 +71,7 @@ type V2Repository struct {
 
 type V2SearchResponse struct {
 	Count      int            `json:"count"`
-	Repositories []V2Repository `json:"summaries"`
+	Repositories []V2Repository `json:"results"`
 }
 
 func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, token string) {
