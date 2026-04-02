@@ -73,7 +73,6 @@ func StartFromMongo(page int64, pageSize int64, tagCnt int, pullCountThreshold i
 func loadReposToChannel(page int64, pageSize int64, threshold int64, ch chan *myutils.Repository) {
 	repoPage := page
 	for {
-		// Filtro de Pull Count para garantir relevância acadêmica e performance
 		filter := bson.M{"pull_count": bson.M{"$gte": threshold}}
 		repos, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(filter, repoPage, pageSize)
 		if err != nil || len(repos) == 0 {
@@ -88,10 +87,18 @@ func loadReposToChannel(page int64, pageSize int64, threshold int64, ch chan *my
 }
 
 func repoWorker(repoChan chan *myutils.Repository, jobChan chan GraphJob, tagCnt int) {
+	networkKeywords := []string{"nginx", "http", "server", "api", "db", "database", "sql", "redis", "proxy", "app"}
+
 	for repo := range repoChan {
-		// Prioriza imagens de rede (Otimização para OpenVAS)
-		// tags, err := myutils.GlobalDBClient.Mongo.FindTagsByRepoNamePaged(repo.Namespace, repo.Name, 1, int64(tagCnt))
-		// Simplificado: Busca as tags mais recentes para construir o topo do grafo
+		isNetworkRepo := false
+		lowerName := strings.ToLower(repo.Name)
+		for _, kw := range networkKeywords {
+			if strings.Contains(lowerName, kw) {
+				isNetworkRepo = true
+				break
+			}
+		}
+
 		tags, err := myutils.ReqTagsMetadata(repo.Namespace, repo.Name, 1, tagCnt)
 		if err != nil {
 			continue
@@ -106,26 +113,8 @@ func repoWorker(repoChan chan *myutils.Repository, jobChan chan GraphJob, tagCnt
 			for _, img := range imgs {
 				if img.OS == "windows" { continue }
 				
-				jobChan <- GraphJob{
-					Registry:      "docker.io",
-					RepoNamespace: repo.Namespace,
-					RepoName:      repo.Name,
-					TagName:       tag.Name,
-					ImageMeta:     img,
-				}
-			}
-		}
-	}
-}
-
-func buildGraphWorker(jobChan chan GraphJob) {
-	for job := range jobChan {
-		id := fmt.Sprintf("%s/%s/%s:%s@%s", job.Registry, job.RepoNamespace, job.RepoName, job.TagName, job.ImageMeta.Digest)
-		myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(id, job.ImageMeta)
-		myutils.Logger.Info(fmt.Sprintf("Inserido no Neo4j: %s", id))
-	}
-}
-ob{
+				if isNetworkRepo || repo.PullCount > 10000 {
+					jobChan <- GraphJob{
 						Registry:      "docker.io",
 						RepoNamespace: repo.Namespace,
 						RepoName:      repo.Name,
