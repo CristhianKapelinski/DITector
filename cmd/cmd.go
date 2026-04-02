@@ -238,6 +238,7 @@ func init() {
 	crawlCmd.Flags().IntP("workers", "w", 10, "number of parallel crawler workers")
 	crawlCmd.Flags().String("proxies", "", "path to proxies file (one per line)")
 	crawlCmd.Flags().String("accounts", "", "path to accounts JSON file")
+	crawlCmd.Flags().String("seed", "", "initial seed keyword for DFS (e.g., 'a' or 'n')")
 
 	// calculateCmd
 	calculateCmd.Flags().String("digest", "", "digest of the image to calculate the node id in Neo4j")
@@ -272,11 +273,6 @@ func init() {
 		crawlCmd,
 		calculateCmd,
 		buildCmd,
-		analyzeCmd,
-		executeCmd,
-	)
-}
-ildCmd,
 		analyzeCmd,
 		executeCmd,
 	)
