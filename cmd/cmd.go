@@ -9,6 +9,7 @@ import (
 
 	"github.com/NSSL-SJTU/DITector/analyzer"
 	"github.com/NSSL-SJTU/DITector/buildgraph"
+	"github.com/NSSL-SJTU/DITector/crawler"
 	"github.com/NSSL-SJTU/DITector/myutils"
 	"github.com/NSSL-SJTU/DITector/scripts"
 	"github.com/spf13/cobra"
@@ -63,6 +64,19 @@ var RootCmd = &cobra.Command{
 var crawlCmd = &cobra.Command{
 	Use:   "crawl",
 	Short: "crawl metadata of repositories and images from specific Docker registry, now supports Docker Hub only",
+	Run: func(cmd *cobra.Command, args []string) {
+		workers, _ := cmd.Flags().GetInt("workers")
+		proxyFile, _ := cmd.Flags().GetString("proxies")
+		accountFile, _ := cmd.Flags().GetString("accounts")
+
+		im, err := crawler.LoadIdentities(proxyFile, accountFile)
+		if err != nil {
+			log.Fatalf("Failed to load identities: %v", err)
+		}
+
+		pc := crawler.NewParallelCrawler(workers, im)
+		pc.Start()
+	},
 }
 
 var calculateCmd = &cobra.Command{
@@ -218,6 +232,11 @@ func init() {
 	// RootCmd
 	RootCmd.PersistentFlags().StringP("config", "c", "config.yaml", "path to config file")
 	RootCmd.PersistentFlags().StringVarP(&logLevelStr, "log_level", "l", "debug", "log level: debug, info, warn, error, critical")
+
+	// crawlCmd
+	crawlCmd.Flags().IntP("workers", "w", 10, "number of parallel crawler workers")
+	crawlCmd.Flags().String("proxies", "", "path to proxies file (one per line)")
+	crawlCmd.Flags().String("accounts", "", "path to accounts JSON file")
 
 	// calculateCmd
 	calculateCmd.Flags().String("digest", "", "digest of the image to calculate the node id in Neo4j")
