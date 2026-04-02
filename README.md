@@ -3,61 +3,65 @@
 ## Project Goal
 Este projeto visa realizar um **escaneamento dinâmico em larga escala** (~100.000 containers) do Docker Hub para identificar vulnerabilidades de rede usando o **OpenVAS**.
 
-A estratégia de seleção e priorização baseia-se no framework **DITector** e no artigo *"Dr. Docker: A Large-Scale Security Measurement of Docker Image Ecosystem"*.
+A estratégia de seleção e priorização baseia-se no framework **DITector** e na implementação de um crawler distribuído de alta performance.
 
 ### Metodologia de Pesquisa
-1.  **Crawling Distribuído:** Implementação de um crawler em Go altamente paralelo, capaz de utilizar múltiplos IPs (Proxy Pooling) e múltiplas contas do Docker Hub para contornar Rate Limits.
-2.  **Construção do Grafo de Dependências (IDEA):** Mapeamento de camadas de imagens no Neo4j para identificar imagens "mãe" críticas (High-Dependency Weight).
-3.  **Priorização:** Seleção de containers baseada em:
-    *   **Pull Count:** Popularidade no Docker Hub.
-    *   **Dependency Weight:** Impacto na cadeia de suprimentos (quantas imagens dependem deste container).
-    *   **Network Exposure:** Filtro de containers que possuem diretivas `EXPOSE` ou configurações de rede vulneráveis.
-4.  **Scan Dinâmico:** Automação do setup dos containers de rede e escaneamento via OpenVAS.
+1.  **Crawling Distribuído:** Crawler em Go com suporte a DFS (Depth-First Search) para varrer todos os 12M+ repositórios do Docker Hub.
+2.  **Resiliência Industrial:** Tratamento nativo de erros HTTP 429 (Rate Limit), login sincronizado e rotação de identidades.
+3.  **Priorização por Impacto:** Construção de grafo no Neo4j para selecionar imagens com maior "Dependency Weight" e "Pull Count".
+4.  **Filtro de Rede:** Identificação de containers que expõem portas (EXPOSE) para scan via OpenVAS.
 
 ---
 
 ## 🚀 Como Executar o Crawler (Modo Pesquisa)
 
-### 1. Preparação (Docker Hub Accounts)
-Crie um arquivo `accounts.json` na raiz do projeto (não commitado):
+### 1. Configuração (Importante)
+Certifique-se de que o arquivo `config.yaml` tenha as configurações de proxy vazias para conexões diretas (a menos que use um pool de proxies real):
+```yaml
+proxy:
+  http_proxy: ''
+  https_proxy: ''
+```
+
+### 2. Contas do Docker Hub
+Crie o arquivo `accounts.json` na raiz:
 ```json
 [
-  { "username": "seu_user", "password": "sua_password" }
+  { "username": "seu_user", "password": "seu_password" }
 ]
 ```
 
-### 2. Execução Distribuída (Meet-in-the-Middle)
-Divida o alfabeto entre duas ou mais máquinas para acelerar a descoberta:
-
-**Máquina 1 (GPU1 - Letra A):**
+### 3. Execução via Docker Compose (Recomendado)
+Sobe o MongoDB, Neo4j e o Crawler automaticamente:
 ```bash
-docker run -d --name ditector_gpu1 -v $(pwd):/app -w /app --network host golang:1.22 \
-go run main.go crawl --workers 50 --seed 'a' --accounts accounts.json
+docker compose up -d
 ```
 
-**Máquina 2 (A9 - Letra N):**
+### 4. Meet-in-the-Middle (Multi-Máquina)
+Para acelerar o processo entre várias máquinas, use a flag `--seed`:
+
+**Máquina 1 (Começa em A):**
 ```bash
-docker run -d --name ditector_a9 -v $(pwd):/app -w /app --network host golang:1.22 \
-go run main.go crawl --workers 50 --seed 'n' --accounts accounts.json
+go run main.go crawl --workers 20 --seed 'a' --accounts accounts.json
 ```
 
-### 3. Monitoramento dos Logs
-Para ver o crawler logando e descobrindo repositórios em tempo real:
+**Máquina 2 (Começa em N):**
 ```bash
-docker logs -f ditector_gpu1
+go run main.go crawl --workers 20 --seed 'n' --accounts accounts.json
 ```
 
 ---
 
-## Roadmap de Desenvolvimento
-- [x] Fork do repositório original.
-- [x] Implementação do Parallel DFS Crawler em Go.
-- [x] Integração com Auto-Login e Rotação de Contas.
-- [ ] Otimização do cálculo de pesos de dependência no Neo4j.
-- [ ] Script de exportação para dataset de scan do OpenVAS.
+## 📊 Monitoramento
+Acompanhe a descoberta em tempo real:
+```bash
+tail -f *.log | grep "Discovered repository"
+```
+
+Verifique a contagem no MongoDB:
+```bash
+mongosh localhost:27017/dockerhub_data --eval 'db.repositories_data.countDocuments()'
+```
 
 ---
-## Framework DITector original
-O framework original foi desenvolvido pela Shanghai Jiao Tong University para detectar cinco tipos de ameaças. Este fork foca na expansão das capacidades de crawling e no escaneamento de rede dinâmico.
-
-*Veja o [CHANGELOG.md](./CHANGELOG.md) para detalhes técnicos das mudanças.*
+*Veja o [CHANGELOG.md](./CHANGELOG.md) para detalhes técnicos das melhorias de performance e estabilidade.*
