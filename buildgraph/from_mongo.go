@@ -24,9 +24,9 @@ func StartFromMongo(page int64, pageSize int64, tagCnt int, pullCountThreshold i
 	beginTime := time.Now()
 	fmt.Println("Build paralelo iniciado em:", myutils.GetLocalNowTimeStr())
 
-	// Canais de orquestração
-	repoChan := make(chan *myutils.Repository, 1000)
-	jobChan := make(chan GraphJob, 5000)
+	// Canais de orquestração. Buffers grandes evitam bloqueio entre estágios.
+	repoChan := make(chan *myutils.Repository, 4000)
+	jobChan := make(chan GraphJob, 20000)
 	doneChan := make(chan struct{})
 
 	var wgLoad sync.WaitGroup
@@ -38,8 +38,12 @@ func StartFromMongo(page int64, pageSize int64, tagCnt int, pullCountThreshold i
 		close(repoChan)
 	}()
 
-	// 2. Repo Workers: Processam Tags e Manifestos em paralelo
-	numRepoWorkers := runtime.NumCPU() * 2
+	// 2. Repo Workers: buscam tags e manifestos via Docker Hub API (I/O bound).
+	// Escalamos muito acima de NumCPU pois a maior parte do tempo é espera de rede.
+	numRepoWorkers := runtime.NumCPU() * 16
+	if numRepoWorkers < 64 {
+		numRepoWorkers = 64
+	}
 	for i := 0; i < numRepoWorkers; i++ {
 		wgLoad.Add(1)
 		go func() {
@@ -48,8 +52,11 @@ func StartFromMongo(page int64, pageSize int64, tagCnt int, pullCountThreshold i
 		}()
 	}
 
-	// 3. Build Workers: Inserem no Neo4j
-	numBuildWorkers := runtime.NumCPU()
+	// 3. Build Workers: inserem no Neo4j (I/O bound — Bolt protocol over TCP).
+	numBuildWorkers := runtime.NumCPU() * 4
+	if numBuildWorkers < 16 {
+		numBuildWorkers = 16
+	}
 	for i := 0; i < numBuildWorkers; i++ {
 		wgBuild.Add(1)
 		go func() {
@@ -105,6 +112,10 @@ func isNetworkContainer(name string) bool {
 	return false
 }
 
+// tagConcurrency limits concurrent image-manifest fetches per repo to avoid
+// triggering per-repo rate limits on Docker Hub.
+const tagConcurrency = 4
+
 func repoWorker(repoChan chan *myutils.Repository, jobChan chan GraphJob, tagCnt int) {
 	for repo := range repoChan {
 		// Only submit to the graph if the repo passes the network heuristic.
@@ -119,52 +130,65 @@ func repoWorker(repoChan chan *myutils.Repository, jobChan chan GraphJob, tagCnt
 			continue
 		}
 
+		// Fetch image manifests for all tags in parallel. Each ReqImagesMetadata
+		// call is an independent HTTPS round-trip; serialising them wastes wall
+		// time proportional to (numTags × latency).
+		sem := make(chan struct{}, tagConcurrency)
+		var wg sync.WaitGroup
 		for _, tag := range tags {
-			imgs, err := myutils.ReqImagesMetadata(repo.Namespace, repo.Name, tag.Name)
-			if err != nil {
-				continue
-			}
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(t *myutils.Tag) {
+				defer wg.Done()
+				defer func() { <-sem }()
 
-			// Persist image metadata to MongoDB so the rank stage (Stage III)
-			// can compute Neo4j node IDs without live API calls.
-			for _, img := range imgs {
-				if myutils.GlobalDBClient.MongoFlag {
-					if err := myutils.GlobalDBClient.Mongo.UpdateImage(img); err != nil {
-						myutils.Logger.Error(fmt.Sprintf("UpdateImage %s failed: %v", img.Digest, err))
+				imgs, err := myutils.ReqImagesMetadata(repo.Namespace, repo.Name, t.Name)
+				if err != nil {
+					return
+				}
+
+				// Persist image metadata to MongoDB so Stage III can compute
+				// Neo4j node IDs without live API calls.
+				for _, img := range imgs {
+					if myutils.GlobalDBClient.MongoFlag {
+						if err := myutils.GlobalDBClient.Mongo.UpdateImage(img); err != nil {
+							myutils.Logger.Error(fmt.Sprintf("UpdateImage %s failed: %v", img.Digest, err))
+						}
 					}
 				}
-			}
 
-			// Persist tag to MongoDB (with its Images array set).
-			// This is required by calculate_node_dependent_weights loadDataFromMongo.
-			tag.Images = make([]myutils.ImageInTag, 0, len(imgs))
-			for _, img := range imgs {
-				tag.Images = append(tag.Images, myutils.ImageInTag{
-					Architecture: img.Architecture,
-					OS:           img.OS,
-					Digest:       img.Digest,
-					Size:         img.Size,
-				})
-			}
-			if myutils.GlobalDBClient.MongoFlag {
-				if err := myutils.GlobalDBClient.Mongo.UpdateTag(tag); err != nil {
-					myutils.Logger.Error(fmt.Sprintf("UpdateTag %s/%s:%s failed: %v", repo.Namespace, repo.Name, tag.Name, err))
+				// Persist tag to MongoDB (with its Images array populated).
+				// Required by calculate_node_dependent_weights loadDataFromMongo.
+				t.Images = make([]myutils.ImageInTag, 0, len(imgs))
+				for _, img := range imgs {
+					t.Images = append(t.Images, myutils.ImageInTag{
+						Architecture: img.Architecture,
+						OS:           img.OS,
+						Digest:       img.Digest,
+						Size:         img.Size,
+					})
 				}
-			}
+				if myutils.GlobalDBClient.MongoFlag {
+					if err := myutils.GlobalDBClient.Mongo.UpdateTag(t); err != nil {
+						myutils.Logger.Error(fmt.Sprintf("UpdateTag %s/%s:%s failed: %v", repo.Namespace, repo.Name, t.Name, err))
+					}
+				}
 
-			for _, img := range imgs {
-				if img.OS == "windows" {
-					continue
+				for _, img := range imgs {
+					if img.OS == "windows" {
+						continue
+					}
+					jobChan <- GraphJob{
+						Registry:      "docker.io",
+						RepoNamespace: repo.Namespace,
+						RepoName:      repo.Name,
+						TagName:       t.Name,
+						ImageMeta:     img,
+					}
 				}
-				jobChan <- GraphJob{
-					Registry:      "docker.io",
-					RepoNamespace: repo.Namespace,
-					RepoName:      repo.Name,
-					TagName:       tag.Name,
-					ImageMeta:     img,
-				}
-			}
+			}(tag)
 		}
+		wg.Wait()
 	}
 }
 

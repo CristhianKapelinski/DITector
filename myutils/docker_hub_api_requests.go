@@ -15,12 +15,18 @@ import (
 // 创建一个文件用于记录tag数目过多的repo名称（目前以10000为阈值）
 var repoNameWithManyTagsFile *RepoNameRecordFile
 
-// 创建一个通用的client，用于请求Docker Hub资源
-// 是否能够修复socket: open too many files？？？？？？
+// httpClient is shared across all goroutines. Keep-alives enabled so TCP
+// connections are reused — critical for throughput since each new connection
+// requires a TCP handshake + TLS negotiation (~100-300ms each).
 var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
 	Transport: &http.Transport{
-		DisableKeepAlives: true, // 疑似可以解决resp 0 tag问题，需要后续观察
-		Proxy:             http.ProxyFromEnvironment,
+		Proxy:               http.ProxyFromEnvironment,
+		MaxIdleConns:        300,
+		MaxIdleConnsPerHost: 50,
+		MaxConnsPerHost:     50,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  false,
 	},
 }
 

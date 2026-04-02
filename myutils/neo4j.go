@@ -82,19 +82,29 @@ func NewNeo4jDriver(target, username, password string, initFlag bool) (*MyNeo4j,
 	return ret, err
 }
 
-// InsertImageToNeo4j 将镜像插入到neo4j数据库中，imgName要求为registry/namespace/repository:tag@digest的格式
+// layerRecord holds the precomputed IDs and data needed to insert one layer.
+// IDs are computed locally (pure SHA256 chains) before any network call.
+type layerRecord struct {
+	prevID string
+	currID string
+	layer  Layer
+}
+
+// InsertImageToNeo4j inserts an image's full layer chain into Neo4j.
+//
+// All layer IDs are computed locally first (no I/O). Then the entire chain is
+// written in a SINGLE transaction — one BEGIN/COMMIT round-trip regardless of
+// how many layers the image has. This reduces latency from O(N) round-trips to
+// O(1) per image.
+//
+// imgName format: registry/namespace/repository:tag@digest
 func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(imgName string, image *Image) {
-	// 创建一个neo4j session
 	ctx := context.Background()
-	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
 
-	// 初始化变量
-	preID := "" // 用于存储上一个镜像层对应Layer节点的ID
-
-	// 遍历镜像层
+	// 1. Precompute all IDs locally — pure CPU, no network.
+	records := make([]layerRecord, 0, len(image.Layers))
+	preID := ""
 	for i, layer := range image.Layers {
-		// 有文件内容的层基于digest计算，没有文件内容的层基于命令计算
 		dig := ""
 		if layer.Digest != "" {
 			dig = Sha256Str(layer.Digest)
@@ -105,23 +115,33 @@ func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(imgName string, image *Image) {
 			Logger.Error(fmt.Sprintf("digest of layer %d of image %s still none after calculating SHA256", i, imgName))
 			return
 		}
-
-		// 计算当前层的Layer节点ID
 		currID := Sha256Str(preID + dig)
-
-		// 将当前Layer节点存储到数据库
-		if _, err := session.ExecuteWrite(ctx, addNewLayerFunc(ctx, preID, currID, layer)); err != nil {
-			Logger.Error(fmt.Sprintf("insert layer %d of image %s failed with: %s", i, imgName, err))
-			return
-		}
-
+		records = append(records, layerRecord{prevID: preID, currID: currID, layer: layer})
 		preID = currID
 	}
-
-	// 将image name放到最后一层的Layer节点上
-	if _, err := session.ExecuteWrite(ctx, addImageToLayerFunc(ctx, imgName, preID)); err != nil {
-		Logger.Error(fmt.Sprintf("insert name of image %s failed with: %s", imgName, err))
+	if len(records) == 0 {
 		return
+	}
+
+	// 2. Write all layers + final image-name tag in ONE transaction.
+	session := neo4jDriver.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		for i, r := range records {
+			work := addNewLayerFunc(ctx, r.prevID, r.currID, r.layer)
+			if _, err := work(tx); err != nil {
+				return nil, fmt.Errorf("layer %d: %w", i, err)
+			}
+		}
+		work := addImageToLayerFunc(ctx, imgName, preID)
+		if _, err := work(tx); err != nil {
+			return nil, fmt.Errorf("addImageToLayer: %w", err)
+		}
+		return nil, nil
+	})
+	if err != nil {
+		Logger.Error(fmt.Sprintf("insert image %s failed: %s", imgName, err))
 	}
 }
 

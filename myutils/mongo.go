@@ -389,6 +389,27 @@ func (m *MyMongo) UpdateRepository(repoMeta *Repository) error {
 	return err
 }
 
+// BulkUpsertRepositories inserts or updates a batch of repositories in a single
+// MongoDB round-trip using an unordered bulk write. This is ~10-50× faster than
+// calling UpdateRepository in a loop when processing a full search results page.
+func (m *MyMongo) BulkUpsertRepositories(repos []*Repository) error {
+	if len(repos) == 0 {
+		return nil
+	}
+	models := make([]mongo.WriteModel, 0, len(repos))
+	for _, r := range repos {
+		filter := bson.M{"namespace": r.Namespace, "name": r.Name}
+		update := bson.M{"$set": r}
+		models = append(models, mongo.NewUpdateOneModel().
+			SetFilter(filter).
+			SetUpdate(update).
+			SetUpsert(true))
+	}
+	opts := options.BulkWrite().SetOrdered(false) // unordered = parallel execution on server
+	_, err := m.RepoColl.BulkWrite(context.TODO(), models, opts)
+	return err
+}
+
 func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, error) {
 	rMeta := new(Repository)
 

@@ -11,6 +11,11 @@ import (
 	"github.com/NSSL-SJTU/DITector/myutils"
 )
 
+// pageConcurrency controls how many pages of a single keyword are fetched in
+// parallel. Kept conservative (5) to stay under Docker Hub rate limits while
+// still being ~5× faster than serial pagination.
+const pageConcurrency = 5
+
 // parseRepoName splits "namespace/name" from the V2 API repo_name field.
 // Official images (e.g. "nginx") are treated as "library/nginx".
 func parseRepoName(repoName string) (namespace, name string) {
@@ -86,9 +91,6 @@ type V2SearchResponse struct {
 }
 
 func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, token string) {
-	// Add a small delay between keywords to avoid 429
-	time.Sleep(500 * time.Millisecond)
-
 	url := myutils.GetV2SearchURL(keyword, 1, 100)
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -137,13 +139,22 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 
 func (pc *ParallelCrawler) scrapeAllPages(keyword string, totalCount int, client *http.Client, token string) {
 	totalPages := (totalCount / 100) + 1
-	if totalPages > 100 { totalPages = 100 }
-
-	for page := 1; page <= totalPages; page++ {
-		url := myutils.GetV2SearchURL(keyword, page, 100)
-		pc.processPage(url, client, token)
-		time.Sleep(200 * time.Millisecond) // Pagination delay
+	if totalPages > 100 {
+		totalPages = 100
 	}
+
+	sem := make(chan struct{}, pageConcurrency)
+	var wg sync.WaitGroup
+	for page := 1; page <= totalPages; page++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(p int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			pc.processPage(myutils.GetV2SearchURL(keyword, p, 100), client, token)
+		}(page)
+	}
+	wg.Wait()
 }
 
 func (pc *ParallelCrawler) processPage(url string, client *http.Client, token string) {
@@ -170,6 +181,7 @@ func (pc *ParallelCrawler) processPage(url string, client *http.Client, token st
 		return
 	}
 
+	repos := make([]*myutils.Repository, 0, len(searchRes.Repositories))
 	for _, v2repo := range searchRes.Repositories {
 		if v2repo.RepoName == "" {
 			continue
@@ -177,17 +189,17 @@ func (pc *ParallelCrawler) processPage(url string, client *http.Client, token st
 		// V2 API returns repo_name as "namespace/name" (e.g. "library/nginx").
 		// repo_owner is often null for official images, so we parse from repo_name.
 		ns, name := parseRepoName(v2repo.RepoName)
-		repo := &myutils.Repository{
+		repos = append(repos, &myutils.Repository{
 			Namespace: ns,
 			Name:      name,
 			PullCount: v2repo.PullCount,
-		}
-
-		myutils.Logger.Info(fmt.Sprintf("Discovered repository: %s/%s (%d pulls)", repo.Namespace, repo.Name, repo.PullCount))
+		})
+	}
+	if len(repos) > 0 {
+		myutils.Logger.Debug(fmt.Sprintf("Page discovered %d repos", len(repos)))
 		if myutils.GlobalDBClient.MongoFlag {
-			err := myutils.GlobalDBClient.Mongo.UpdateRepository(repo)
-			if err != nil {
-				myutils.Logger.Error(fmt.Sprintf("Failed to update repo %s/%s: %v", repo.Namespace, repo.Name, err))
+			if err := myutils.GlobalDBClient.Mongo.BulkUpsertRepositories(repos); err != nil {
+				myutils.Logger.Error(fmt.Sprintf("BulkUpsert failed: %v", err))
 			}
 		}
 	}
