@@ -59,8 +59,8 @@ func NewParallelCrawler(workers int, im *IdentityManager) *ParallelCrawler {
 	pc := &ParallelCrawler{
 		WorkerCount: workers,
 		KeywordChan: make(chan string, 1000000),
-		ScrapeChan:  make(chan ScrapeTask, 1000000), // Huge buffer
-		RepoChan:    make(chan *myutils.Repository, 500000), // Massive buffer
+		ScrapeChan:  make(chan ScrapeTask, 1000000),
+		RepoChan:    make(chan *myutils.Repository, 100000),
 		IM:          im,
 	}
 	pc.loadCrawledKeywords()
@@ -89,8 +89,8 @@ func (pc *ParallelCrawler) loadCrawledKeywords() {
 
 func (pc *ParallelCrawler) repoWriter(ctx context.Context, done chan struct{}) {
 	defer close(done)
-	buffer := make([]*myutils.Repository, 0, 5000) // 5x larger batch
-	ticker := time.NewTicker(5 * time.Second)
+	buffer := make([]*myutils.Repository, 0, 1000)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	flush := func() {
@@ -108,7 +108,7 @@ func (pc *ParallelCrawler) repoWriter(ctx context.Context, done chan struct{}) {
 		case repo, ok := <-pc.RepoChan:
 			if !ok { flush(); return }
 			buffer = append(buffer, repo)
-			if len(buffer) >= 5000 { flush() }
+			if len(buffer) >= 1000 { flush() }
 		case <-ticker.C:
 			flush()
 		}
@@ -121,7 +121,6 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 	writerDone := make(chan struct{})
 	go pc.repoWriter(context.Background(), writerDone)
 
-	// Start Workers
 	for i := 0; i < pc.WorkerCount; i++ {
 		pc.WG.Add(1)
 		go pc.worker(i)
@@ -139,11 +138,11 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 		for {
 			p := atomic.LoadInt32(&pc.pending)
 			if p == 0 {
-				time.Sleep(5 * time.Second) // Longer settle time
+				time.Sleep(5 * time.Second)
 				if atomic.LoadInt32(&pc.pending) == 0 { break }
 			}
 			myutils.Logger.Info(fmt.Sprintf("Discovery Progress: %d tasks pending...", p))
-			time.Sleep(10 * time.Second) // Less verbose logging
+			time.Sleep(5 * time.Second)
 		}
 		close(pc.KeywordChan)
 		close(pc.ScrapeChan)
@@ -182,7 +181,7 @@ func (pc *ParallelCrawler) worker(id int) {
 			atomic.AddInt32(&pc.pending, -1)
 		default:
 			if atomic.LoadInt32(&pc.pending) == 0 { return }
-			time.Sleep(10 * time.Millisecond) // Faster spin-wait
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
@@ -218,6 +217,7 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 	var res V2SearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil { return client, token }
 
+	// Deepen Directly strategy
 	if (res.Count >= 10000 || len(keyword) == 1) && len(keyword) < 255 {
 		pc.saveRepos(res.Repositories)
 		for _, char := range alphabet {
@@ -225,9 +225,9 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 			pc.KeywordChan <- keyword + string(char)
 		}
 	} else if res.Count > 0 {
-		pages := (res.Count / 100) + 1
-		if pages > 100 { pages = 100 }
-		for p := 1; p <= pages; p++ {
+		totalPages := (res.Count / 100) + 1
+		if totalPages > 100 { totalPages = 100 }
+		for p := 1; p <= totalPages; p++ {
 			atomic.AddInt32(&pc.pending, 1)
 			pc.ScrapeChan <- ScrapeTask{URL: myutils.GetV2SearchURL(keyword, p, 100), Client: client, Token: token}
 		}
