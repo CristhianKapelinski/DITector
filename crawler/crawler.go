@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -16,6 +17,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 var pageConcurrency = func() int {
 	if v := os.Getenv("PAGE_CONCURRENCY"); v != "" {
@@ -106,7 +111,6 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 			myutils.Logger.Info(fmt.Sprintf("Progress: %d local workers active | %d tasks in queue", p, active))
 			time.Sleep(10 * time.Second)
 		}
-		// No need to close a channel, workers will exit when getNextTask returns empty
 	}()
 
 	pc.WG.Wait()
@@ -190,11 +194,13 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 	if pageConcurrency > 0 {
 		pc.scrapeAllPages(prefix, res.Count, client, token)
 	} else {
-		// Serial fallback
+		// Serial fallback with Jitter (400ms to 900ms)
 		pages := (res.Count / 100) + 1
 		if pages > 100 { pages = 100 }
 		for p := 2; p <= pages; p++ {
-			time.Sleep(500 * time.Millisecond) // Increased delay to 0.5s for better API compliance
+			jitter := 400 + rand.Intn(500)
+			time.Sleep(time.Duration(jitter) * time.Millisecond)
+			
 			resP, c, t := pc.fetchPage(prefix, p, client, token)
 			client, token = c, t
 			if resP != nil { pc.processResults(resP.Repositories) }
