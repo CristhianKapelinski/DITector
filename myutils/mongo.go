@@ -414,7 +414,9 @@ func (m *MyMongo) BulkUpsertRepositories(repos []*Repository) error {
 			SetUpsert(true))
 	}
 	opts := options.BulkWrite().SetOrdered(false) // unordered = parallel execution on server
-	_, err := m.RepoColl.BulkWrite(context.TODO(), models, opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := m.RepoColl.BulkWrite(ctx, models, opts)
 	return err
 }
 
@@ -422,14 +424,18 @@ func (m *MyMongo) BulkUpsertRepositories(repos []*Repository) error {
 
 // IsKeywordCrawled reports whether keyword was fully crawled in a previous run.
 func (m *MyMongo) IsKeywordCrawled(keyword string) bool {
-	count, err := m.KeywordsColl.CountDocuments(context.TODO(), bson.M{"_id": keyword})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	count, err := m.KeywordsColl.CountDocuments(ctx, bson.M{"_id": keyword})
 	return err == nil && count > 0
 }
 
 // MarkKeywordCrawled records keyword as fully crawled. Idempotent (upsert).
 func (m *MyMongo) MarkKeywordCrawled(keyword string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	_, err := m.KeywordsColl.UpdateOne(
-		context.TODO(),
+		ctx,
 		bson.M{"_id": keyword},
 		bson.M{"$setOnInsert": bson.M{"_id": keyword, "crawled_at": time.Now().UTC().Format(time.RFC3339)}},
 		options.Update().SetUpsert(true),
@@ -440,7 +446,9 @@ func (m *MyMongo) MarkKeywordCrawled(keyword string) error {
 // DropKeywordCheckpoint removes all crawled-keyword records. Called at the end
 // of a complete DFS run so the next restart performs a full re-crawl cycle.
 func (m *MyMongo) DropKeywordCheckpoint() error {
-	return m.KeywordsColl.Drop(context.TODO())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return m.KeywordsColl.Drop(ctx)
 }
 
 // --- Stage II checkpoint: per-repo graph build tracking ---

@@ -20,4 +20,4 @@ services:
       - MONGO_URI=mongodb://${DB_HOST:?DB_HOST must be set}:27017
       - NEO4J_URI=neo4j://${DB_HOST}:7687
       - PAGE_CONCURRENCY=${PAGE_CONCURRENCY:-8}
-    command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector crawl --workers ${WORKERS:-50} --shard 1 --shards 2 --accounts accounts_node2.json --config config.yaml"
+    command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector crawl --workers ${WORKERS:-50} --shard 1 --shards 2 --accounts accounts_a9.json --config config.yaml"

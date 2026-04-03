@@ -3,8 +3,8 @@ log_file: '<log-file-path>'
 repo_with_many_tags_file: '<repo-with-too-many-tags-file-path>[only for statistics]'
 tmp_dir: '<tmp-dir-path>'
 proxy:
-  http_proxy: '127.0.0.1:7890'
-  https_proxy: '127.0.0.1:7890'
+  http_proxy: ''
+  https_proxy: ''
 docker_config:
   username: '<dockerhub-username>'
   password: '<dockerhub-password>'
