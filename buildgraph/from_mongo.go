@@ -87,15 +87,22 @@ func loadReposToChannel(page int64, pageSize int64, threshold int64, ch chan *my
 			"pull_count":     bson.M{"$gte": threshold},
 			"graph_built_at": bson.M{"$exists": false},
 		}
-		repos, err := myutils.GlobalDBClient.Mongo.FindRepositoriesByKeywordPaged(filter, repoPage, pageSize)
-		if err != nil || len(repos) == 0 {
+		// Sort by pull_count descending to prioritize influential images
+		opts := mongodb_opts.Find().SetSort(bson.M{"pull_count": -1})
+		cursor, err := myutils.GlobalDBClient.Mongo.RepoColl.Find(context.Background(), filter, opts)
+		if err != nil {
 			break
 		}
+		defer cursor.Close(context.Background())
 
-		for _, r := range repos {
-			ch <- r
+		for cursor.Next(context.Background()) {
+			var r myutils.Repository
+			if err := cursor.Decode(&r); err != nil {
+				continue
+			}
+			ch <- &r
 		}
-		repoPage++
+		break 
 	}
 }
 
