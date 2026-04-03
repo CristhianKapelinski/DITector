@@ -12,6 +12,7 @@ import (
 
 	"github.com/NSSL-SJTU/DITector/myutils"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // pageConcurrency controls how many pages of a single keyword are fetched in
