@@ -35,7 +35,7 @@ services:
       - PAGE_CONCURRENCY=${PAGE_CONCURRENCY:-8}
     # Meet-in-the-middle: shard 0/2 covers keywords starting with a–s (19 root chars).
     # Machine node2 runs docker-compose.node2.yml with --shard 1 --shards 2 (t–_).
-    command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector crawl --workers ${WORKERS:-50} --shard 0 --shards 2 --accounts accounts_gpu1.json --config config.yaml"
+    command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector crawl --workers ${WORKERS:-50} --shard 0 --shards 2 --accounts accounts_node1.json --config config.yaml"
 
 volumes:
   mongo_data:
