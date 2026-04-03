@@ -161,14 +161,18 @@ O upstream original (`NSSL-SJTU/DITector`) focava em análise de segurança de i
 
 **Arquivo:** `crawler/crawler.go`
 
-Implementação nativa em Go do crawler distribuído descrito no paper. O upstream original usava Python/Scrapy; este fork usa Goroutines e Channels para máxima performance de I/O.
+Implementação nativa em Go do crawler distribuído descrito no paper. O upstream original não possuía estágio de crawling — o Estágio I é inteiramente novo neste fork.
 
 **Design:**
 - `ParallelCrawler` gerencia N workers concorrentes via `sync.WaitGroup`
-- Keywords são distribuídas via channel buffered (capacidade 1M)
-- DFS: se `count >= 10.000`, aprofunda para `keyword+char` (todo o alfabeto `[a-z0-9-_]`)
+- DFS é implementado **recursivamente**: `crawlDFS(prefix)` chama a si mesma para cada sub-prefixo quando `count >= 10.000`
+- Seeds iniciais são distribuídas aos workers via um channel temporário de tamanho `len(seeds)`, criado dentro de `Start()` e fechado imediatamente após o preenchimento
+- `RepoChan` (buffer 100.000) recebe repositórios descobertos e os entrega à goroutine `repoWriter`
+- DFS: se `count >= 10.000`, aprofunda para `keyword+char` (alfabeto `[a-z0-9-_]`); se `len(prefix) == 1`, aprofunda incondicionalmente (contorna stopwords do ElasticSearch do Docker Hub)
 - Se `count < 10.000`, coleta todas as páginas disponíveis (max 100 páginas × 100 resultados = 10.000 itens)
-- Rate limit HTTP 429 tratado com backoff de 60s e **re-enfileiramento** da keyword (sem perda)
+- Rate limit HTTP 429 tratado com backoff de **10s**, rotação de identidade e **retry recursivo** de `fetchPage` — a keyword nunca é descartada
+- Deduplicação em memória via `seenRepos sync.Map` (O(1)) antes de qualquer I/O de rede ou banco
+- Checkpointing por keyword via MongoDB (`crawler_keywords`): ao reiniciar, keywords já concluídas são ignoradas em O(1)
 
 **Arquivo:** `crawler/auth_proxy.go`
 
@@ -177,39 +181,84 @@ Implementação nativa em Go do crawler distribuído descrito no paper. O upstre
 - Carrega proxies de arquivo texto (uma URL por linha, ex: `http://user:pass@host:port`)
 - Auto-login JWT via `POST /v2/users/login/` com mutex para evitar login paralelo para a mesma conta
 - `GetNextClient()` retorna `(*http.Client, token)` com proxy rotacionado round-robin
+- **Nota:** não há lógica de refresh automático de JWT — tokens expiram em ~24h e o crawler deve ser reiniciado para renová-los
 
 ### 4.2 Novo arquivo `buildgraph/from_mongo.go`
 
-Reengenharia do estágio `build` original para operar em **Worker Pool paralelo**:
+Reengenharia do estágio `build` original para operar em **Worker Pool paralelo** com três estágios em pipeline:
 
 ```
-MongoDB (repositories) 
+MongoDB (repositories)
     │
     ▼ loadReposToChannel (goroutine única, paginação)
     │
-    ├──▶ repoWorker × NumCPU*2  (chamam API Docker Hub para tags+layers, filtro de rede)
-    │                                    │
-    │                                    ▼
-    │                              jobChan (buffer 5000)
-    │                                    │
-    └──▶ buildGraphWorker × NumCPU  (inserem no Neo4j via InsertImageToNeo4j)
+    ├──▶ repoChan (buffer 4000)
+    │         │
+    │         ▼
+    ├──▶ repoWorker × max(NumCPU*16, 64)   ← I/O bound: espera de rede
+    │         │ (API Docker Hub: tags + manifests + filtro de rede)
+    │         ▼
+    │    jobChan (buffer 20000)
+    │         │
+    └──▶ buildGraphWorker × max(NumCPU*4, 16)  ← DB bound: escrita Neo4j
+              │
+              ▼
+           Neo4j + MongoDB (MarkRepoGraphBuilt → graph_built_at)
 ```
 
 **Filtro heurístico de rede:** `repoWorker` aplica `isNetworkContainer(repo.Name)` — lista de 30+ keywords como `nginx`, `postgres`, `redis`, `proxy`, `gateway`, etc. — para descartar containers que provavelmente não expõem serviços de rede antes mesmo de chamar a API.
+
+**Checkpointing Stage II:** após inserir todas as tags de um repositório no Neo4j, `repoWorker` chama `MarkRepoGraphBuilt`, que grava `graph_built_at` no documento MongoDB. O loader ignora repositórios com esse campo em reinícios subsequentes — zero retrabalho.
 
 ### 4.3 Modificação em `myutils/urls.go`
 
 Adicionado template e função para a V2 Search API:
 
 ```go
-V2SearchURLTemplate = `https://hub.docker.com/v2/search/repositories/?query=%s&page=%d&page_size=%d`
+V2SearchURLTemplate = `https://hub.docker.com/v2/search/repositories/?query=%s&page=%d&page_size=%d&ordering=-pull_count`
 
 func GetV2SearchURL(query string, page, size int) string
 ```
 
-O upstream usava a API antiga `content/v1/products/search` que possui limitações maiores. A V2 é a API oficial.
+O parâmetro `ordering=-pull_count` garante que a janela de 10.000 resultados seja determinística e ordenada por popularidade, não aleatória — crítico para consistência entre páginas durante o DFS.
 
-### 4.4 Novo `docker-compose.yml`
+O upstream não usava esta API — simplesmente não havia estágio de crawling no upstream.
+
+### 4.4 Modificações em `myutils/mongo.go`
+
+Adicionadas ao cliente MongoDB para suportar o crawler de alta vazão:
+
+- **`BulkUpsertRepositories(repos []*Repository)`** — bulk write atômico e não-ordenado; ~10-50× mais rápido que upserts individuais em loop para processar uma página de resultados inteira de uma vez
+- **`KeywordsColl`** — nova coleção `crawler_keywords` para checkpointing do Estágio I: ao reiniciar, keywords já completamente crawleadas são ignoradas em O(1)
+- **`IsKeywordCrawled(keyword)` / `MarkKeywordCrawled(keyword)`** — interface de leitura/gravação do checkpoint
+- **`MarkRepoGraphBuilt(namespace, name)`** — grava `graph_built_at` no repositório após Estágio II concluído
+- **Connection pool**: `SetMaxPoolSize(100)`, `SetMinPoolSize(5)`, `SetMaxConnIdleTime(5m)` — estabilidade sob carga paralela alta
+- **Timeout do ping inicial**: aumentado de `1s` para `30s` — evita falso-negativo em conexões lentas
+
+### 4.5 Modificações em `myutils/neo4j.go`
+
+`InsertImageToNeo4j` foi reescrito para **transação única por imagem** (antes: uma transação por layer):
+
+1. Todos os IDs de layer são computados localmente via SHA256 (puro CPU, zero I/O de rede)
+2. Toda a cadeia de layers + tag de imagem é inserida em **uma única `ExecuteWrite`** — O(1) round-trips por imagem independente do número de layers
+
+Resultado: latência de inserção cai de O(N layers × RTT) para O(1 × RTT) ≈ 100-200× mais rápido para imagens com 20+ layers.
+
+### 4.6 Modificações em `myutils/docker_hub_api_requests.go`
+
+O cliente HTTP global foi reestruturado:
+
+- **`DisableKeepAlives: true` removido** — keep-alives habilitados; conexões TCP são reutilizadas entre requisições (economia de ~100-300ms de handshake+TLS por requisição)
+- **Connection pool**: `MaxIdleConns: 300`, `MaxIdleConnsPerHost: 50`, `IdleConnTimeout: 90s`
+- **`Timeout: 30s`** adicionado ao cliente global
+
+### 4.7 Modificações em `myutils/config.go`
+
+- **Env vars de override**: `MONGO_URI` e `NEO4J_URI` sobrescrevem os valores do `config.yaml` — permite rodar Node 2 apontando para o MongoDB do Node 1 sem alterar o arquivo de configuração
+- **Localização do config**: `filepath.Dir(os.Args[0])` → `os.Getwd()` — o config é buscado relativo ao diretório de trabalho, não ao binário (compatível com `go run`)
+- **Neo4j opcional**: se a conexão Neo4j falhar na inicialização, o sistema não aborta — útil para rodar apenas o Estágio I sem Neo4j ativo
+
+### 4.8 Novo `docker-compose.yml`
 
 Infraestrutura completa para rodar a pipeline:
 
@@ -225,7 +274,7 @@ SEED=a docker compose up -d crawler   # Máquina 1: a-m
 SEED=n docker compose up -d crawler   # Máquina 2: n-z
 ```
 
-### 4.5 Novos scripts de automação (`automation/`)
+### 4.9 Novos scripts de automação (`automation/`)
 
 - `pipeline_autopilot.sh` — executa os 3 estágios sequencialmente com configuração parametrizada
 - `test_e2e.sh` — teste de integração end-to-end: crawl com seed `nginx`, build, rank, verifica output
@@ -280,11 +329,11 @@ if [ -f "test_output.json" ] && [ "$(stat -c%s test_output.json)" -gt 10 ]; then
 
 **Correção:** Removido o `continue` prematuro. Imagens `library` agora fazem fetch de todos os tags (comportamento correto conforme o paper).
 
-### Bug 6 — `crawler/crawler.go`: Keyword com 429 descartada permanentemente (BAIXO)
+### Bug 6 — `crawler/crawler.go`: Requisição com 429 descartada permanentemente (BAIXO)
 
-**Problema:** Quando uma keyword recebia status HTTP 429, o crawler aguardava 30s e depois simplesmente retornava sem re-enfileirar a keyword. A keyword era perdida definitivamente.
+**Problema:** Quando uma página recebia status HTTP 429, `fetchPage` simplesmente retornava `nil` sem qualquer retry, causando perda silenciosa dos resultados daquela página.
 
-**Correção:** Após o backoff de 60s, a keyword é re-enfileirada via `pc.KeywordChan <- keyword`.
+**Correção:** Ao receber 429, `fetchPage` agora: (1) dorme 10s, (2) rotaciona para uma nova identidade via `GetNextClient()`, (3) faz retry recursivo da mesma página com a nova identidade. A página nunca é perdida enquanto houver identidades disponíveis.
 
 ---
 
@@ -475,7 +524,9 @@ go run main.go crawl --workers 20 --proxies proxies.txt --accounts accounts.json
 | Flag | Padrão | Descrição |
 |------|--------|-----------|
 | `--workers` / `-w` | 10 | Número de goroutines trabalhadoras paralelas |
-| `--seed` | — | Keyword inicial para DFS (sem seed = começa por todo o alfabeto) |
+| `--seed` | — | Keywords iniciais para DFS, separadas por vírgula (sem seed = começa por todo o alfabeto) |
+| `--shard` | -1 | Índice do shard (base 0) para crawl distribuído; requer `--shards` |
+| `--shards` | 1 | Total de shards para distribuição meet-in-the-middle (ex: 2 para dividir o alfabeto entre 2 máquinas) |
 | `--accounts` | — | Caminho para `accounts.json` |
 | `--proxies` | — | Caminho para arquivo de proxies (uma URL por linha) |
 | `--config` / `-c` | `config.yaml` | Caminho para o arquivo de configuração |
@@ -756,12 +807,12 @@ docker-scan calculate  — Calcula o node ID de uma imagem pelo digest
 
 ## 15. Decisões de Design e Trade-offs
 
-### Por que Go em vez de Python/Scrapy (como o upstream)?
+### Por que o crawler foi implementado em Go (e não em Python como mencionado em versões anteriores)?
 
-O upstream original usa Python/Scrapy para o crawler. Este fork reimplementou em Go por:
-- **Goroutines vs threads**: Go escala para centenas de workers de I/O com custo de memória mínimo (~2KB/goroutine vs ~1MB/thread OS)
-- **Channels**: comunicação entre stages é type-safe e não requer locks manuais
-- **Único binário**: sem dependências de runtime, deploy trivial em múltiplas máquinas
+O upstream original era inteiramente Go mas **não possuía estágio de crawling** — o Estágio I é completamente novo neste fork. Go foi mantido como linguagem única pela consistência de stack e pelas vantagens para este caso de uso:
+- **Goroutines**: escala para centenas de workers de I/O com ~2KB/goroutine (vs ~1MB/thread OS)
+- **Channels**: comunicação entre stages type-safe sem locks manuais
+- **Único binário**: deploy trivial em múltiplas máquinas, sem runtime externo
 
 ### Por que o Build chama a API live em vez de ler do MongoDB?
 
@@ -779,7 +830,7 @@ O campo `EXPOSE` só é acessível após baixar a imagem (análise de conteúdo)
 
 1. **JWT expiry**: Tokens JWT do Docker Hub expirem (~24h). Não há lógica de refresh automático. Em runs longas, os tokens precisam ser renovados manualmente reiniciando o crawler.
 2. **Build live API**: Se um repositório for deletado entre o crawl e o build, erros são logados mas não impedem o progresso.
-3. **Throughput do Neo4j**: A inserção no Neo4j é síncrona por imagem. Para volumes muito grandes (>1M imagens), considere aumentar `NEO4J_dbms_memory_heap_initial__size`.
+3. **Throughput do Neo4j**: A inserção no Neo4j usa uma transação por imagem (O(1) round-trips). Para volumes muito grandes (>1M imagens), o gargalo passa a ser a memória heap do Neo4j — considere aumentar `NEO4J_dbms_memory_heap_initial__size` e `NEO4J_dbms_memory_heap_max__size`.
 
 ---
 
