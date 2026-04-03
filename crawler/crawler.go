@@ -118,6 +118,13 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 	if !myutils.GlobalDBClient.MongoFlag { return }
 	coll := myutils.GlobalDBClient.Mongo.KeywordsColl
+
+	// Self-healing: reset stuck 'processing' tasks back to 'pending'
+	_, _ = coll.UpdateMany(context.TODO(), 
+		bson.M{"status": "processing"}, 
+		bson.M{"$set": bson.M{"status": "pending"}},
+	)
+
 	count, _ := coll.CountDocuments(context.TODO(), bson.M{})
 	if count > 0 { return }
 
