@@ -193,8 +193,10 @@ func (pc *ParallelCrawler) crawlDFS(prefix string, client *http.Client, token st
 	}
 
 	// DFS Collision Logic
-	if total >= 10000 && len(prefix) < 255 {
-		myutils.Logger.Info(fmt.Sprintf("Collision on '%s'. Deepening search space...", prefix))
+	// Force deepening for 1-character prefixes because Docker Hub search
+	// often treats them as stopwords and returns falsely low counts.
+	if (total >= 10000 || len(prefix) == 1) && len(prefix) < 255 {
+		myutils.Logger.Info(fmt.Sprintf("Collision or root prefix on '%s'. Deepening search space...", prefix))
 		for _, char := range alphabet {
 			client, token = pc.crawlDFS(prefix+string(char), client, token)
 		}
