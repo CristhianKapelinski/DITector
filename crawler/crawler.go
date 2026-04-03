@@ -20,18 +20,14 @@ var pageConcurrency = func() int {
 	if v := os.Getenv("PAGE_CONCURRENCY"); v != "" {
 		var n int
 		fmt.Sscan(v, &n)
-		if n > 0 {
-			return n
-		}
+		if n > 0 { return n }
 	}
 	return 8
 }()
 
 func parseRepoName(repoName string) (namespace, name string) {
 	parts := strings.SplitN(repoName, "/", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
+	if len(parts) == 2 { return parts[0], parts[1] }
 	return "library", repoName
 }
 
@@ -39,8 +35,6 @@ const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789-_"
 
 type ScrapeTask struct {
 	URL    string
-	Client *http.Client
-	Token  string
 }
 
 type ParallelCrawler struct {
@@ -56,28 +50,22 @@ type ParallelCrawler struct {
 }
 
 func NewParallelCrawler(workers int, im *IdentityManager) *ParallelCrawler {
-	pc := &ParallelCrawler{
+	return &ParallelCrawler{
 		WorkerCount: workers,
 		KeywordChan: make(chan string, 1000000),
 		ScrapeChan:  make(chan ScrapeTask, 1000000),
 		RepoChan:    make(chan *myutils.Repository, 100000),
 		IM:          im,
 	}
-	pc.loadCrawledKeywords()
-	return pc
 }
 
 func (pc *ParallelCrawler) loadCrawledKeywords() {
-	if !myutils.GlobalDBClient.MongoFlag {
-		return
-	}
-	myutils.Logger.Info("Warming up keyword cache from MongoDB (ID projection)...")
-	ctx := context.Background()
+	if !myutils.GlobalDBClient.MongoFlag { return }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 	opts := mongodb_opts.Find().SetProjection(bson.M{"_id": 1})
 	cursor, err := myutils.GlobalDBClient.Mongo.KeywordsColl.Find(ctx, bson.M{}, opts)
-	if err != nil {
-		return
-	}
+	if err != nil { return }
 	defer cursor.Close(ctx)
 	for cursor.Next(ctx) {
 		var doc struct{ ID string `bson:"_id"` }
@@ -95,11 +83,7 @@ func (pc *ParallelCrawler) repoWriter(ctx context.Context, done chan struct{}) {
 
 	flush := func() {
 		if len(buffer) == 0 { return }
-		if err := myutils.GlobalDBClient.Mongo.BulkUpsertRepositories(buffer); err != nil {
-			myutils.Logger.Error(fmt.Sprintf("Bulk write failed: %v", err))
-		} else {
-			myutils.Logger.Info(fmt.Sprintf("Flushed %d repositories to MongoDB", len(buffer)))
-		}
+		_ = myutils.GlobalDBClient.Mongo.BulkUpsertRepositories(buffer)
 		buffer = buffer[:0]
 	}
 
@@ -116,14 +100,20 @@ func (pc *ParallelCrawler) repoWriter(ctx context.Context, done chan struct{}) {
 }
 
 func (pc *ParallelCrawler) Start(seeds []string) {
-	myutils.Logger.Info(fmt.Sprintf("Starting Discovery Pipeline [%d workers]", pc.WorkerCount))
+	pc.loadCrawledKeywords()
+	myutils.Logger.Info(fmt.Sprintf("Starting Production Pipeline [W:%d]", pc.WorkerCount))
 	
 	writerDone := make(chan struct{})
 	go pc.repoWriter(context.Background(), writerDone)
 
+	for i := 0; i < 2; i++ {
+		pc.WG.Add(1)
+		go pc.discoveryWorker()
+	}
+
 	for i := 0; i < pc.WorkerCount; i++ {
 		pc.WG.Add(1)
-		go pc.worker(i)
+		go pc.scrapeWorker(i)
 	}
 
 	if len(seeds) == 0 {
@@ -141,8 +131,8 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 				time.Sleep(5 * time.Second)
 				if atomic.LoadInt32(&pc.pending) == 0 { break }
 			}
-			myutils.Logger.Info(fmt.Sprintf("Discovery Progress: %d tasks pending...", p))
-			time.Sleep(5 * time.Second)
+			myutils.Logger.Info(fmt.Sprintf("Discovery Progress: %d tasks active", p))
+			time.Sleep(10 * time.Second)
 		}
 		close(pc.KeywordChan)
 		close(pc.ScrapeChan)
@@ -152,14 +142,19 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 	close(pc.RepoChan)
 	<-writerDone
 	pc.kwWriteWG.Wait()
-
-	if myutils.GlobalDBClient.MongoFlag {
-		_ = myutils.GlobalDBClient.Mongo.DropKeywordCheckpoint()
-	}
-	myutils.Logger.Info("Discovery Phase Complete")
+	myutils.Logger.Info("Full Cycle Complete")
 }
 
-func (pc *ParallelCrawler) worker(id int) {
+func (pc *ParallelCrawler) discoveryWorker() {
+	defer pc.WG.Done()
+	client, token := pc.IM.GetNextClient()
+	for keyword := range pc.KeywordChan {
+		client, token = pc.discover(keyword, client, token)
+		atomic.AddInt32(&pc.pending, -1)
+	}
+}
+
+func (pc *ParallelCrawler) scrapeWorker(id int) {
 	defer pc.WG.Done()
 	client, token := pc.IM.GetNextClient()
 	if pc.WorkerCount == len(pc.IM.Accounts) {
@@ -169,34 +164,21 @@ func (pc *ParallelCrawler) worker(id int) {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
 
-	for {
-		select {
-		case keyword, ok := <-pc.KeywordChan:
-			if !ok { return }
-			client, token = pc.crawlKeyword(keyword, client, token)
-			atomic.AddInt32(&pc.pending, -1)
-		case task, ok := <-pc.ScrapeChan:
-			if !ok { return }
-			pc.processPage(task.URL, task.Client, task.Token)
-			atomic.AddInt32(&pc.pending, -1)
-		default:
-			if atomic.LoadInt32(&pc.pending) == 0 { return }
-			time.Sleep(100 * time.Millisecond)
-		}
+	for task := range pc.ScrapeChan {
+		pc.processPage(task.URL, client, token)
+		atomic.AddInt32(&pc.pending, -1)
 	}
-}
-
-type V2Repository struct {
-	RepoName  string `json:"repo_name"`
-	PullCount int64  `json:"pull_count"`
 }
 
 type V2SearchResponse struct {
 	Count        int            `json:"count"`
-	Repositories []V2Repository `json:"results"`
+	Repositories []struct {
+		RepoName  string `json:"repo_name"`
+		PullCount int64  `json:"pull_count"`
+	} `json:"results"`
 }
 
-func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, token string) (*http.Client, string) {
+func (pc *ParallelCrawler) discover(keyword string, client *http.Client, token string) (*http.Client, string) {
 	if _, crawled := pc.crawledKeys.Load(keyword); crawled { return client, token }
 
 	url := myutils.GetV2SearchURL(keyword, 1, 100)
@@ -217,21 +199,24 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 	var res V2SearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil { return client, token }
 
-	// Deepen Directly strategy
+	// SCRAPE FIRST: Always scrape available results to ensure immediate database growth
+	if res.Count > 0 {
+		pages := (res.Count / 100) + 1
+		if pages > 100 { pages = 100 }
+		for p := 1; p <= pages; p++ {
+			atomic.AddInt32(&pc.pending, 1)
+			pc.ScrapeChan <- ScrapeTask{URL: myutils.GetV2SearchURL(keyword, p, 100)}
+		}
+	}
+
+	// THEN DEEPEN: If it hits the 10k limit, also fan out
 	if (res.Count >= 10000 || len(keyword) == 1) && len(keyword) < 255 {
-		pc.saveRepos(res.Repositories)
 		for _, char := range alphabet {
 			atomic.AddInt32(&pc.pending, 1)
 			pc.KeywordChan <- keyword + string(char)
 		}
-	} else if res.Count > 0 {
-		totalPages := (res.Count / 100) + 1
-		if totalPages > 100 { totalPages = 100 }
-		for p := 1; p <= totalPages; p++ {
-			atomic.AddInt32(&pc.pending, 1)
-			pc.ScrapeChan <- ScrapeTask{URL: myutils.GetV2SearchURL(keyword, p, 100), Client: client, Token: token}
-		}
 	}
+	
 	pc.markKeywordDone(keyword)
 	return client, token
 }
@@ -242,7 +227,7 @@ func (pc *ParallelCrawler) markKeywordDone(keyword string) {
 		pc.kwWriteWG.Add(1)
 		go func() {
 			defer pc.kwWriteWG.Done()
-			myutils.GlobalDBClient.Mongo.MarkKeywordCrawled(keyword)
+			_ = myutils.GlobalDBClient.Mongo.MarkKeywordCrawled(keyword)
 		}()
 	}
 }
@@ -258,24 +243,9 @@ func (pc *ParallelCrawler) processPage(url string, client *http.Client, token st
 
 	var res V2SearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil { return }
-	pc.saveRepos(res.Repositories)
-}
-
-func (pc *ParallelCrawler) saveRepos(v2repos []V2Repository) {
-	for _, v2repo := range v2repos {
-		if v2repo.RepoName == "" { continue }
-		ns, name := parseRepoName(v2repo.RepoName)
-		pc.RepoChan <- &myutils.Repository{Namespace: ns, Name: name, PullCount: v2repo.PullCount}
+	for _, r := range res.Repositories {
+		if r.RepoName == "" { continue }
+		ns, name := parseRepoName(r.RepoName)
+		pc.RepoChan <- &myutils.Repository{Namespace: ns, Name: name, PullCount: r.PullCount}
 	}
-}
-
-func ShardSeeds(shard, total int) []string {
-	chars := []rune(alphabet)
-	n := len(chars)
-	size := n / total
-	start, end := shard*size, (shard+1)*size
-	if shard == total-1 { end = n }
-	var seeds []string
-	for _, ch := range chars[start:end] { seeds = append(seeds, string(ch)) }
-	return seeds
 }
