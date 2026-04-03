@@ -94,8 +94,8 @@ func (pc *ParallelCrawler) loadCrawledKeywords() {
 
 // repoWriter aggregates repositories and performs large bulk writes.
 func (pc *ParallelCrawler) repoWriter() {
-	buffer := make([]*myutils.Repository, 0, 5000)
-	ticker := time.NewTicker(5 * time.Second)
+	buffer := make([]*myutils.Repository, 0, 1000)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	flush := func() {
@@ -105,7 +105,7 @@ func (pc *ParallelCrawler) repoWriter() {
 		if err := myutils.GlobalDBClient.Mongo.BulkUpsertRepositories(buffer); err != nil {
 			myutils.Logger.Error(fmt.Sprintf("Bulk write failed: %v", err))
 		} else {
-			myutils.Logger.Info(fmt.Sprintf("Flushed %d repositories to MongoDB", len(buffer)))
+			myutils.Logger.Info(fmt.Sprintf("Flushed %d repositories to MongoDB (Rate monitoring active)", len(buffer)))
 		}
 		buffer = buffer[:0]
 	}
@@ -118,7 +118,7 @@ func (pc *ParallelCrawler) repoWriter() {
 				return
 			}
 			buffer = append(buffer, repo)
-			if len(buffer) >= 5000 {
+			if len(buffer) >= 1000 {
 				flush()
 			}
 		case <-ticker.C:
@@ -251,13 +251,8 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 		return client, token
 	}
 
-	if searchRes.Count >= 10000 && len(keyword) < 255 {
-		myutils.Logger.Info(fmt.Sprintf("Keyword [%s] has >= 10000 results. Deepening DFS to ensure full coverage...", keyword))
-		for _, char := range alphabet {
-			pc.KeywordChan <- keyword + string(char)
-		}
-	} else if searchRes.Count > 0 {
-		myutils.Logger.Info(fmt.Sprintf("Keyword [%s] found %d repositories. Scraping...", keyword, searchRes.Count))
+	if searchRes.Count > 0 {
+		myutils.Logger.Info(fmt.Sprintf("Keyword [%s] found %d repositories. Scraping first 100 pages...", keyword, searchRes.Count))
 		pc.scrapeAllPages(keyword, searchRes.Count, client, token)
 		pc.crawledKeys.Store(keyword, true)
 		if myutils.GlobalDBClient.MongoFlag {
@@ -267,7 +262,15 @@ func (pc *ParallelCrawler) crawlKeyword(keyword string, client *http.Client, tok
 				}
 			}(keyword)
 		}
-	} else {
+	}
+
+	// Deepen if we hit the 10k limit to ensure we get the items beyond page 100
+	if searchRes.Count >= 10000 && len(keyword) < 255 {
+		myutils.Logger.Info(fmt.Sprintf("Keyword [%s] has >= 10000 results. Deepening DFS for full coverage...", keyword))
+		for _, char := range alphabet {
+			pc.KeywordChan <- keyword + string(char)
+		}
+	} else if searchRes.Count == 0 {
 		myutils.Logger.Debug(fmt.Sprintf("Keyword [%s] returned 0 results.", keyword))
 		pc.crawledKeys.Store(keyword, true)
 		if myutils.GlobalDBClient.MongoFlag {
