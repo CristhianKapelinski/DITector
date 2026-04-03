@@ -21,6 +21,7 @@
 13. [Referência de Comandos](#13-referência-de-comandos)
 14. [Decisões de Design e Trade-offs](#14-decisões-de-design-e-trade-offs)
 
+
 ---
 
 ## 1. Contexto e Motivação
@@ -180,7 +181,7 @@ Implementação do crawler distribuído descrito no paper. O upstream original d
 - Carrega proxies de arquivo texto (uma URL por linha, ex: `http://user:pass@host:port`)
 - Auto-login JWT via `POST /v2/users/login/` com mutex para evitar login paralelo para a mesma conta
 - `GetNextClient()` retorna `(*http.Client, token)` com proxy rotacionado round-robin
-- **Nota:** não há lógica de refresh automático de JWT — tokens expiram em ~24h e o crawler deve ser reiniciado para renová-los
+- Tokens JWT expiram em ~24h; ao receber HTTP 401, `fetchPage` invalida o token via `ClearToken` e obtém nova identidade com re-login automático via `GetNextClient`
 
 ### 4.2 Novo arquivo `buildgraph/from_mongo.go`
 
@@ -340,7 +341,7 @@ socks5://proxy3.example.com:1080
 
 ---
 
-## 7. Configuração do `config.yaml`
+## 6. Configuração do `config.yaml`
 
 Copie o template e ajuste:
 
@@ -380,7 +381,7 @@ proxy:
 
 ---
 
-## 8. Estágio I — Crawling (Descoberta)
+## 7. Estágio I — Crawling (Descoberta)
 
 ### Representação de nomes de repositório no Docker Hub
 
@@ -500,7 +501,7 @@ Com 1 máquina e 20 workers rodando por 24h, espera-se descobrir entre 500.000 e
 
 ---
 
-## 9. Estágio II — Build (Grafo IDEA)
+## 8. Estágio II — Build (Grafo IDEA)
 
 ### O que faz
 
@@ -549,7 +550,7 @@ cypher-shell -u neo4j -p "" "MATCH ()-[r:IS_BASE_OF]->() RETURN count(r) AS tota
 
 ---
 
-## 10. Estágio III — Rank (Priorização)
+## 9. Estágio III — Rank (Priorização)
 
 ### O que faz
 
@@ -594,7 +595,7 @@ jq -r '"\(.repository_namespace)/\(.repository_name):\(.tag_name)"' final_priori
 
 ---
 
-## 11. Integração com OpenVAS
+## 10. Integração com OpenVAS
 
 O objetivo final da pipeline é alimentar um scanner OpenVAS com containers de rede. O fluxo é:
 
@@ -616,7 +617,7 @@ images_for_openvas.txt
 
 ---
 
-## 12. Automação da Pipeline
+## 11. Automação da Pipeline
 
 ### Pipeline Autopilot
 
@@ -652,7 +653,7 @@ O que o teste verifica:
 
 ---
 
-## 13. Monitoramento
+## 12. Monitoramento
 
 ### MongoDB
 
@@ -707,7 +708,7 @@ tail -f *.log | grep "Inserido no Neo4j" | wc -l
 
 ---
 
-## 14. Referência de Comandos
+## 13. Referência de Comandos
 
 ### Subcomandos disponíveis
 
@@ -740,32 +741,28 @@ docker-scan calculate  — Calcula o node ID de uma imagem pelo digest
 
 ---
 
-## 15. Decisões de Design e Trade-offs
+## 14. Decisões de Design e Trade-offs
 
-### Por que o crawler foi implementado em Go (e não em Python como mencionado em versões anteriores)?
+### Por que o crawler foi implementado neste fork em Go?
 
-O upstream original declarava o subcomando `crawl` em `cmd/cmd.go` com descrição "crawl metadata of repositories and images from Docker Hub", porém sem campo `Run` — o comando era registrado mas não executava nenhuma lógica. O Estágio I foi implementado neste fork em Go pela consistência de stack e pelas vantagens para este caso de uso:
-- **Goroutines**: escala para centenas de workers de I/O com ~2KB/goroutine (vs ~1MB/thread OS)
-- **Channels**: comunicação entre stages type-safe sem locks manuais
+O upstream declarava o subcomando `crawl` em `cmd/cmd.go` sem campo `Run` — registrado mas sem implementação. O Estágio I foi implementado neste fork em Go pela consistência de stack e pelas vantagens para workloads de I/O intensivo:
+- **Goroutines**: escala para centenas de workers com ~2KB/goroutine (vs ~1MB/thread OS)
+- **Channels**: comunicação entre estágios type-safe sem locks manuais
 - **Único binário**: deploy trivial em múltiplas máquinas, sem runtime externo
 
 ### Por que o Build chama a API live em vez de ler do MongoDB?
 
-O crawler (Estágio I) armazena apenas `namespace`, `name` e `pull_count`. Tags e layers são buscados no Estágio II via API live. Isso é um trade-off deliberado:
-- **Prós**: Volume de dados no MongoDB é menor; o crawler é mais rápido
-- **Contras**: O build stage é dependente de disponibilidade da API; repositórios deletados entre crawl e build geram erros
+O crawler (Estágio I) armazena apenas `namespace`, `name` e `pull_count`. Tags e layers são buscados no Estágio II via API live. Trade-off deliberado:
+- **Prós**: volume de dados no MongoDB é menor; o crawler é mais rápido
+- **Contras**: o build stage depende da disponibilidade da API; repositórios deletados entre crawl e build geram erros logados
 
-Alternativa (não implementada): o crawler poderia armazenar tags/layers diretamente, tornando o build stage totalmente offline.
-
-### Por que filtro heurístico por nome e não por `EXPOSE` do Dockerfile?
-
-O campo `EXPOSE` só é acessível após baixar a imagem (análise de conteúdo). O filtro por nome de repositório funciona em metadados já coletados, sem custo adicional de download. Para a finalidade de scan com OpenVAS, o filtro por nome é suficientemente preciso como etapa de pré-seleção.
+Alternativa não implementada: o crawler poderia armazenar tags/layers diretamente, tornando o build stage totalmente offline.
 
 ### Limitações conhecidas
 
-1. **JWT expiry**: Tokens JWT do Docker Hub expirem (~24h). Não há lógica de refresh automático. Em runs longas, os tokens precisam ser renovados manualmente reiniciando o crawler.
-2. **Build live API**: Se um repositório for deletado entre o crawl e o build, erros são logados mas não impedem o progresso.
-3. **Throughput do Neo4j**: A inserção no Neo4j usa uma transação por imagem (O(1) round-trips). Para volumes muito grandes (>1M imagens), o gargalo passa a ser a memória heap do Neo4j — considere aumentar `NEO4J_dbms_memory_heap_initial__size` e `NEO4J_dbms_memory_heap_max__size`.
+1. **JWT expiry e re-login**: ao receber HTTP 401, `fetchPage` chama `ClearToken` para invalidar o token expirado e `GetNextClient` para obter uma nova identidade com login automático. Se todas as contas estiverem simultaneamente com token inválido, o retry pode falhar para a página em questão.
+2. **Build live API**: se um repositório for deletado entre o crawl e o build, erros são logados mas não interrompem o progresso.
+3. **Throughput do Neo4j**: uma transação por imagem (O(1) round-trips). Para volumes >1M imagens, o gargalo migra para a memória heap do Neo4j — aumentar `NEO4J_dbms_memory_heap_max__size` é recomendado.
 
 ---
 
