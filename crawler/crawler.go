@@ -12,7 +12,7 @@ import (
 
 	"github.com/NSSL-SJTU/DITector/myutils"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	mongodb_opts "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // pageConcurrency controls how many pages of a single keyword are fetched in
@@ -71,7 +71,7 @@ func (pc *ParallelCrawler) loadCrawledKeywords() {
 	myutils.Logger.Info("Warming up keyword cache from MongoDB (ID projection)...")
 	ctx := context.Background()
 	// Only fetch _id to reduce network and memory overhead
-	opts := options.Find().SetProjection(bson.M{"_id": 1})
+	opts := mongodb_opts.Find().SetProjection(bson.M{"_id": 1})
 	cursor, err := myutils.GlobalDBClient.Mongo.KeywordsColl.Find(ctx, bson.M{}, opts)
 	if err != nil {
 		myutils.Logger.Error(fmt.Sprintf("Failed to load keyword cache: %v", err))
