@@ -11,7 +11,7 @@ const (
 	RepoTagsURLTemplate           = `https://hub.docker.com/v2/repositories/%s/%s/tags/?page=%d&page_size=%d`
 	TagMetadataURLTemplate        = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s`
 	ImageMetadataURLTemplate      = `https://hub.docker.com/v2/repositories/%s/%s/tags/%s/images`
-	V2SearchURLTemplate           = `https://hub.docker.com/v2/search/repositories/?query=%s&page=%d&page_size=%d&ordering=-pull_count`
+	V2SearchURLTemplate           = `https://hub.docker.com/v2/search/repositories/?query=%s&page=%d&page_size=%d`
 )
 
 // GetRegURL 返回用于获取repository list的URL
