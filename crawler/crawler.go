@@ -194,7 +194,7 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 		pages := (res.Count / 100) + 1
 		if pages > 100 { pages = 100 }
 		for p := 2; p <= pages; p++ {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond) // Increased delay to 0.5s for better API compliance
 			resP, c, t := pc.fetchPage(prefix, p, client, token)
 			client, token = c, t
 			if resP != nil { pc.processResults(resP.Repositories) }
