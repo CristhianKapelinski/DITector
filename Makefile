@@ -32,7 +32,7 @@ init:
 start:
 	@[ -f .env ] || (echo "Execute 'make init' primeiro." && exit 1)
 	MONGO_URI=$(_MONGO) NEO4J_URI=$(_NEO4J) \
-	  docker-compose $(_PROFILES) up -d --force-recreate crawler \
+	  docker-compose $(_PROFILES) up -d --force-recreate --remove-orphans crawler \
 	  $(if $(_PROFILES),mongodb neo4j,)
 
 stop:
