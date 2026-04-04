@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 	"crypto/tls"
+	"io"
 
 	"github.com/NSSL-SJTU/DITector/myutils"
 	"go.mongodb.org/mongo-driver/bson"
@@ -21,6 +22,13 @@ import (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+var userAgents = []string{
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
 }
 
 var pageConcurrency = func() int {
@@ -47,6 +55,7 @@ type ParallelCrawler struct {
 	IM          *IdentityManager
 	seenRepos   sync.Map
 	pending     int32
+	userAgent   string
 }
 
 func NewParallelCrawler(workers int, im *IdentityManager) *ParallelCrawler {
@@ -54,6 +63,7 @@ func NewParallelCrawler(workers int, im *IdentityManager) *ParallelCrawler {
 		WorkerCount: workers,
 		RepoChan:    make(chan *myutils.Repository, 100000),
 		IM:          im,
+		userAgent:   userAgents[rand.Intn(len(userAgents))],
 	}
 }
 
@@ -136,22 +146,19 @@ func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 	_, _ = coll.BulkWrite(context.TODO(), models)
 }
 
-// getNewHTTPClient mimics a real modern browser (Chrome 120)
 func (pc *ParallelCrawler) getNewHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			DisableKeepAlives:   false, // Reusing connections is more "human"
+			DisableKeepAlives:   false, 
 			MaxIdleConns:        100,
 			IdleConnTimeout:     90 * time.Second,
 			MaxIdleConnsPerHost: 10,
 			TLSHandshakeTimeout: 10 * time.Second,
 			TLSClientConfig: &tls.Config{
 				MinVersion: tls.VersionTLS12,
-				// Mimic browser cipher suite preference
 				PreferServerCipherSuites: false, 
 				CurvePreferences:         []tls.CurveID{tls.X25519, tls.CurveP256},
 			},
-			// Force HTTP/1.1 to avoid HTTP/2 Tarpit/Multiplexing detection
 			TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 		},
 		Timeout: 30 * time.Second,
@@ -159,11 +166,11 @@ func (pc *ParallelCrawler) getNewHTTPClient() *http.Client {
 }
 
 func (pc *ParallelCrawler) setBrowserHeaders(req *http.Request, token string) {
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", pc.userAgent)
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Referer", "https://hub.docker.com/search?q=library")
-	req.Header.Set("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
+	req.Header.Set("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"121\", \"Google Chrome\";v=\"121\"")
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 	req.Header.Set("Sec-Ch-Ua-Platform", "\"Windows\"")
 	req.Header.Set("Sec-Fetch-Dest", "empty")
@@ -177,6 +184,8 @@ func (pc *ParallelCrawler) setBrowserHeaders(req *http.Request, token string) {
 
 func (pc *ParallelCrawler) worker(id int) {
 	defer pc.WG.Done()
+	// Each worker gets its own persona
+	pc.userAgent = userAgents[rand.Intn(len(userAgents))]
 	client, token := pc.IM.GetNextClient()
 
 	for {
@@ -191,6 +200,8 @@ func (pc *ParallelCrawler) worker(id int) {
 		if !success {
 			time.Sleep(5 * time.Second)
 		}
+		// Inter-task jitter to avoid synchronized bursts
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
 	}
 }
 
@@ -223,7 +234,6 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 	pages := (res.Count / 100) + 1
 	if pages > 100 { pages = 100 }
 	for p := 2; p <= pages; p++ {
-		// Random jitter to look human
 		time.Sleep(time.Duration(400 + rand.Intn(500)) * time.Millisecond)
 		resP, c, t := pc.fetchPage(prefix, p, client, token)
 		client, token = c, t
@@ -263,14 +273,17 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 
 		resp, err := client.Do(req)
 		if err != nil {
-			myutils.Logger.Error(fmt.Sprintf("Network Error for %q: %v. Refreshing...", query, err))
+			myutils.Logger.Error(fmt.Sprintf("Network Error for %q: %v. Refreshing connection...", query, err))
 			newC, newT := pc.IM.GetNextClient()
 			return nil, newC, newT
 		}
+		
+		// CRITICAL: Always drain and close the body to allow TCP connection reuse (Keep-Alive)
 		defer resp.Body.Close()
+		bodyBytes, _ := io.ReadAll(resp.Body)
 
 		if resp.StatusCode == 401 {
-			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Invalidating token...", query))
+			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Invalidating token and rotating...", query))
 			pc.IM.ClearToken(token)
 			newC, newT := pc.IM.GetNextClient()
 			return nil, newC, newT
@@ -278,7 +291,7 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 
 		if resp.StatusCode == 429 {
 			myutils.Logger.Warn(fmt.Sprintf("429 Rate Limit for %q. Rotating identity...", query))
-			time.Sleep(10 * time.Second)
+			time.Sleep(15 * time.Second)
 			newC, newT := pc.IM.GetNextClient()
 			return nil, newC, newT
 		}
@@ -287,8 +300,11 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 			myutils.Logger.Error(fmt.Sprintf("Unexpected Status %d for %q", resp.StatusCode, query))
 			return nil, client, token 
 		}
+		
 		var res V2SearchResponse
-		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil { return nil, client, token }
+		if err := json.Unmarshal(bodyBytes, &res); err != nil { 
+			return nil, client, token 
+		}
 		return &res, client, token
 	}
 	return nil, client, token
