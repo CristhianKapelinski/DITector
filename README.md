@@ -163,25 +163,50 @@ O upstream original (`NSSL-SJTU/DITector`) declarava o subcomando `crawl` mas se
 
 Implementação do crawler distribuído descrito no paper. O upstream original declarava o subcomando `crawl` em `cmd/cmd.go` mas sem campo `Run` — o comando era um stub registrado sem implementação. Este fork implementa o corpo completo do Estágio I.
 
-**Design:**
-- `ParallelCrawler` gerencia N workers concorrentes via `sync.WaitGroup`
-- DFS é implementado **recursivamente**: `crawlDFS(prefix)` chama a si mesma para cada sub-prefixo quando `count >= 10.000`
-- Seeds iniciais são distribuídas aos workers via um channel temporário de tamanho `len(seeds)`, criado dentro de `Start()` e fechado imediatamente após o preenchimento
-- `RepoChan` (buffer 100.000) recebe repositórios descobertos e os entrega à goroutine `repoWriter`
-- DFS: se `count >= 10.000`, aprofunda para `keyword+char` (alfabeto `[a-z0-9-_]`); se `len(prefix) == 1`, aprofunda incondicionalmente (contorna stopwords do ElasticSearch do Docker Hub)
-- Se `count < 10.000`, coleta todas as páginas disponíveis (max 100 páginas × 100 resultados = 10.000 itens)
-- Rate limit HTTP 429 tratado com backoff de **10s**, rotação de identidade e **retry recursivo** de `fetchPage` — a keyword nunca é descartada
-- Deduplicação em memória via `seenRepos sync.Map` (O(1)) antes de qualquer I/O de rede ou banco
-- Checkpointing por keyword via MongoDB (`crawler_keywords`): ao reiniciar, keywords já concluídas são ignoradas em O(1)
+**Arquitetura de fila de tarefas:**
+- `ParallelCrawler` mantém N workers que consomem tarefas da coleção MongoDB `crawler_keywords`
+- Cada tarefa é um prefixo DFS com campo `status`: `pending` → `processing` → `done`
+- `getNextTask()` usa `FindOneAndUpdate` atômico, garantindo que dois workers (inclusive em nós distintos) nunca processem o mesmo prefixo simultaneamente
+- `ensureQueueInitialized()` semeia o alfabeto `[a-z0-9-_]` como `pending` apenas se a coleção estiver vazia; na reinicialização, reverte tarefas `processing` → `pending` (self-healing após crash)
+- `processTask()`: coleta todas as páginas do prefixo (máx. 100 páginas × 100 resultados), depois insere 38 filhos como `pending` se `count >= 10.000` ou `len(prefix) == 1` (stopword workaround)
+- Deduplicação em memória via `seenRepos sync.Map` (O(1)); `PreloadExistingRepos()` aquece o cache no boot carregando todos os nomes do banco para RAM
+
+**Estratégia anti-detecção — `fetchPage`:**
+
+O Docker Hub aplica WAF/Cloudflare com detecção comportamental. A resposta é uma pilha de camuflagem em múltiplas camadas:
+
+| Camada | Mecanismo | Implementação |
+|--------|-----------|---------------|
+| Fingerprint TLS | HTTP/1.1 forçado (sem HTTP/2), TLS 1.2+ | `tls.Config{MinVersion: tls.VersionTLS12}` + transporte sem HTTP/2 |
+| Headers de navegador | Conjunto completo de headers Chrome 121 | `setBrowserHeaders()`: UA, Accept, Referer, Sec-Fetch-*, Connection |
+| Identidade por conta | Cada conta JWT tem UA fixo e exclusivo | `acc.UserAgent` atribuído no boot via round-robin sobre pool de 7 UAs |
+| Jitter entre páginas | 400–900 ms aleatório entre páginas | `rand.Intn(500) + 400` ms por requisição |
+| Jitter entre tarefas | 0–1000 ms aleatório após cada tarefa | `rand.Intn(1000)` ms no loop do worker |
+| Keep-Alive / body draining | Corpo lido completamente antes de fechar | `io.ReadAll(resp.Body)` — devolve socket ao pool TCP |
+
+**Tratamento de erros HTTP — sem retry recursivo:**
+
+| Código | Interpretação | Ação | Destino da tarefa |
+|--------|---------------|------|-------------------|
+| 401 | JWT expirado | `ClearToken(token)` + `GetNextClient()` | re-enfileirada como `pending` |
+| 403 | Bot score alto / IP flagrado | sleep 15 min + `GetNextClient()` | re-enfileirada como `pending` |
+| 429 | Rate limit por IP/conta | sleep 15 s + `GetNextClient()` | re-enfileirada como `pending` |
+| outros | Erro transitório | retorna `nil` | re-enfileirada como `pending` |
+
+A tarefa nunca é descartada: em qualquer falha, `processTask` chama `updateTaskStatus(prefix, "pending")` antes de retornar. Na próxima iteração de qualquer worker disponível, ela será retomada.
+
+---
 
 **Arquivo:** `crawler/auth_proxy.go`
 
-`IdentityManager` centraliza autenticação e rotação de proxies:
-- Carrega contas Docker Hub de `accounts.json` (array de `{username, password}`)
-- Carrega proxies de arquivo texto (uma URL por linha, ex: `http://user:pass@host:port`)
-- Auto-login JWT via `POST /v2/users/login/` com mutex para evitar login paralelo para a mesma conta
-- `GetNextClient()` retorna `(*http.Client, token)` com proxy rotacionado round-robin
-- Tokens JWT expiram em ~24h; ao receber HTTP 401, `fetchPage` invalida o token via `ClearToken` e obtém nova identidade com re-login automático via `GetNextClient`
+`IdentityManager` centraliza autenticação, User-Agents e clientes HTTP:
+
+- Carrega contas Docker Hub de `accounts.json` (`[{username, password}]`)
+- Atribui `UserAgent` exclusivo a cada conta no carregamento — round-robin sobre `globalUAPool` (7 strings representando Chrome 121, Edge, Firefox 122, Safari 17 em Windows, Mac e Linux)
+- `GetNextClient()` retorna `(*http.Client, token, ua)`: o UA é retornado junto com o token para ser propagado coerentemente em todas as requisições daquela identidade
+- Login JWT via `POST /v2/users/login/` protegido por `loginMu sync.Mutex` — evita que dois workers loguem a mesma conta simultaneamente
+- `ClearToken(token string)` percorre as contas e zera o campo `Token` da conta correspondente ao token expirado; na próxima chamada a `GetNextClient`, `LoginDockerHub` é invocado automaticamente
+- O `http.Transport` por cliente configura `MaxIdleConns=100`, `IdleConnTimeout=90s` e `TLSHandshakeTimeout=10s`, mantendo um pool TCP estável e evitando a abertura massiva de sockets (sinal de bot)
 
 ### 4.2 Novo arquivo `buildgraph/from_mongo.go`
 
