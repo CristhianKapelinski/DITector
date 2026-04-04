@@ -136,6 +136,49 @@ func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 	_, _ = coll.BulkWrite(context.TODO(), models)
 }
 
+func (pc *ParallelCrawler) getNewHTTPClient() *http.Client {
+	// TLS config optimized for security and stealth
+	return &http.Client{
+		Transport: &http.Transport{
+			DisableKeepAlives:     true,
+			MaxIdleConns:          1,
+			IdleConnTimeout:       1 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 15 * time.Second,
+			TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+				CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+				CipherSuites: []uint16{
+					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+					tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+					tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+				},
+			},
+		},
+		Timeout: 30 * time.Second,
+	}
+}
+
+func (pc *ParallelCrawler) setBrowserHeaders(req *http.Request, token string) {
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", "\"Windows\"")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("DNT", "1")
+	if token != "" {
+		req.Header.Set("Authorization", "JWT "+token)
+	}
+}
+
 func (pc *ParallelCrawler) worker(id int) {
 	defer pc.WG.Done()
 	client, token := pc.IM.GetNextClient()
@@ -219,20 +262,18 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 	for attempts := 0; attempts < 3; attempts++ {
 		url := myutils.GetV2SearchURL(query, page, 100)
 		req, _ := http.NewRequest("GET", url, nil)
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-		if token != "" { req.Header.Add("Authorization", "JWT "+token) }
+		pc.setBrowserHeaders(req, token)
 
 		resp, err := client.Do(req)
 		if err != nil {
-			myutils.Logger.Error(fmt.Sprintf("Network Error for %q: %v. Refreshing connection...", query, err))
+			myutils.Logger.Error(fmt.Sprintf("Network Error for %q: %v. Refreshing...", query, err))
 			newC, newT := pc.IM.GetNextClient()
 			return nil, newC, newT
 		}
 		defer resp.Body.Close()
 
-		// 401 Handle: Expired or Revoked Token. Triggering Centralized Re-login.
 		if resp.StatusCode == 401 {
-			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Invalidating token and rotating...", query))
+			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Revoking token...", query))
 			pc.IM.ClearToken(token)
 			newC, newT := pc.IM.GetNextClient()
 			return nil, newC, newT
