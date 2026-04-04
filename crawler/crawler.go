@@ -136,24 +136,9 @@ func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 	_, _ = coll.BulkWrite(context.TODO(), models)
 }
 
-func (pc *ParallelCrawler) getNewHTTPClient() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			DisableKeepAlives:     true,
-			MaxIdleConns:          1,
-			IdleConnTimeout:       1 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 15 * time.Second,
-			TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
-		},
-		Timeout: 30 * time.Second,
-	}
-}
-
 func (pc *ParallelCrawler) worker(id int) {
 	defer pc.WG.Done()
-	client := pc.getNewHTTPClient()
-	_, token := pc.IM.GetNextClient()
+	client, token := pc.IM.GetNextClient()
 
 	for {
 		prefix := pc.getNextTask()
@@ -165,8 +150,6 @@ func (pc *ParallelCrawler) worker(id int) {
 		atomic.AddInt32(&pc.pending, -1)
 
 		if !success {
-			// Fail-safe: if task failed, cool down the worker to avoid tight-loop DoS
-			myutils.Logger.Warn(fmt.Sprintf("Worker %d: Task [%s] failed. Cooling down 5s...", id, prefix))
 			time.Sleep(5 * time.Second)
 		}
 	}
@@ -175,11 +158,8 @@ func (pc *ParallelCrawler) worker(id int) {
 func (pc *ParallelCrawler) getNextTask() string {
 	if !myutils.GlobalDBClient.MongoFlag { return "" }
 	var doc struct{ ID string `bson:"_id"` }
-	
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
-	// Atomic Find and Update with Priority to oldest tasks to avoid re-picking failed tasks immediately
 	err := myutils.GlobalDBClient.Mongo.KeywordsColl.FindOneAndUpdate(
 		ctx,
 		bson.M{"status": "pending"},
@@ -220,7 +200,6 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 		for _, char := range alphabet {
 			models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{"_id": prefix + string(char)}).SetUpdate(bson.M{"$setOnInsert": bson.M{"status": "pending"}}).SetUpsert(true))
 		}
-		
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_, _ = myutils.GlobalDBClient.Mongo.KeywordsColl.BulkWrite(ctx, models)
@@ -246,26 +225,24 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 		resp, err := client.Do(req)
 		if err != nil {
 			myutils.Logger.Error(fmt.Sprintf("Network Error for %q: %v. Refreshing connection...", query, err))
-			client = pc.getNewHTTPClient()
-			time.Sleep(2 * time.Second)
-			continue
+			newC, newT := pc.IM.GetNextClient()
+			return nil, newC, newT
 		}
 		defer resp.Body.Close()
 
-		// 401 Handle: Token expired or revoked. Forcing re-login.
+		// 401 Handle: Expired or Revoked Token. Triggering Centralized Re-login.
 		if resp.StatusCode == 401 {
-			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Revoking token and logging in again...", query))
+			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Invalidating token and rotating...", query))
 			pc.IM.ClearToken(token)
 			newC, newT := pc.IM.GetNextClient()
-			return nil, pc.getNewHTTPClient(), newT
+			return nil, newC, newT
 		}
 
 		if resp.StatusCode == 429 {
-			myutils.Logger.Warn(fmt.Sprintf("429 Rate Limit for %q. Rotating account...", query))
-			time.Sleep(10 * time.Second)
-			_, token = pc.IM.GetNextClient()
-			client = pc.getNewHTTPClient()
-			continue
+			myutils.Logger.Warn(fmt.Sprintf("429 Rate Limit for %q. Rotating identity...", query))
+			time.Sleep(15 * time.Second)
+			newC, newT := pc.IM.GetNextClient()
+			return nil, newC, newT
 		}
 
 		if resp.StatusCode != http.StatusOK { 
