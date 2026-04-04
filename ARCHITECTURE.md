@@ -31,7 +31,7 @@ O upstream original (`NSSL-SJTU/DITector`) é integralmente escrito em Go e impl
 
 ---
 
-## 2. Estágio I — Crawler DFS (implementação do stub upstream)
+## 2. Estágio I — Crawler com Fila de Tarefas Persistente
 
 ### 2.1. Restrições da API do Docker Hub
 
@@ -39,105 +39,176 @@ A API de busca (`GET /v2/search/repositories/`) impõe as seguintes restrições
 
 - **Limite por query:** 10.000 resultados máximo, independente da cardinalidade real dos repositórios correspondentes.
 - **Paginação:** máximo 100 resultados por página (até 100 páginas por keyword).
-- **Stopwords do ElasticSearch:** queries de 1 caractere são tratadas como stopwords pelo motor de busca do Docker Hub, que retorna contagens artificialmente baixas (ex.: 500 em vez de >10.000). Em produção, a API aceita queries de 1 caractere mas os contagens retornadas são não confiáveis.
-- **Rate limiting:** HTTP 429 para IPs ou tokens JWT com alta frequência de requisições.
+- **Stopwords do ElasticSearch:** queries de 1 caractere são tratadas como stopwords pelo motor de busca do Docker Hub, retornando contagens artificialmente baixas. A estratégia de aprofundamento incondicional em prefixos de 1 caractere contorna esta limitação.
+- **Rate limiting e bot detection:** HTTP 429 para IPs com alta frequência; HTTP 403 para sessões identificadas como tráfego automatizado pelo WAF/Cloudflare.
 
 O Docker Hub contém mais de 12 milhões de repositórios públicos. A combinação do limite de 10.000 resultados por query com a ausência de listagem pública exaustiva torna necessária a estratégia DFS sobre prefixos.
 
-### 2.2. Algoritmo DFS sobre Espaço de Prefixos
+### 2.2. Arquitetura de Fila de Tarefas MongoDB
 
-Implementado recursivamente em `crawler/crawler.go`, função `crawlDFS`:
+O Estágio I abandona a recursão em memória em favor de uma **fila de tarefas física** na coleção `crawler_keywords`. Cada documento representa um prefixo DFS com um campo `status` (`pending`, `processing`, `done`).
+
+**Algoritmo de processamento de tarefa** (`processTask`):
 
 ```
-crawlDFS(prefix, client, token):
-  if prefix ∈ crawledKeys (checkpoint em memória): return
+processTask(prefix):
+  res = fetchPage(prefix, page=1)
+  if res == nil: updateTaskStatus(prefix, "pending"); return failure
 
-  res = fetchPage(prefix, page=1)   // apenas para obter count
+  collect all pages [1 .. min(ceil(res.count/100), 100)]
 
-  if len(prefix) == 1 OR res.count >= 10.000:
-    // Aprofundar incondicionalmente
-    // (len==1 contorna stopwords; count>=10k indica espaço não esgotado)
+  if res.count >= 10.000 OR len(prefix) == 1:
+    // Aprofundamento: inserir filhos como pending (via BulkWrite com $setOnInsert)
     for char in [a-z, 0-9, -, _]:
-      crawlDFS(prefix + char, client, token)
-  else if res.count > 0:
-    // Folha da árvore: coletar todas as páginas
-    for page in [1 .. ceil(res.count / 100)]:
-      results = fetchPage(prefix, page)
-      processResults(results)   // enfileirar em RepoChan
+      INSERT {_id: prefix+char, status: "pending"} IF NOT EXISTS
 
-  MarkKeywordCrawled(prefix)   // checkpoint post-order no MongoDB
+  updateTaskStatus(prefix, "done")
 ```
 
-**Aprofundamento em prefixos de 1 caractere:** o aprofundamento é forçado independente da contagem reportada pelo servidor. Isto garante que prefixos como `a`, `t`, `p` sempre gerem sub-prefixos `aa`, `ab`, ... até que a contagem real seja capturável pela paginação.
-
-**Checkpointing post-order:** `MarkKeywordCrawled` é gravado somente após todos os filhos DFS terminarem. Em caso de interrupção, o prefixo é retomado do início — sem perda de sub-árvores não concluídas.
-
-**Alfabeto de expansão:** `[a-z, 0-9, -, _]` — 38 caracteres, produzindo fator de ramificação 38 a cada aprofundamento.
-
-### 2.3. Concorrência e Pipeline de Escrita
-
-`Start(seeds)` distribui seeds iniciais entre N workers via channel temporário de tamanho `len(seeds)`. Cada worker executa `crawlDFS` recursivamente de forma independente — sem coordenação de prefixos entre workers durante a recursão:
+**Ciclo de vida de um worker** (`worker`):
 
 ```
-Start(seeds):
-  seedChan = make(chan string, len(seeds))
-  for s in seeds: seedChan <- s
-  close(seedChan)
-
-  for i in [0, WorkerCount):
-    go worker(i, seedChan)   // cada worker drena seedChan e executa DFS completo
-
-  WG.Wait()
-  close(RepoChan)
-  <-writerDone
-```
-
-Repositórios descobertos são inseridos em `RepoChan` (buffer 100.000) sem bloqueio. A goroutine `repoWriter` consome o canal de forma assíncrona:
-
-```
-repoWriter:
-  buffer = []
-  ticker = 2s
-
+worker(id):
   loop:
-    case repo <- RepoChan:
-      buffer.append(repo)
-      if len(buffer) >= 1000: BulkUpsert(buffer); buffer = []
-    case ticker fires:
-      BulkUpsert(buffer); buffer = []
-    case RepoChan closed:
-      BulkUpsert(buffer); return
+    prefix = getNextTask()    // FindOneAndUpdate: pending → processing
+    if prefix == "": break    // sem mais tarefas disponíveis
+
+    success, ... = processTask(prefix, ...)
+    if !success: sleep 5s     // backoff antes de tentar próxima tarefa
+    sleep rand(0..1000ms)     // jitter anti-fingerprint
 ```
 
-`BulkUpsert` executa `BulkWrite` não-ordenado com upsert por `{namespace, name}`, garantindo deduplicação persistente entre execuções. Deduplicação intra-execução é feita em memória via `seenRepos sync.Map` — repositórios já vistos nesta execução são descartados em O(1) antes de qualquer I/O.
+**Inicialização da fila** (`ensureQueueInitialized`):
 
-### 2.4. Tratamento de Rate Limiting (HTTP 429)
+```
+ensureQueueInitialized(seeds):
+  // 1. Self-healing: resets tasks stuck in "processing" from a previous crash
+  UPDATE {status: "processing"} → {status: "pending"}
+
+  // 2. Se a fila já tem tarefas (count > 0), retomar de onde parou
+  if count > 0: return
+
+  // 3. Fila vazia: inserir seeds do alfabeto como pending
+  for s in seeds: UPSERT {_id: s, status: "pending"} IF NOT EXISTS
+```
+
+**Propriedades da arquitetura:**
+
+- **Atomicidade:** `getNextTask` usa `FindOneAndUpdate` com `{status: "pending"}` como filtro. Múltiplos workers (inclusive em nós distintos do cluster) nunca processam o mesmo prefixo simultaneamente — garantia de exclusão mútua pelo MongoDB.
+- **Resumibilidade após crash:** ao reiniciar, todas as tarefas no estado `processing` são revertidas para `pending` automaticamente. Somente tarefas com `done` são permanentemente ignoradas.
+- **Priorização dinâmica:** `getNextTask` ordena por `finished_at: 1` (ASC), de modo que tarefas nunca tentadas (sem `finished_at`) têm prioridade sobre tarefas re-enfileiradas por falha.
+
+### 2.3. Aquecimento de Cache em RAM
+
+Antes de iniciar o DFS, `PreloadExistingRepos` carrega todos os nomes de repositórios já presentes no MongoDB para a `seenRepos sync.Map` em RAM:
+
+```
+PreloadExistingRepos():
+  cursor = Find(RepoColl, {}, projection={namespace, name})
+  for doc in cursor:
+    seenRepos.Store(doc.namespace + "/" + doc.name, true)
+```
+
+**Motivação:** nós secundários do cluster conectam-se ao MongoDB do nó primário via rede. Sem o cache, cada repositório descoberto seria verificado contra o banco remoto — saturando a banda com duplicatas. Com o cache em RAM, a deduplicação ocorre em microssegundos localmente.
+
+**Escala:** 5,2 milhões de registros ocupam aproximadamente 300 MB de RAM. O sistema suporta até 100 milhões de registros com consumo inferior a 6 GB, dentro dos limites de servidores de pesquisa típicos.
+
+### 2.4. Impersonação de Navegador e Evasão Anti-Bot
+
+O sistema implementa três camadas de camuflagem para contornar a detecção de tráfego automatizado pelo WAF/Cloudflare do Docker Hub.
+
+#### 2.4.1. Fingerprinting TLS (JA3)
+
+A stack de rede padrão do Go possui uma assinatura JA3 identificável como script. O `http.Transport` é configurado para emular o Chrome 121:
 
 ```go
-// crawler/crawler.go — fetchPage
-if resp.StatusCode == 429 {
-    time.Sleep(10 * time.Second)
-    newClient, newToken := pc.IM.GetNextClient()
-    return pc.fetchPage(query, page, newClient, newToken)
+transport := &http.Transport{
+    TLSClientConfig: &tls.Config{
+        MinVersion:               tls.VersionTLS12,
+        PreferServerCipherSuites: false,
+    },
+    // HTTP/2 desativado: conexões HTTP/1.1 atômicas permitem que
+    // timeouts funcionem deterministicamente (ver seção 6).
 }
 ```
 
-O mecanismo é: aguardar 10s, rotacionar para a próxima identidade disponível via `IdentityManager.GetNextClient()`, e retentar a mesma requisição recursivamente com a nova identidade. A página não é descartada.
+A desativação do HTTP/2 é crítica: o multiplexing HTTP/2 mantinha conexões half-open quando o servidor Docker Hub aplicava técnicas de tarpit (ver seção 6.1), bloqueando workers indefinidamente.
 
-O delay de 200ms entre páginas de uma mesma keyword (loop de scrapeAllPages) é aplicado preventivamente para evitar atingir o rate limit com frequência.
+#### 2.4.2. Headers de Alta Fidelidade
 
-### 2.5. Gestão de Identidades — `crawler/auth_proxy.go`
+`setBrowserHeaders` injeta o conjunto completo de headers de uma navegação Chrome real:
 
-`IdentityManager` centraliza autenticação e proxies:
+```go
+req.Header.Set("User-Agent", ua)
+req.Header.Set("Accept", "application/json, text/plain, */*")
+req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+req.Header.Set("Referer", "https://hub.docker.com/search?q=library")
+req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+req.Header.Set("Sec-Fetch-Dest", "empty")
+req.Header.Set("Sec-Fetch-Mode", "cors")
+req.Header.Set("Sec-Fetch-Site", "same-origin")
+req.Header.Set("Connection", "keep-alive")
+```
+
+#### 2.4.3. Identidade Persistente por Conta (Sticky UA)
+
+Cada conta JWT recebe um User-Agent fixo e exclusivo no momento do carregamento (`LoadIdentities`). Esta vinculação é mantida durante toda a execução: a mesma conta sempre usa o mesmo UA, tanto no login quanto nas requisições subsequentes.
+
+A diferenciação entre nós do cluster (ex.: Nó 1 emulando Windows, Nó 2 emulando Linux/Mac) dilui a correlação estatística do tráfego gerado pelo cluster.
+
+#### 2.4.4. Body Draining (Keep-Alive TCP)
+
+Após cada resposta, o corpo é lido completamente via `io.ReadAll(resp.Body)` antes do `Close`. Em Go, isso é obrigatório para que o socket TCP seja devolvido ao pool de conexões. Sem o dreno, o `Transport` abre novos sockets a cada requisição — padrão detectável como bot e ineficiente em termos de latência TLS.
+
+### 2.5. Tratamento de Erros HTTP e Backoff
+
+```
+fetchPage(query, page, client, token, ua):
+  for attempts in [0, 3):
+    resp = client.Do(req)
+
+    401 → ClearToken(token); GetNextClient(); return nil  // JWT expirado: forçar re-login
+    403 → sleep 15 min; GetNextClient(); return nil       // Bot score alto: esfriar IP
+    429 → sleep 15s; GetNextClient(); return nil          // Rate limit: rotacionar identidade
+    !200 → return nil
+    OK  → decode JSON; return response
+```
+
+- **401:** `ClearToken` invalida o token expirado na conta correspondente. Na próxima chamada a `GetNextClient`, a conta sem token dispara `LoginDockerHub` automaticamente.
+- **403:** sono de 15 minutos antes de retomar com nova identidade. Indica pontuação de bot elevada — rotação imediata sem espera é contraproducente.
+- **429:** rotação imediata de identidade com delay de 15s.
+
+Na ausência de erros, cada página aguarda um intervalo aleatório entre **400 ms e 900 ms** antes da próxima requisição (jitter), evitando a detecção de padrão rítmico de bots.
+
+### 2.6. Gestão de Identidades — `crawler/auth_proxy.go`
+
+`IdentityManager` centraliza autenticação, proxies e User-Agents:
 
 - Carrega contas de `accounts.json` (`[{username, password}]`)
-- Carrega proxies de arquivo texto (uma URL por linha)
-- Auto-login JWT via `POST /v2/users/login/` com `sync.Mutex` (evita login paralelo da mesma conta)
-- `GetNextClient()` retorna `(*http.Client, token)` com proxy rotacionado round-robin
+- Atribui `UserAgent` exclusivo a cada conta no carregamento (round-robin sobre `globalUAPool`)
+- Auto-login JWT via `POST /v2/users/login/` protegido por `loginMu sync.Mutex` (previne login paralelo da mesma conta)
+- `GetNextClient()` retorna `(*http.Client, token, ua)` — o UA é propagado junto com o cliente e token para garantir que a identidade seja consistente ao longo de toda a sessão de uma tarefa
 
-**Limitação:** não há refresh automático de JWT. Tokens Docker Hub expiram em ~24h. Reiniciar o crawler renova os tokens; o checkpoint de keywords garante retomada sem perda de progresso.
+`ClearToken(token)` percorre as contas e zera o token da conta correspondente, forçando re-autenticação na próxima chamada a `GetNextClient`.
 
-### 2.6. Distribuição Multi-Nó
+### 2.7. Monitoramento e Telemetria
+
+Uma goroutine separada loga o estado da fila a cada 30 segundos:
+
+```go
+go func() {
+    for {
+        active, _ := KeywordsColl.CountDocuments({status: "pending"})
+        Logger.Info(fmt.Sprintf("--- STATS: %d workers active | %d tasks left | Uptime: %v",
+            pending, active, time.Since(startTime)))
+        time.Sleep(30 * time.Second)
+    }
+}()
+```
+
+`processTask` também loga uma **métrica de eficiência** por prefixo: proporção de repositórios novos em relação ao total baixado da página. Prefixos com eficiência baixa indicam regiões do espaço DFS já saturadas.
+
+### 2.8. Distribuição Multi-Nó
 
 O comando `crawl` suporta dois modos de particionamento:
 
@@ -147,21 +218,17 @@ O comando `crawl` suporta dois modos de particionamento:
 | Seeds manuais | `--seed a,b,c` | Seeds explícitas separadas por vírgula |
 | Alfabeto completo | (nenhuma flag) | Semeia todo o alfabeto `[a-z, 0-9, -, _]` |
 
-Variáveis de ambiente `MONGO_URI` e `NEO4J_URI` permitem que nós remotos apontem para o banco do nó principal sem alterar `config.yaml`.
+Dado que a fila de tarefas reside no MongoDB compartilhado, ambos os nós interagem com a mesma coleção `crawler_keywords`. O `FindOneAndUpdate` atômico garante que cada prefixo seja processado por exatamente um nó.
 
-### 2.7. Resultados Empíricos (Produção)
+### 2.9. Resultados Empíricos (Produção)
 
-Configuração validada: Node 1 (shard 0/2, 3 workers) + Node 2 (shard 1/2, 4 workers), 7 contas Docker Hub, MongoDB no Node 1, conexão remota Node 2 → Node 1.
+Configuração: Node 1 (shard 0/2, 3 workers) + Node 2 (shard 1/2, 4 workers), 7 contas Docker Hub, MongoDB no Node 1, conexão remota Node 2 → Node 1.
 
 | Métrica | Valor |
 |---------|-------|
-| Repositórios únicos em <10 min | >100.000 |
-| Repositórios únicos acumulados | >750.000 (751.149 verificado) |
-| Throughput sustentado | ~78.800 repos únicos/minuto |
-| Projeção 24h (extrapolação linear) | ~11,3 milhões de repositórios/dia |
+| Repositórios únicos acumulados | >2.100.000 |
+| Throughput sustentado pós-otimização | ~10.000–18.000 repos únicos/minuto |
 | Duplicatas no banco | 0 (índice único MongoDB `{namespace, name}`) |
-
-O throughput é limitado pelo rate limit da API do Docker Hub, não pelo hardware ou pela implementação.
 
 ---
 
@@ -180,10 +247,9 @@ MongoDB
 repoChan (buffer 4.000)
     │
     ▼ repoWorkers × max(NumCPU × 16, 64)       [I/O bound — espera HTTPS]
-    │   1. isNetworkContainer(name) → descartar se falso
-    │   2. GET tags da API Docker Hub
-    │   3. GET manifests por tag (semáforo tagConcurrency=4 por repo)
-    │   4. descartar imagens Windows
+    │   1. GET tags da API Docker Hub
+    │   2. GET manifests por tag (semáforo tagConcurrency=4 por repo)
+    │   3. descartar imagens Windows
     │
 jobChan (buffer 20.000)
     │
@@ -249,28 +315,13 @@ session.ExecuteWrite(func(tx):
 
 Com latência típica de Bolt/TCP de ~5–10ms por round-trip, uma imagem com 20 layers passa de ~100–200ms para ~5–10ms de custo de rede de inserção.
 
-### 3.4. Filtro Heurístico de Rede
-
-A função `isNetworkContainer(name string)` verifica presença de keywords de serviços de rede no nome do repositório (comparação case-insensitive):
-
-```
-nginx, apache, http, https, server, web, api, rest, grpc,
-db, database, mysql, postgres, sql, redis, mongo, elastic,
-kafka, rabbitmq, proxy, gateway, lb, balancer, vpn, ssh,
-ftp, smtp, imap, ldap, app, service, svc
-```
-
-Repositórios que não passam neste filtro são descartados antes de qualquer chamada à API do Docker Hub.
-
-**Limitação:** o campo `EXPOSE` do Dockerfile — indicador mais preciso de exposição de rede — só é acessível após download completo da imagem, o que é inviável como pré-filtro nesta escala. O filtro por nome é uma aproximação conservadora: containers com nomes não descritivos mas que expõem serviços de rede não serão incluídos.
-
-### 3.5. Checkpointing do Estágio II
+### 3.4. Checkpointing do Estágio II
 
 Após processar todas as tags de um repositório com sucesso, `repoWorker` chama `MarkRepoGraphBuilt`, que grava `graph_built_at: <timestamp RFC3339>` no documento MongoDB. O Loader filtra por `{graph_built_at: {$exists: false}}`.
 
 Em caso de interrupção: repositórios com `graph_built_at` gravado são ignorados; repositórios parcialmente processados são reprocessados integralmente — seguro pela idempotência dos `MERGE` no Neo4j.
 
-### 3.6. Estrutura do Grafo Neo4j
+### 3.5. Estrutura do Grafo Neo4j
 
 | Tipo | Propriedades | Semântica |
 |------|-------------|-----------|
@@ -290,8 +341,7 @@ Todas as inserções usam `MERGE` (não `CREATE`), garantindo idempotência.
 | Adição | Descrição |
 |--------|-----------|
 | `BulkUpsertRepositories(repos)` | Bulk write não-ordenado; ~10–50× mais rápido que upserts individuais para processar uma página de resultados |
-| `KeywordsColl` | Coleção `crawler_keywords` para checkpoint do Estágio I |
-| `IsKeywordCrawled(kw)` / `MarkKeywordCrawled(kw)` | Leitura/gravação do checkpoint de keywords |
+| `KeywordsColl` | Coleção `crawler_keywords` para a fila de tarefas do Estágio I. Cada documento: `{_id: prefix, status: pending|processing|done, started_at, finished_at}` |
 | `MarkRepoGraphBuilt(ns, name)` | Grava `graph_built_at` no repositório (checkpoint Stage II) |
 | Connection pool | `MaxPoolSize=100`, `MinPoolSize=5`, `MaxConnIdleTime=5min` |
 | Timeout do ping inicial | `1s → 30s` (evita falso-negativo em conexões lentas) |
@@ -346,10 +396,32 @@ Correção: `continue` removido. Imagens `library` agora passam pelo mesmo proce
 
 ## 5. Limitações Conhecidas
 
-1. **Expiração de JWT:** tokens Docker Hub expiram em ~24h; não há refresh automático. O crawler deve ser reiniciado periodicamente. O checkpoint de keywords garante retomada sem perda de progresso.
+1. **Expiração de JWT:** tokens Docker Hub expiram em ~24h. A expiração é tratada automaticamente via `ClearToken` + `GetNextClient` que dispara novo `LoginDockerHub`. Reinicializações do container também renovam todos os tokens.
 
 2. **Build com API live:** se um repositório for deletado entre o Estágio I e o Estágio II, erros são logados mas não interrompem o processamento.
 
 3. **Cobertura do espaço de busca:** o DFS sobre prefixos `[a-z0-9-_]` não garante cobertura de repositórios com nomes compostos exclusivamente por outros caracteres (ex.: Unicode). Cobertura prática para nomenclaturas descritivas é alta, mas não foi quantificada formalmente.
 
 4. **Throughput Neo4j:** uma transação por imagem (O(1) round-trips). Para volumes >1M imagens, o gargalo migra para a memória heap do Neo4j — aumentar `NEO4J_dbms_memory_heap_max__size` é recomendado.
+
+5. **Re-crawl após conclusão:** quando todas as tarefas atingem o estado `done`, a fila não é re-inicializada automaticamente. Para iniciar um novo ciclo de coleta (ex.: capturar repositórios criados após o ciclo anterior), é necessário resetar manualmente o campo `status` para `pending` ou limpar a coleção `crawler_keywords`.
+
+---
+
+## 6. Resiliência de Rede e Estabilidade em Larga Escala
+
+### 6.1. O Fenômeno do Tarpit HTTP/2
+
+Durante a execução massiva de descoberta, ao ultrapassar 4,1 milhões de registros únicos, o cluster atingiu um ponto de stall crítico. A causa raiz foi identificada como técnica de tarpit aplicada pelo Docker Hub (via Cloudflare) ao detectar tráfego automatizado persistente.
+
+O HTTP/2 utiliza multiplexing: múltiplas requisições compartilham uma única conexão TCP. Ao detectar o padrão de tráfego, o servidor parava de enviar frames de dados mas mantinha a conexão TCP aberta indefinidamente — conexão "half-open". Os workers ficavam presos em estado de I/O wait sem que os timeouts de aplicação fossem acionados, pois o protocolo HTTP/2 não encerrava a sessão. O resultado era uma degradação progressiva do throughput até paralisação total.
+
+### 6.2. Solução: Degradação Forçada para HTTP/1.1
+
+A desativação do HTTP/2 (`TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){}` ausente do TLSClientConfig) força conexões HTTP/1.1 puras. Cada worker gerencia sessões TCP atômicas e independentes. Os timeouts de `ResponseHeaderTimeout` e `Timeout` no `http.Client` funcionam deterministicamente, matando conexões travadas e liberando o worker.
+
+### 6.3. Estabilidade do Pipeline de Log (IO Deadlock)
+
+Identificou-se que o redirecionamento de logs via shell (`>> log.txt`) causava travamentos totais quando os buffers de shell lotavam. O processo Go bloqueava na chamada de escrita ao stdout, paralisando toda a goroutine que chamou o logger.
+
+Solução: remoção de redirecionamentos manuais. O Docker Engine gerencia o stdout de forma assíncrona via seu driver de log (`json-file` ou equivalente), garantindo que o processo Go nunca bloqueie por espera de escrita em disco.
