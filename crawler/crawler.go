@@ -136,28 +136,23 @@ func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 	_, _ = coll.BulkWrite(context.TODO(), models)
 }
 
+// getNewHTTPClient mimics a real modern browser (Chrome 120)
 func (pc *ParallelCrawler) getNewHTTPClient() *http.Client {
-	// TLS config optimized for security and stealth
 	return &http.Client{
 		Transport: &http.Transport{
-			DisableKeepAlives:     true,
-			MaxIdleConns:          1,
-			IdleConnTimeout:       1 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 15 * time.Second,
-			TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+			DisableKeepAlives:   false, // Reusing connections is more "human"
+			MaxIdleConns:        100,
+			IdleConnTimeout:     90 * time.Second,
+			MaxIdleConnsPerHost: 10,
+			TLSHandshakeTimeout: 10 * time.Second,
 			TLSClientConfig: &tls.Config{
 				MinVersion: tls.VersionTLS12,
-				CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
-				CipherSuites: []uint16{
-					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-					tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-				},
+				// Mimic browser cipher suite preference
+				PreferServerCipherSuites: false, 
+				CurvePreferences:         []tls.CurveID{tls.X25519, tls.CurveP256},
 			},
+			// Force HTTP/1.1 to avoid HTTP/2 Tarpit/Multiplexing detection
+			TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 		},
 		Timeout: 30 * time.Second,
 	}
@@ -167,13 +162,14 @@ func (pc *ParallelCrawler) setBrowserHeaders(req *http.Request, token string) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Referer", "https://hub.docker.com/search?q=library")
 	req.Header.Set("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 	req.Header.Set("Sec-Ch-Ua-Platform", "\"Windows\"")
 	req.Header.Set("Sec-Fetch-Dest", "empty")
 	req.Header.Set("Sec-Fetch-Mode", "cors")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Set("DNT", "1")
+	req.Header.Set("Connection", "keep-alive")
 	if token != "" {
 		req.Header.Set("Authorization", "JWT "+token)
 	}
@@ -227,6 +223,7 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 	pages := (res.Count / 100) + 1
 	if pages > 100 { pages = 100 }
 	for p := 2; p <= pages; p++ {
+		// Random jitter to look human
 		time.Sleep(time.Duration(400 + rand.Intn(500)) * time.Millisecond)
 		resP, c, t := pc.fetchPage(prefix, p, client, token)
 		client, token = c, t
@@ -273,7 +270,7 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 		defer resp.Body.Close()
 
 		if resp.StatusCode == 401 {
-			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Revoking token...", query))
+			myutils.Logger.Warn(fmt.Sprintf("401 Unauthorized for %q. Invalidating token...", query))
 			pc.IM.ClearToken(token)
 			newC, newT := pc.IM.GetNextClient()
 			return nil, newC, newT
@@ -281,7 +278,7 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 
 		if resp.StatusCode == 429 {
 			myutils.Logger.Warn(fmt.Sprintf("429 Rate Limit for %q. Rotating identity...", query))
-			time.Sleep(15 * time.Second)
+			time.Sleep(10 * time.Second)
 			newC, newT := pc.IM.GetNextClient()
 			return nil, newC, newT
 		}
