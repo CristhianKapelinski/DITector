@@ -250,8 +250,14 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 	if (res.Count >= 10000 || len(prefix) == 1) && len(prefix) < 255 {
 		priority := 0
 		if newInPrefix > 0 { priority = 1 }
+		lastChar := byte(0)
+		if len(prefix) > 0 { lastChar = prefix[len(prefix)-1] }
+		isSep := lastChar == '-' || lastChar == '_'
 		var models []mongo.WriteModel
 		for _, char := range alphabet {
+			// Don't append separator to a prefix that already ends with one:
+			// Docker Hub treats consecutive separators identically, causing infinite DFS depth.
+			if isSep && (char == '-' || char == '_') { continue }
 			models = append(models, mongo.NewUpdateOneModel().
 				SetFilter(bson.M{"_id": prefix + string(char)}).
 				SetUpdate(bson.M{"$setOnInsert": bson.M{"status": "pending", "priority": priority}}).
