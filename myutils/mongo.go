@@ -164,13 +164,11 @@ func (m *MyMongo) createRepoCollIndexes() (err error) {
 		}
 	}
 
-	// Stage II queue index: sort by pull_count DESC, filter unbuilt repos.
-	// Without this index ClaimNextBuildRepo does a full collection scan on
-	// millions of documents and times out.
+	// Stage II: sort by pull_count DESC for ClaimNextBuildRepo and
+	// CountPendingBuildRepos. Without this index both queries do a full
+	// collection scan on millions of documents and time out.
 	stageIIModel := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "pull_count", Value: -1},
-		},
+		Keys:    bson.D{{Key: "pull_count", Value: -1}},
 		Options: options.Index().SetName("pull_count_desc"),
 	}
 	_, err = indexView.CreateOne(context.Background(), stageIIModel)
@@ -178,17 +176,17 @@ func (m *MyMongo) createRepoCollIndexes() (err error) {
 		return
 	}
 
-	// Sparse compound index used by CountPendingBuildRepos and the Stage II
-	// worker loop. Only indexes documents that still have no graph_built_at,
-	// so the index shrinks as repos are processed.
-	stageIIQueueModel := mongo.IndexModel{
-		Keys: bson.D{
-			{Key: "graph_built_at", Value: 1},
-			{Key: "pull_count", Value: -1},
-		},
-		Options: options.Index().SetName("stage2_queue").SetSparse(true),
+	// Partial index covering only unprocessed repos (graph_built_at absent).
+	// Unlike a sparse compound index, this actually shrinks as Stage II runs
+	// because documents gain graph_built_at and leave the partial filter.
+	// Used by CountPendingBuildRepos and ClaimNextBuildRepo when threshold=0.
+	stageIIPartialModel := mongo.IndexModel{
+		Keys: bson.D{{Key: "pull_count", Value: -1}},
+		Options: options.Index().
+			SetName("stage2_partial").
+			SetPartialFilterExpression(bson.D{{Key: "graph_built_at", Value: bson.D{{Key: "$exists", Value: false}}}}),
 	}
-	_, err = indexView.CreateOne(context.Background(), stageIIQueueModel)
+	_, err = indexView.CreateOne(context.Background(), stageIIPartialModel)
 	if err != nil && !mongo.IsDuplicateKeyError(err) {
 		return
 	}
