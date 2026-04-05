@@ -130,7 +130,8 @@ func (im *IdentityManager) GetNextClient() (*http.Client, string, string) {
 		MaxIdleConns:        100,
 		IdleConnTimeout:     90 * time.Second,
 		MaxIdleConnsPerHost: 10,
-		TLSHandshakeTimeout: 10 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			PreferServerCipherSuites: false,
@@ -139,7 +140,7 @@ func (im *IdentityManager) GetNextClient() (*http.Client, string, string) {
 
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   30 * time.Second,
+		Timeout:   10 * time.Second,
 	}
 
 	if len(im.Accounts) == 0 {
