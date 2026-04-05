@@ -192,9 +192,16 @@ func (pc *ParallelCrawler) worker(id int) {
 		myUA = uaLinuxMac[rand.Intn(len(uaLinuxMac))]
 	}
 	client, token, _ := pc.IM.GetNextClient()
+	emptyStreak := 0
 	for {
 		prefix := pc.getNextTask()
-		if prefix == "" { break }
+		if prefix == "" {
+			emptyStreak++
+			if emptyStreak > 12 { break }
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		emptyStreak = 0
 		atomic.AddInt32(&pc.pending, 1)
 		success, nextClient, nextToken, nextUA := pc.processTask(prefix, client, token, myUA)
 		client, token, myUA = nextClient, nextToken, nextUA
