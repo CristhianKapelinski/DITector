@@ -1,15 +1,11 @@
 package buildgraph
 
-func Build(format string, page int64, pageSize int64, tagCnt int, pullCountThreshold int64) {
-	config(format)
+import "github.com/NSSL-SJTU/DITector/myutils"
 
+func Build(format string, tagCnt int, threshold int64, ip myutils.IdentityProvider, dataDir string) {
+	config(format)
 	switch format {
 	case "mongo":
-		BuildFromMongo(page, pageSize, tagCnt, pullCountThreshold)
+		StartFromMongo(tagCnt, threshold, ip, dataDir)
 	}
-}
-
-// BuildFromMongo 根据crawler爬到的mysql内容建立信息库
-func BuildFromMongo(page int64, pageSize int64, tagCnt int, pullCountThreshold int64) {
-	StartFromMongo(page, pageSize, tagCnt, pullCountThreshold)
 }
