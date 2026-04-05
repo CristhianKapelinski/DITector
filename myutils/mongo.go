@@ -453,15 +453,67 @@ func (m *MyMongo) DropKeywordCheckpoint() error {
 
 // --- Stage II checkpoint: per-repo graph build tracking ---
 
-// MarkRepoGraphBuilt sets graph_built_at on the repo document. Called by Stage II
-// after all tags/images for the repo have been inserted into Neo4j.
+// MarkRepoGraphBuilt sets graph_built_at and releases the build claim.
 func (m *MyMongo) MarkRepoGraphBuilt(namespace, name string) error {
 	_, err := m.RepoColl.UpdateOne(
 		context.TODO(),
 		bson.M{"namespace": namespace, "name": name},
-		bson.M{"$set": bson.M{"graph_built_at": time.Now().UTC().Format(time.RFC3339)}},
+		bson.M{
+			"$set":   bson.M{"graph_built_at": time.Now().UTC().Format(time.RFC3339)},
+			"$unset": bson.M{"build_claimed": "", "build_started_at": ""},
+		},
 	)
 	return err
+}
+
+// ClaimNextBuildRepo atomically claims one unprocessed repo for Stage II.
+// Uses FindOneAndUpdate so two machines never claim the same repo simultaneously.
+func (m *MyMongo) ClaimNextBuildRepo(threshold int64) (*Repository, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var repo Repository
+	err := m.RepoColl.FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"pull_count":     bson.M{"$gte": threshold},
+			"graph_built_at": bson.M{"$exists": false},
+			"build_claimed":  bson.M{"$ne": true},
+		},
+		bson.M{"$set": bson.M{"build_claimed": true, "build_started_at": time.Now()}},
+		options.FindOneAndUpdate().
+			SetReturnDocument(options.After).
+			SetSort(bson.D{{Key: "pull_count", Value: -1}}),
+	).Decode(&repo)
+	if err != nil {
+		return nil, err
+	}
+	return &repo, nil
+}
+
+// ResetStaleBuildClaims releases claims left behind by a crashed Stage II run.
+// Call once at startup before spawning workers.
+func (m *MyMongo) ResetStaleBuildClaims() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, _ := m.RepoColl.UpdateMany(
+		ctx,
+		bson.M{"build_claimed": true, "graph_built_at": bson.M{"$exists": false}},
+		bson.M{"$unset": bson.M{"build_claimed": "", "build_started_at": ""}},
+	)
+	if res != nil && res.ModifiedCount > 0 {
+		Logger.Info(fmt.Sprintf(">>> BUILD RESUME: Released %d stale claims from previous run", res.ModifiedCount))
+	}
+}
+
+// CountPendingBuildRepos returns how many repos still need Stage II processing.
+func (m *MyMongo) CountPendingBuildRepos(threshold int64) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return m.RepoColl.CountDocuments(ctx, bson.M{
+		"pull_count":     bson.M{"$gte": threshold},
+		"graph_built_at": bson.M{"$exists": false},
+		"build_claimed":  bson.M{"$ne": true},
+	})
 }
 
 func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, error) {
@@ -818,6 +870,25 @@ func (m *MyMongo) FindImageByDigest(digest string) (*Image, error) {
 	err := m.ImgColl.FindOne(context.Background(), filter).Decode(iMeta)
 
 	return iMeta, err
+}
+
+// FindImagesByDigests fetches multiple images in a single query and returns a
+// map keyed by digest. Used by the Stage II cache-hit path to avoid N+1 queries.
+func (m *MyMongo) FindImagesByDigests(digests []string) (map[string]*Image, error) {
+	cursor, err := m.ImgColl.Find(context.Background(), bson.M{"digest": bson.M{"$in": digests}})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+	result := make(map[string]*Image, len(digests))
+	for cursor.Next(context.Background()) {
+		var img Image
+		if err := cursor.Decode(&img); err != nil {
+			continue
+		}
+		result[img.Digest] = &img
+	}
+	return result, cursor.Err()
 }
 
 // 传入的KeyMap应该仅为空，或仅包含digest字段
