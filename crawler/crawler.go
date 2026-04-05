@@ -244,24 +244,26 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 		newInPrefix += pc.processResults(resP.Repositories)
 	}
 	if (res.Count >= 10000 || len(prefix) == 1) && len(prefix) < 255 {
-		priority := 0
-		if newInPrefix > 0 { priority = 1 }
-		lastChar := byte(0)
-		if len(prefix) > 0 { lastChar = prefix[len(prefix)-1] }
-		isSep := lastChar == '-' || lastChar == '_'
-		var models []mongo.WriteModel
-		for _, char := range alphabet {
-			// Don't append separator to a prefix that already ends with one:
-			// Docker Hub treats consecutive separators identically, causing infinite DFS depth.
-			if isSep && (char == '-' || char == '_') { continue }
-			models = append(models, mongo.NewUpdateOneModel().
-				SetFilter(bson.M{"_id": prefix + string(char)}).
-				SetUpdate(bson.M{"$setOnInsert": bson.M{"status": "pending", "priority": priority}}).
-				SetUpsert(true))
+		tokenPlateau := newInPrefix == 0 && res.Count >= 10000 && strings.Contains(prefix, "-") && len(prefix) > 1
+		if tokenPlateau {
+			myutils.Logger.Info(fmt.Sprintf(">>> PRUNING [%s]: token-match plateau (%d results, 0 new).", prefix, res.Count))
+		} else {
+			priority := 0
+			if newInPrefix > 0 { priority = 1 }
+			lastChar := prefix[len(prefix)-1]
+			isSep := lastChar == '-' || lastChar == '_'
+			var models []mongo.WriteModel
+			for _, char := range alphabet {
+				if isSep && (char == '-' || char == '_') { continue }
+				models = append(models, mongo.NewUpdateOneModel().
+					SetFilter(bson.M{"_id": prefix + string(char)}).
+					SetUpdate(bson.M{"$setOnInsert": bson.M{"status": "pending", "priority": priority}}).
+					SetUpsert(true))
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, _ = myutils.GlobalDBClient.Mongo.KeywordsColl.BulkWrite(ctx, models)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_, _ = myutils.GlobalDBClient.Mongo.KeywordsColl.BulkWrite(ctx, models)
 	}
 	efficiency := (float64(newInPrefix) / float64(pages*100)) * 100.0
 	myutils.Logger.Info(fmt.Sprintf("[DONE] Prefix [%s]: +%d unique | Eff: %.1f%% | Found total: %d", prefix, newInPrefix, efficiency, res.Count))
