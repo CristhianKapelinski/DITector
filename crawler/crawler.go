@@ -245,27 +245,30 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 	}
 	if (res.Count >= 10000 || len(prefix) == 1) && len(prefix) < 255 {
 		tokenPlateau := newInPrefix == 0 && res.Count >= 10000 && strings.Contains(prefix, "-") && len(prefix) > 1
-		if tokenPlateau {
-			myutils.Logger.Info(fmt.Sprintf(">>> PRUNING [%s]: token-match plateau (%d results, 0 new).", prefix, res.Count))
-		} else {
-			lastChar := prefix[len(prefix)-1]
-			isSep := lastChar == '-' || lastChar == '_'
-			var models []mongo.WriteModel
-			for _, char := range alphabet {
-				if isSep && (char == '-' || char == '_') { continue }
-				child := prefix + string(char)
-				priority := 0
+		lastChar := prefix[len(prefix)-1]
+		isSep := lastChar == '-' || lastChar == '_'
+		var models []mongo.WriteModel
+		for _, char := range alphabet {
+			if isSep && (char == '-' || char == '_') { continue }
+			child := prefix + string(char)
+			priority := 0
+			if tokenPlateau {
+				priority = -1
+			} else {
 				if newInPrefix > 0 { priority = 1 }
 				if !strings.Contains(child, "-") { priority = 2 }
-				models = append(models, mongo.NewUpdateOneModel().
-					SetFilter(bson.M{"_id": child}).
-					SetUpdate(bson.M{"$setOnInsert": bson.M{"status": "pending", "priority": priority}}).
-					SetUpsert(true))
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			_, _ = myutils.GlobalDBClient.Mongo.KeywordsColl.BulkWrite(ctx, models)
+			models = append(models, mongo.NewUpdateOneModel().
+				SetFilter(bson.M{"_id": child}).
+				SetUpdate(bson.M{"$setOnInsert": bson.M{"status": "pending", "priority": priority}}).
+				SetUpsert(true))
 		}
+		if tokenPlateau {
+			myutils.Logger.Info(fmt.Sprintf(">>> DEPRIORITIZING [%s]: token-match plateau (%d results, 0 new). Children set to priority=-1.", prefix, res.Count))
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, _ = myutils.GlobalDBClient.Mongo.KeywordsColl.BulkWrite(ctx, models)
 	}
 	efficiency := (float64(newInPrefix) / float64(pages*100)) * 100.0
 	myutils.Logger.Info(fmt.Sprintf("[DONE] Prefix [%s]: +%d unique | Eff: %.1f%% | Found total: %d", prefix, newInPrefix, efficiency, res.Count))
