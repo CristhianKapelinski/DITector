@@ -192,16 +192,20 @@ func (pc *ParallelCrawler) worker(id int) {
 		myUA = uaLinuxMac[rand.Intn(len(uaLinuxMac))]
 	}
 	client, token, _ := pc.IM.GetNextClient()
-	emptyStreak := 0
+	emptyCount := 0
 	for {
 		prefix := pc.getNextTask()
 		if prefix == "" {
-			emptyStreak++
-			if emptyStreak > 12 { break }
+			emptyCount++
+			if emptyCount%6 == 0 {
+				count, _ := myutils.GlobalDBClient.Mongo.KeywordsColl.CountDocuments(
+					context.TODO(), bson.M{"status": "pending"})
+				if count == 0 { break }
+			}
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		emptyStreak = 0
+		emptyCount = 0
 		atomic.AddInt32(&pc.pending, 1)
 		success, nextClient, nextToken, nextUA := pc.processTask(prefix, client, token, myUA)
 		client, token, myUA = nextClient, nextToken, nextUA
@@ -214,7 +218,7 @@ func (pc *ParallelCrawler) worker(id int) {
 func (pc *ParallelCrawler) getNextTask() string {
 	if !myutils.GlobalDBClient.MongoFlag { return "" }
 	var doc struct{ ID string `bson:"_id"` }
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	err := myutils.GlobalDBClient.Mongo.KeywordsColl.FindOneAndUpdate(
 		ctx,
