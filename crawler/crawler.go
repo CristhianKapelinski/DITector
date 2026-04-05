@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"crypto/tls"
 	"io"
 
 	"github.com/NSSL-SJTU/DITector/myutils"
@@ -21,6 +22,16 @@ import (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+// Updated User-Agents to match the high-version found in browser dump
+var uaWindows = []string{
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+}
+var uaLinuxMac = []string{
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
 }
 
 var pageConcurrency = func() int {
@@ -61,9 +72,7 @@ func NewParallelCrawler(workers int, im *IdentityManager) *ParallelCrawler {
 
 func (pc *ParallelCrawler) PreloadExistingRepos() {
 	if !myutils.GlobalDBClient.MongoFlag { return }
-	
 	myutils.Logger.Info(">>> CACHE WARM-UP: Loading existing dataset to RAM...")
-	
 	coll := myutils.GlobalDBClient.Mongo.RepoColl
 	projection := bson.M{"namespace": 1, "name": 1, "_id": 0}
 	cursor, err := coll.Find(context.TODO(), bson.M{}, options.Find().SetProjection(projection))
@@ -72,7 +81,6 @@ func (pc *ParallelCrawler) PreloadExistingRepos() {
 		return
 	}
 	defer cursor.Close(context.TODO())
-
 	count := 0
 	start := time.Now()
 	for cursor.Next(context.TODO()) {
@@ -81,9 +89,7 @@ func (pc *ParallelCrawler) PreloadExistingRepos() {
 			Name      string `bson:"name"`
 		}
 		if err := cursor.Decode(&r); err != nil { continue }
-		
-		fullName := r.Namespace + "/" + r.Name
-		pc.seenRepos.Store(fullName, true)
+		pc.seenRepos.Store(r.Namespace+"/"+r.Name, true)
 		count++
 		if count % 250000 == 0 {
 			myutils.Logger.Info(fmt.Sprintf("... Preloading: %.1f Million repos in RAM", float64(count)/1000000.0))
@@ -97,7 +103,6 @@ func (pc *ParallelCrawler) repoWriter(ctx context.Context, done chan struct{}) {
 	buffer := make([]*myutils.Repository, 0, 1000)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-
 	flush := func() {
 		if len(buffer) == 0 { return }
 		count := len(buffer)
@@ -109,7 +114,6 @@ func (pc *ParallelCrawler) repoWriter(ctx context.Context, done chan struct{}) {
 		myutils.Logger.Info(fmt.Sprintf(">>> DB SYNC: Flushed %d NEW repos to central database", count))
 		buffer = buffer[:0]
 	}
-
 	for {
 		select {
 		case repo, ok := <-pc.RepoChan:
@@ -124,22 +128,17 @@ func (pc *ParallelCrawler) repoWriter(ctx context.Context, done chan struct{}) {
 
 func (pc *ParallelCrawler) Start(seeds []string) {
 	pc.PreloadExistingRepos()
-
 	myutils.Logger.Info(fmt.Sprintf(">>> CORE START: Discovery Pipeline Active [W:%d]", pc.WorkerCount))
-	
 	if len(seeds) == 0 {
 		for _, ch := range alphabet { seeds = append(seeds, string(ch)) }
 	}
 	pc.ensureQueueInitialized(seeds)
-
 	writerDone := make(chan struct{})
 	go pc.repoWriter(context.Background(), writerDone)
-
 	for i := 0; i < pc.WorkerCount; i++ {
 		pc.WG.Add(1)
 		go pc.worker(i)
 	}
-
 	go func() {
 		for {
 			p := atomic.LoadInt32(&pc.pending)
@@ -148,7 +147,6 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 			time.Sleep(30 * time.Second)
 		}
 	}()
-
 	pc.WG.Wait()
 	close(pc.RepoChan)
 	<-writerDone
@@ -158,14 +156,9 @@ func (pc *ParallelCrawler) Start(seeds []string) {
 func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 	if !myutils.GlobalDBClient.MongoFlag { return }
 	coll := myutils.GlobalDBClient.Mongo.KeywordsColl
-	
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	
-	_, _ = coll.UpdateMany(ctx, bson.M{"status": "processing"}, bson.M{"$set": bson.M{"status": "pending"}})
-	count, _ := coll.CountDocuments(ctx, bson.M{})
+	_, _ = coll.UpdateMany(context.TODO(), bson.M{"status": "processing"}, bson.M{"$set": bson.M{"status": "pending"}})
+	count, _ := coll.CountDocuments(context.TODO(), bson.M{})
 	if count > 0 { return }
-
 	var models []mongo.WriteModel
 	for _, s := range seeds {
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{"_id": s}).SetUpdate(bson.M{"$setOnInsert": bson.M{"status": "pending"}}).SetUpsert(true))
@@ -175,35 +168,43 @@ func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 
 func (pc *ParallelCrawler) setBrowserHeaders(req *http.Request, token, ua string) {
 	req.Header.Set("User-Agent", ua)
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 	req.Header.Set("Referer", "https://hub.docker.com/search?q=library")
+	req.Header.Set("Cache-Control", "max-age=0")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Priority", "u=0, i")
+	req.Header.Set("Sec-Ch-Ua", "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"")
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Ch-Ua-Platform", "\"Linux\"")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
 	req.Header.Set("Connection", "keep-alive")
-	if token != "" {
-		req.Header.Set("Authorization", "JWT "+token)
-	}
+	if token != "" { req.Header.Set("Authorization", "JWT "+token) }
 }
 
 func (pc *ParallelCrawler) worker(id int) {
 	defer pc.WG.Done()
-	client, token, myUA := pc.IM.GetNextClient()
-
+	role := os.Getenv("ROLE")
+	var myUA string
+	if role == "primary" {
+		myUA = uaWindows[rand.Intn(len(uaWindows))]
+	} else {
+		myUA = uaLinuxMac[rand.Intn(len(uaLinuxMac))]
+	}
+	client, token, _ := pc.IM.GetNextClient()
 	for {
 		prefix := pc.getNextTask()
 		if prefix == "" { break }
-		
 		atomic.AddInt32(&pc.pending, 1)
-		success, nextClient, nextToken, nextUA := pc.processTask(prefix, client, token, myUA)
-		client, token, myUA = nextClient, nextToken, nextUA
+		success, nextClient, nextToken, _ := pc.processTask(prefix, client, token, myUA)
+		client, token = nextClient, nextToken
 		atomic.AddInt32(&pc.pending, -1)
-
-		if !success {
-			time.Sleep(5 * time.Second)
-		}
+		if !success { time.Sleep(5 * time.Second) }
 		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
 	}
 }
@@ -224,18 +225,14 @@ func (pc *ParallelCrawler) getNextTask() string {
 }
 
 func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token, ua string) (bool, *http.Client, string, string) {
-	myutils.Logger.Info(fmt.Sprintf("[TASK] Exploring: [%s] | Identity: %s", prefix, ua[0:30]+"..."))
-	
+	myutils.Logger.Info(fmt.Sprintf("[TASK] Exploring: [%s]", prefix))
 	res, nextClient, nextToken, nextUA := pc.fetchPage(prefix, 1, client, token, ua)
 	client, token, ua = nextClient, nextToken, nextUA
 	if res == nil {
 		pc.updateTaskStatus(prefix, "pending")
 		return false, client, token, ua
 	}
-
 	newInPrefix := pc.processResults(res.Repositories)
-	efficiency := (float64(newInPrefix) / 100.0) * 100.0
-	
 	pages := (res.Count / 100) + 1
 	if pages > 100 { pages = 100 }
 	for p := 2; p <= pages; p++ {
@@ -249,7 +246,6 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 			return false, client, token, ua
 		}
 	}
-
 	if (res.Count >= 10000 || len(prefix) == 1) && len(prefix) < 255 {
 		var models []mongo.WriteModel
 		for _, char := range alphabet {
@@ -259,8 +255,8 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 		defer cancel()
 		_, _ = myutils.GlobalDBClient.Mongo.KeywordsColl.BulkWrite(ctx, models)
 	}
-	
-	myutils.Logger.Info(fmt.Sprintf("[DONE] Prefix [%s]: +%d unique | Eff: %.1f%% | Found total: %d", prefix, newInPrefix, efficiency, res.Count))
+	efficiency := (float64(newInPrefix) / float64(pages*100)) * 100.0
+	myutils.Logger.Info(fmt.Sprintf("[DONE] Prefix [%s]: +%d unique | Eff: %.1f%%", prefix, newInPrefix, efficiency))
 	pc.updateTaskStatus(prefix, "done")
 	return true, client, token, ua
 }
@@ -276,46 +272,40 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 		url := myutils.GetV2SearchURL(query, page, 100)
 		req, _ := http.NewRequest("GET", url, nil)
 		pc.setBrowserHeaders(req, token, ua)
-
 		resp, err := client.Do(req)
 		if err != nil {
-			myutils.Logger.Error(fmt.Sprintf("!!! NET ERROR [%s]: %v", query, err))
+			myutils.Logger.Error(fmt.Sprintf("!!! NET ERROR [%s]: %v. Refreshing...", query, err))
 			newC, newT, newUA := pc.IM.GetNextClient()
 			return nil, newC, newT, newUA
 		}
 		
+		// Log Rate Limit info for transparency
+		remaining := resp.Header.Get("x-ratelimit-remaining")
+		if remaining != "" && rand.Intn(10) == 0 { // Log 10% of the time to avoid bloat
+			myutils.Logger.Info(fmt.Sprintf("Rate Limit Remaining: %s", remaining))
+		}
+
 		defer resp.Body.Close()
 		bodyBytes, _ := io.ReadAll(resp.Body)
-
 		if resp.StatusCode == 401 {
-			myutils.Logger.Warn(fmt.Sprintf("!!! 401 Unauthorized [%s]. Rotating...", query))
 			pc.IM.ClearToken(token)
 			newC, newT, newUA := pc.IM.GetNextClient()
 			return nil, newC, newT, newUA
 		}
-
 		if resp.StatusCode == 403 {
 			myutils.Logger.Error(fmt.Sprintf("!!! CRITICAL 403 Forbidden [%s]. Bot block detected. Sleeping 15m...", query))
 			time.Sleep(15 * time.Minute)
 			newC, newT, newUA := pc.IM.GetNextClient()
 			return nil, newC, newT, newUA
 		}
-
 		if resp.StatusCode == 429 {
-			myutils.Logger.Warn(fmt.Sprintf("!!! 429 Rate Limit [%s]. Rotating identity...", query))
 			time.Sleep(15 * time.Second)
 			newC, newT, newUA := pc.IM.GetNextClient()
 			return nil, newC, newT, newUA
 		}
-
-		if resp.StatusCode != http.StatusOK { 
-			return nil, client, token, ua 
-		}
-		
+		if resp.StatusCode != http.StatusOK { return nil, client, token, ua }
 		var res V2SearchResponse
-		if err := json.Unmarshal(bodyBytes, &res); err != nil { 
-			return nil, client, token, ua 
-		}
+		if err := json.Unmarshal(bodyBytes, &res); err != nil { return nil, client, token, ua }
 		return &res, client, token, ua
 	}
 	return nil, client, token, ua
