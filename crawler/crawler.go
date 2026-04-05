@@ -307,8 +307,6 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 			myutils.Logger.Error(fmt.Sprintf("!!! 403 [%s]. Bot block detected, rotating...", query))
 			client, token, ua = pc.IM.GetNextClient()
 			continue
-		case 404:
-			return &V2SearchResponse{Count: 0}, client, token, ua
 		default:
 			myutils.Logger.Warn(fmt.Sprintf("!!! HTTP %d [%s]. Cooling off 30s...", resp.StatusCode, query))
 			time.Sleep(30 * time.Second)
