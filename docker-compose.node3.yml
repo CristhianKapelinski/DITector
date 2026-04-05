@@ -25,11 +25,4 @@ services:
     environment:
       - MONGO_URI=${MONGO_URI}
       - NEO4J_URI=${NEO4J_URI}
-    command: >
-      sh -c "go build -buildvcs=false -o /tmp/ditector . &&
-             /tmp/ditector build
-               --accounts ${ACCOUNTS:-accounts.json}
-               --threshold ${THRESHOLD:-0}
-               --tags ${TAGS:-10}
-               --config config.yaml
-               --data_dir /app"
+    command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector build --accounts ${ACCOUNTS:-accounts.json} --threshold ${THRESHOLD:-0} --tags ${TAGS:-10} --config config.yaml --data_dir /app"
