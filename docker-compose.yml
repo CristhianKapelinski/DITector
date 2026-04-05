@@ -20,7 +20,7 @@ services:
     environment:
       - NEO4J_AUTH=none
     volumes:
-      - neo4j_data:/data
+      - ./neo4j_data:/data
 
   crawler:
     image: golang:1.22
@@ -38,5 +38,5 @@ services:
     # Removed manual log redirection to prevent IO deadlocks
     command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector crawl --workers ${WORKERS:-3} --shard ${SHARD:-0} --shards ${SHARDS:-1} --accounts ${ACCOUNTS:-accounts.json} --config config.yaml"
 
-volumes:
-  neo4j_data:
+# No named Docker volumes — all data mounted to host paths so docker system
+# prune -a (with or without --volumes) cannot destroy the dataset.
