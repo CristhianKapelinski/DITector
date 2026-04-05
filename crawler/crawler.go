@@ -329,6 +329,10 @@ func (pc *ParallelCrawler) processResults(repos []struct {
 	return newCount
 }
 
+// TODO: expand to capture all fields returned by the search API (description as
+// "short_description", star_count, is_automated, is_official) and propagate them
+// through processResults → Repository → BulkUpsertRepositories. Zero extra
+// requests — data is already in the response payload.
 type V2SearchResponse struct {
 	Count        int `json:"count"`
 	Repositories []struct {

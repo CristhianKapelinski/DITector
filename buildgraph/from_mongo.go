@@ -3,6 +3,7 @@ package buildgraph
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -101,15 +102,25 @@ func repoWorker(hub *myutils.HubClient, threshold int64, tagCnt int, jobChan cha
 			continue
 		}
 		emptyCount = 0
-		processRepo(hub, repo, tagCnt, jobChan, cpCh, m)
+		ok := processRepo(hub, repo, tagCnt, jobChan, cpCh, m)
+		if !ok {
+			// cooldown on repo-level failure (mirrors Stage I 4-min on unexpected errors)
+			myutils.Logger.Warn(fmt.Sprintf("!!! processRepo failed for %s/%s, cooling off 30s...", repo.Namespace, repo.Name))
+			time.Sleep(30 * time.Second)
+		}
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) // anti-fingerprint jitter
 	}
 }
 
-func processRepo(hub *myutils.HubClient, repo *myutils.Repository, tagCnt int, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) {
+func processRepo(hub *myutils.HubClient, repo *myutils.Repository, tagCnt int, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) bool {
 	tags := getTags(hub, repo, tagCnt, m)
 	defer markBuilt(repo, len(tags), cpCh, m)
+	if tags == nil {
+		return false
+	}
 
 	for _, tag := range tags {
+		time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond) // jitter between tag requests (mirrors Stage I page jitter)
 		imgs, err := getImages(hub, repo, tag, m)
 		if err != nil {
 			m.Errors.Add(1)
@@ -129,6 +140,7 @@ func processRepo(hub *myutils.HubClient, repo *myutils.Repository, tagCnt int, j
 			}
 		}
 	}
+	return true
 }
 
 func markBuilt(repo *myutils.Repository, tagCount int, cpCh chan<- cpEntry, m *BuildMetrics) {
@@ -163,6 +175,13 @@ func getTags(hub *myutils.HubClient, repo *myutils.Repository, tagCnt int, m *Bu
 		return nil
 	}
 	m.TagAPIFetches.Add(1)
+	if myutils.GlobalDBClient.MongoFlag {
+		for _, t := range tags {
+			if err := myutils.GlobalDBClient.Mongo.UpdateTag(t); err != nil {
+				myutils.Logger.Error(fmt.Sprintf("UpdateTag %s/%s:%s: %v", repo.Namespace, repo.Name, t.Name, err))
+			}
+		}
+	}
 	return tags
 }
 
@@ -190,15 +209,8 @@ func persistImages(repo *myutils.Repository, t *myutils.Tag, imgs []*myutils.Ima
 			myutils.Logger.Error(fmt.Sprintf("UpdateImage %s: %v", img.Digest, err))
 		}
 	}
-	t.Images = make([]myutils.ImageInTag, len(imgs))
-	for i, img := range imgs {
-		t.Images[i] = myutils.ImageInTag{
-			Architecture: img.Architecture,
-			OS:           img.OS,
-			Digest:       img.Digest,
-			Size:         img.Size,
-		}
-	}
+	// t.Images already carries the full ImageInTag payload from the tags API
+	// (Features, Variant, Status, LastPulled, LastPushed, etc.) — do not overwrite.
 	if err := myutils.GlobalDBClient.Mongo.UpdateTag(t); err != nil {
 		myutils.Logger.Error(fmt.Sprintf("UpdateTag %s/%s:%s: %v", repo.Namespace, repo.Name, t.Name, err))
 	}

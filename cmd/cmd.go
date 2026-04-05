@@ -275,7 +275,7 @@ func init() {
 	// buildCmd
 	buildCmd.Flags().String("format", "mongo", "source format: mongo")
 	buildCmd.Flags().Int("tags", 10, "number of tags to fetch per repo")
-	buildCmd.Flags().Int64("threshold", 1000000, "minimum pull_count to include a repo")
+	buildCmd.Flags().Int64("threshold", 0, "minimum pull_count to include a repo (0 = all repos, ordered by pull_count DESC)")
 	buildCmd.Flags().String("proxies", "", "path to proxies file (one per line)")
 	buildCmd.Flags().String("accounts", "", "path to accounts JSON file")
 	buildCmd.Flags().String("data_dir", ".", "directory for build_checkpoint.jsonl (use a host-mounted path)")
