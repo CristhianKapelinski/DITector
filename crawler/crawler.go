@@ -236,12 +236,12 @@ func (pc *ParallelCrawler) processTask(prefix string, client *http.Client, token
 		time.Sleep(time.Duration(400 + rand.Intn(500)) * time.Millisecond)
 		resP, c, t, u := pc.fetchPage(prefix, p, client, token, ua)
 		client, token, ua = c, t, u
-		if resP != nil { 
-			newInPrefix += pc.processResults(resP.Repositories)
-		} else {
+		if resP == nil {
 			pc.updateTaskStatus(prefix, "pending")
 			return false, client, token, ua
 		}
+		if len(resP.Repositories) == 0 { break }
+		newInPrefix += pc.processResults(resP.Repositories)
 	}
 	if (res.Count >= 10000 || len(prefix) == 1) && len(prefix) < 255 {
 		priority := 0
@@ -307,6 +307,8 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 			myutils.Logger.Error(fmt.Sprintf("!!! 403 [%s]. Bot block detected, rotating...", query))
 			client, token, ua = pc.IM.GetNextClient()
 			continue
+		case 404:
+			return &V2SearchResponse{}, client, token, ua
 		default:
 			body := string(bodyBytes)
 			if len(body) > 200 { body = body[:200] }
