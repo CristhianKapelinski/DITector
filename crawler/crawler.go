@@ -167,21 +167,17 @@ func (pc *ParallelCrawler) ensureQueueInitialized(seeds []string) {
 
 func (pc *ParallelCrawler) setBrowserHeaders(req *http.Request, token, ua string) {
 	req.Header.Set("User-Agent", ua)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
-	req.Header.Set("Referer", "https://hub.docker.com/search?q=library")
-	req.Header.Set("Cache-Control", "max-age=0")
+	req.Header.Set("Referer", "https://hub.docker.com/search?q=")
 	req.Header.Set("DNT", "1")
-	req.Header.Set("Priority", "u=0, i")
 	req.Header.Set("Sec-Ch-Ua", "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"")
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 	req.Header.Set("Sec-Ch-Ua-Platform", "\"Linux\"")
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	req.Header.Set("Connection", "keep-alive")
 	if token != "" { req.Header.Set("Authorization", "JWT "+token) }
 }
@@ -311,8 +307,11 @@ func (pc *ParallelCrawler) fetchPage(query string, page int, client *http.Client
 			myutils.Logger.Error(fmt.Sprintf("!!! 403 [%s]. Bot block detected, rotating...", query))
 			client, token, ua = pc.IM.GetNextClient()
 			continue
+		case 404:
+			return &V2SearchResponse{Count: 0}, client, token, ua
 		default:
-			myutils.Logger.Error(fmt.Sprintf("!!! HTTP %d [%s].", resp.StatusCode, query))
+			myutils.Logger.Warn(fmt.Sprintf("!!! HTTP %d [%s]. Cooling off 30s...", resp.StatusCode, query))
+			time.Sleep(30 * time.Second)
 			return nil, client, token, ua
 		}
 	}
