@@ -567,22 +567,29 @@ func (m *MyMongo) ResetStaleBuildClaims() {
 func (m *MyMongo) CountAllEligibleRepos(threshold int64) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	if threshold == 0 {
+		return m.RepoColl.EstimatedDocumentCount(ctx)
+	}
 	return m.RepoColl.CountDocuments(ctx, bson.M{"pull_count": bson.M{"$gte": threshold}})
 }
 
 // CountPendingBuildRepos returns how many repos still need Stage II processing.
-// If threshold is 0, we can use an estimation to avoid a 60-second index scan
-// on 12+ million documents.
-func (m *MyMongo) CountPendingBuildRepos(threshold int64) (int64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// Use `fastEstimate=true` during startup/progress-bar to tolerate up to ~2 minutes
+// for an exact count. Use `fastEstimate=false` during worker idle-checks.
+func (m *MyMongo) CountPendingBuildRepos(threshold int64, exactCount bool) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	// Omit build_claimed filter — claimed repos are processed within seconds
-	// and the field is not indexed. Including it forces a full doc fetch on
-	// every entry, making the count time out on large collections.
+	
+	opts := options.Count()
+	if !exactCount {
+		// Used by workers just to know if there's *any* job left. Capping at 10k is plenty.
+		opts.SetLimit(10000)
+	}
+
 	return m.RepoColl.CountDocuments(ctx, bson.M{
 		"pull_count":     bson.M{"$gte": threshold},
 		"graph_built_at": nil,
-	}, options.Count().SetLimit(100000)) // Cap count at 100k to prevent O(N) DB scan stalls
+	}, opts)
 }
 
 func (m *MyMongo) FindRepositoryByName(namespace, name string) (*Repository, error) {

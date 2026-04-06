@@ -33,7 +33,7 @@ func newBuildMetrics(threshold int64) *BuildMetrics {
 		var pending, all int64
 		var wg sync.WaitGroup
 		wg.Add(2)
-		go func() { defer wg.Done(); pending, _ = myutils.GlobalDBClient.Mongo.CountPendingBuildRepos(threshold) }()
+		go func() { defer wg.Done(); pending, _ = myutils.GlobalDBClient.Mongo.CountPendingBuildRepos(threshold, true) }()
 		go func() { defer wg.Done(); all, _ = myutils.GlobalDBClient.Mongo.CountAllEligibleRepos(threshold) }()
 		wg.Wait()
 		m.reposTotal = pending

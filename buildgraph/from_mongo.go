@@ -97,7 +97,7 @@ func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphB
 		if err != nil || repo == nil {
 			emptyCount++
 			if emptyCount%6 == 0 {
-				count, _ := myutils.GlobalDBClient.Mongo.CountPendingBuildRepos(threshold)
+				count, _ := myutils.GlobalDBClient.Mongo.CountPendingBuildRepos(threshold, false)
 				if count == 0 {
 					break
 				}
