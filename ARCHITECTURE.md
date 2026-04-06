@@ -217,8 +217,8 @@ A mesma conta sempre usa o mesmo UA em todas as requisições — login, busca, 
 **Ameaça:** intervalos fixos entre requisições são estatisticamente improváveis para navegação humana e detectáveis por análise de frequência.
 
 **Contramedida:** dois níveis de jitter aleatório:
-- Entre páginas de um mesmo prefixo: `400 + rand.Intn(500)` ms → intervalo uniforme em [400, 900] ms
-- Entre tarefas consecutivas do worker: `rand.Intn(1000)` ms → [0, 1000] ms
+- **Por chamada API** (`HubClient.Get`): `200 + rand.Intn(200)` ms → intervalo uniforme em [200, 400] ms, média 300ms. Aplicado antes de cada GET ao Docker Hub, independente do estágio.
+- **Entre tarefas consecutivas do worker** (crawler Stage I): `rand.Intn(1000)` ms → [0, 1000] ms
 
 ---
 
