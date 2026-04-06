@@ -3,7 +3,6 @@ package buildgraph
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -125,7 +124,6 @@ func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphB
 			Name:      repo.Name,
 			BuiltAt:   time.Now().UTC().Format(time.RFC3339),
 		}
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) // anti-fingerprint jitter
 	}
 }
 
@@ -141,7 +139,6 @@ func collectBatch(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetr
 
 	var jobs []GraphJob
 	for _, tag := range tags {
-		time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond) // jitter between tag requests
 		imgs, err := getImages(hub, repo, tag, m)
 		if err != nil {
 			m.Errors.Add(1)

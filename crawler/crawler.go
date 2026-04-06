@@ -224,7 +224,6 @@ func (pc *ParallelCrawler) processTask(hub *myutils.HubClient, prefix string) bo
 		pages = 100
 	}
 	for p := 2; p <= pages; p++ {
-		time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond)
 		resP, ok := pc.fetchPage(hub, prefix, p)
 		if !ok {
 			pc.updateTaskStatus(prefix, "pending")
