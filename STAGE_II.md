@@ -29,17 +29,16 @@ Este documento descreve em detalhes a arquitetura, o funcionamento interno e os 
 MongoDB (repositories_data)
         │  ClaimNextBuildRepo() — atômico, pull_count DESC
         ▼
-  repoWorker (N workers, 1 por conta Docker Hub)
+  repoWorker (N workers, controlado por --workers)
         │  getTags()      → tags API (ou cache MongoDB)
         │  getImages()    → images API (ou cache MongoDB)
-        │  filtro: OS != "windows"
         ▼
-  jobChan (buffer 10 000)
+  batchChan (buffer 10 000)
         │
         ▼
   graphWorker (2×NumCPU, mínimo 8)
-        │  InsertImageToNeo4j()
-        │  transação única por imagem
+        │  InsertBatch()
+        │  uma sessão Neo4j por batch, uma transação por imagem
         ▼
   Neo4j (Layer, RawLayer, IS_BASE_OF, IS_SAME_AS)
         │
@@ -57,13 +56,13 @@ O pipeline é bifurcado: `repoWorker` é limitado pela taxa de requisições ao 
 
 ### repoWorkers (busca de dados)
 
-O número de `repoWorker` é igual a `len(accounts)` — um worker por conta Docker Hub. Cada worker usa um `HubClient` exclusivo que carrega os cookies e JWT da sua própria conta. Isso garante que contas não compartilhem sessão e evita colisões de tokens.
+O número de `repoWorker` é controlado pela flag `--workers` (padrão: 1). Cada worker usa um `HubClient` exclusivo com identidade própria. O número recomendado é igual ao número de contas Docker Hub disponíveis — um worker por conta evita colisões de token entre goroutines.
 
 ```
-workers = len(accounts)   # definido em cmd/cmd.go, não há flag --workers
+numRepo = --workers   # flag em cmd/cmd.go; default 1
 ```
 
-Com 6 contas, há 6 workers de repositório rodando em paralelo. Cada um obtém ~1,8 req/s em média (limitação do Hub), totalizando ~10,8 req/s de tags + imagens.
+Com 6 contas e `--workers 6`, há 6 workers de repositório em paralelo. Cada um obtém ~1,8 req/s em média (limitação do Hub por conta), totalizando ~10,8 req/s de tags + imagens.
 
 ### graphWorkers (inserção no Neo4j)
 
@@ -90,7 +89,7 @@ Filtro:
 
 Update:
   SET build_claimed = true
-  SET build_claimed_at = now()
+  SET build_started_at = now()
 ```
 
 A operação é atômica no MongoDB: dois workers nunca reivindicam o mesmo repositório simultaneamente. Repositórios são ordenados por `pull_count` descendente, ou seja, os mais populares são processados primeiro.
@@ -101,7 +100,7 @@ Na inicialização, antes de qualquer trabalho, a Fase II chama `ResetStaleBuild
 
 ```
 Filtro:  build_claimed = true  AND  graph_built_at = null
-Update:  UNSET build_claimed,  UNSET build_claimed_at
+Update:  UNSET build_claimed,  UNSET build_started_at
 ```
 
 Isso recupera repositórios que tinham `build_claimed = true` mas o worker morreu antes de concluir. Eles voltam ao pool de pendentes e serão reprocessados normalmente. O repositório só sai definitivamente do pool quando `graph_built_at` é setado, o que acontece apenas após a inserção no Neo4j ser confirmada e `MarkRepoGraphBuilt` retornar sem erro.
@@ -173,14 +172,17 @@ if len(t.Images) > 0 {
 
 ### Persistência após API
 
-Toda resposta da API é salva no MongoDB imediatamente após a chamada:
+Após cada chamada à API, as respostas são enfileiradas para persistência assíncrona via `writesCh chan func()`. Uma goroutine dedicada drena o canal em background:
 
 ```go
-persistImages(repo, t, imgs)  // salva cada Image + atualiza Tag com lista de images
-mongo.UpdateTag(t)            // persiste a tag com images preenchido
+// repoWorker nunca bloqueia em writes de cache:
+writesCh <- func() { mongo.UpdateImage(img) }
+writesCh <- func() { mongo.UpdateTag(t) }
 ```
 
-Isso constrói o cache progressivamente: uma segunda execução da Fase II (com threshold diferente ou para recuperar falhas) aproveita tudo que já foi buscado.
+A persistência é assíncrona pois os writes são apenas cache — uma falha (crash antes de drenar o canal) causa apenas um cache miss na próxima execução, sem impacto na integridade do grafo Neo4j ou no mecanismo de retomada (`graph_built_at`).
+
+Isso constrói o cache progressivamente: execuções subsequentes com threshold diferente ou em caso de recuperação de falhas aproveitam os dados já buscados.
 
 ---
 
@@ -297,7 +299,7 @@ Isso reduz a latência de O(N) round-trips para O(1) por imagem. Para uma imagem
 
 O Cypher usa `MERGE` em vez de `CREATE`, o que garante idempotência: reinserir a mesma imagem duas vezes não duplica nós nem relacionamentos.
 
-Imagens com `OS == "windows"` são descartadas antes de chegar ao canal `jobChan`. Imagens com zero camadas após o cálculo de IDs são ignoradas silenciosamente.
+`InsertBatch` reutiliza uma única sessão Neo4j para todas as imagens do batch (uma por repo), criando uma nova sessão apenas por batch — não por imagem. Imagens com zero camadas após o cálculo de IDs são ignoradas silenciosamente.
 
 ---
 
@@ -408,14 +410,13 @@ Até 3 tentativas por URL antes de retornar erro.
 ### Jitter anti-fingerprint
 
 ```go
-// Entre tags de um mesmo repositório
-time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond)  // 400–900ms
-
-// Entre repositórios
-time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)     // 0–1000ms
+// HubClient.Get — antes de cada chamada à API (tags, tag latest, imagens)
+time.Sleep(time.Duration(200+rand.Intn(200)) * time.Millisecond)  // 200–400ms, média 300ms
 ```
 
-O jitter aleatoriza o padrão de requisições, evitando que todos os workers façam burst simultâneo.
+O jitter é aplicado **antes de cada chamada HTTP**, não apenas entre repositórios. Com ~3 chamadas por repo (GetTags + GetTag("latest") + GetImages), o delay total por repo é 600–1200ms apenas em jitter.
+
+O intervalo 200–400ms foi calibrado para evadir o tarpit do Cloudflare sem overhead excessivo: valores abaixo de 200ms aumentam a taxa de repostas 429/captcha; acima de 600ms desperdiçam throughput sem ganho proporcional de evasão.
 
 ---
 
