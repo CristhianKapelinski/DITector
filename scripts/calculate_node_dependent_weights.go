@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/NSSL-SJTU/DITector/buildgraph"
@@ -32,11 +31,12 @@ func CalculateNodeRelyWeights(output string, page int64, pageSize int, pullCount
 	if err != nil {
 		log.Fatalln("open file", output, "failed with:", err)
 	}
+	defer outputF.Close()
+
 	jobCh := make(chan buildgraph.GraphJob, runtime.NumCPU())
-	wg := sync.WaitGroup{}
 	chDone := make(chan struct{})
 
-	go loadDataFromMongo(page, pageSize, pullCountThreshold, jobCh, &wg)
+	go loadDataFromMongo(page, pageSize, pullCountThreshold, jobCh)
 	go calculate(jobCh, outputF, chDone)
 	<-chDone
 
@@ -45,7 +45,7 @@ func CalculateNodeRelyWeights(output string, page int64, pageSize int, pullCount
 }
 
 // loadDataFromMongo 从mongo加载镜像信息
-func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch chan buildgraph.GraphJob, wg *sync.WaitGroup) {
+func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch chan buildgraph.GraphJob) {
 	defer close(ch)
 
 	beginTime := time.Now()
@@ -164,8 +164,12 @@ func calculate(ch chan buildgraph.GraphJob, file *os.File, chDone chan struct{})
 		b, err := json.Marshal(tmp)
 		if err != nil {
 			myutils.Logger.Error("json marshal failed with:", err.Error())
+			continue
 		}
-		file.Write(b)
+		if _, err := file.Write(b); err != nil {
+			myutils.Logger.Error("write result failed:", err.Error())
+			continue
+		}
 		file.WriteString("\n")
 	}
 	chDone <- struct{}{}
