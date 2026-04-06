@@ -249,7 +249,7 @@ func TestGetTags_SavesTagToMongo(t *testing.T) {
 	repo := &myutils.Repository{Namespace: ns, Name: name}
 	m := &BuildMetrics{}
 
-	tags := getTags(hub, repo, 1, m)
+	tags := getTags(hub, repo, m)
 	if len(tags) != 1 || tags[0].Name != tagName {
 		t.Fatalf("getTags returned unexpected result: %v", tags)
 	}
@@ -335,10 +335,10 @@ func TestPersistImages_DoesNotOverwriteTagImages(t *testing.T) {
 
 // ---- processRepo edge cases ----
 
-func TestProcessRepo_ReturnsFalseWhenTagsFail(t *testing.T) {
+func TestCollectBatch_ReturnsFalseWhenTagsFail(t *testing.T) {
 	cleanCollections(t)
 
-	// Server always returns 500 — getTags will fail, processRepo must return false.
+	// Server always returns 500 — getTags will fail, collectBatch must return false.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -346,20 +346,15 @@ func TestProcessRepo_ReturnsFalseWhenTagsFail(t *testing.T) {
 
 	hub := newTestHub(ts)
 	repo := &myutils.Repository{Namespace: "failns", Name: "failrepo"}
-	jobChan := make(chan GraphJob, 10)
-	cpCh := make(chan cpEntry, 10)
 	m := &BuildMetrics{}
 
-	ok := processRepo(hub, repo, 1, jobChan, cpCh, m)
+	_, ok := collectBatch(hub, repo, m)
 	if ok {
-		t.Fatal("expected processRepo=false when tags API returns 500")
-	}
-	if len(jobChan) != 0 {
-		t.Fatalf("jobChan must be empty on failure, got %d jobs", len(jobChan))
+		t.Fatal("expected collectBatch=false when tags API returns 500")
 	}
 }
 
-func TestProcessRepo_SkipsWindowsImages(t *testing.T) {
+func TestCollectBatch_SkipsWindowsImages(t *testing.T) {
 	cleanCollections(t)
 
 	const (
@@ -368,7 +363,6 @@ func TestProcessRepo_SkipsWindowsImages(t *testing.T) {
 		tagName = "latest"
 	)
 
-	// Tags response: one tag with no cached image refs (forces getImages API call).
 	tagsResp := myutils.TagsPage{
 		Count: 1,
 		Results: []*myutils.Tag{{
@@ -381,7 +375,6 @@ func TestProcessRepo_SkipsWindowsImages(t *testing.T) {
 	}
 	tagsBody, _ := json.Marshal(tagsResp)
 
-	// Images response: windows-only — processRepo must skip every image.
 	windowsImgs := []*myutils.Image{{
 		Architecture: "amd64",
 		Digest:       "sha256:" + strings.Repeat("f", 64),
@@ -402,15 +395,13 @@ func TestProcessRepo_SkipsWindowsImages(t *testing.T) {
 
 	hub := newTestHub(ts)
 	repo := &myutils.Repository{Namespace: ns, Name: name}
-	jobChan := make(chan GraphJob, 10)
-	cpCh := make(chan cpEntry, 10)
 	m := &BuildMetrics{}
 
-	ok := processRepo(hub, repo, 1, jobChan, cpCh, m)
+	batch, ok := collectBatch(hub, repo, m)
 	if !ok {
-		t.Fatal("processRepo should return true even when all images are windows")
+		t.Fatal("collectBatch should return true even when all images are windows")
 	}
-	if len(jobChan) != 0 {
-		t.Fatalf("windows images must be skipped — expected 0 jobs, got %d", len(jobChan))
+	if len(batch.Jobs) != 0 {
+		t.Fatalf("windows images must be skipped — expected 0 jobs, got %d", len(batch.Jobs))
 	}
 }
