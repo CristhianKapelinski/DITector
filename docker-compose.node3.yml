@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Stage II — Builder node. Runs on any machine with network access to the
 # primary's MongoDB and Neo4j. Two or more builder nodes can run simultaneously:
 # ClaimNextBuildRepo() is atomic, so each repo is processed by exactly one node.
