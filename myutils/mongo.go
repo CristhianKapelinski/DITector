@@ -92,7 +92,37 @@ func NewMongo(uri, database, repositories, tags, images, imgResults, layerResult
 		return mymongo, err
 	}
 
+	if err = mymongo.createKeywordsCollIndexes(); err != nil {
+		return mymongo, err
+	}
+
 	return mymongo, nil
+}
+
+// createKeywordsCollIndexes creates indexes on crawler_keywords collection.
+func (m *MyMongo) createKeywordsCollIndexes() (err error) {
+	indexView := m.KeywordsColl.Indexes()
+
+	// Unique index: status, priority, _id (required for FindOneAndUpdate in getNextTask)
+	model := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "status", Value: 1},
+			{Key: "priority", Value: -1},
+			{Key: "_id", Value: 1},
+		},
+		Options: options.Index().SetBackground(true),
+	}
+	_, err = indexView.CreateOne(context.Background(), model)
+	if err != nil {
+		if !mongo.IsDuplicateKeyError(err) {
+			return
+		}
+	}
+
+	if mongo.IsDuplicateKeyError(err) {
+		err = nil
+	}
+	return
 }
 
 // createRepoCollIndexes creates indexes on repositories collection.
