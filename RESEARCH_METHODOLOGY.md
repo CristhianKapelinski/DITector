@@ -72,17 +72,15 @@ MongoDB, coleção `repositories_data`: um documento por repositório com `names
 
 ## 3. Fase II — Construção do Grafo IDEA
 
-### 3.1. Pré-filtro Heurístico de Rede
+### 3.1. Escopo de Processamento
 
-Antes de processar um repositório, aplica-se o filtro `isNetworkContainer(name)`: verifica a presença de keywords de serviços de rede no nome do repositório. Repositórios que não passam neste filtro são descartados sem chamada adicional à API.
+A Fase II processa **todos os repositórios** com `pull_count ≥ threshold`, sem filtro heurístico por nome. O objetivo é a cobertura completa do ecossistema Docker Hub para análise de dependências: repositórios que não expõem portas de rede são igualmente relevantes como imagens base (upstream) no grafo IDEA.
 
-Keywords usadas: `nginx, apache, http, https, server, web, api, rest, grpc, db, database, mysql, postgres, sql, redis, mongo, elastic, kafka, rabbitmq, proxy, gateway, lb, balancer, vpn, ssh, ftp, smtp, imap, ldap, app, service, svc`.
-
-**Justificativa:** o campo `EXPOSE` do Dockerfile seria um indicador mais preciso de exposição de rede, mas só é acessível após download completo da imagem — inviável como pré-filtro nesta escala. O filtro por nome é uma aproximação conservadora: containers de rede com nomes não descritivos não serão incluídos, mas a taxa de falsos negativos para infraestrutura convencional é baixa.
+O filtro por relevância de segurança é aplicado a posteriori, na Fase III, via Dependency Weight: repositórios que nada depende e que não expõem portas relevantes obtêm score baixo e são naturalmente despriorizados no dataset final.
 
 ### 3.2. Construção do Grafo IDEA (Image DEpendency grAph)
 
-Para cada repositório que passa no filtro, o sistema consulta a API do Docker Hub para obter as N tags mais recentes e, para cada tag, os metadados de imagem (lista de layers com digest, instrução e tamanho).
+Para cada repositório, o sistema consulta a API do Docker Hub para obter a tag mais recentemente atualizada e a tag `latest` (se diferente), e para cada tag os metadados de imagem (lista de layers com digest, instrução e tamanho) de todas as plataformas disponíveis.
 
 O grafo modela herança entre imagens através de um esquema de hashing de layers. Para cada layer i na pilha de uma imagem:
 
