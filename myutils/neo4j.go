@@ -52,32 +52,31 @@ func NewNeo4jDriver(target, username, password string, initFlag bool) (*MyNeo4j,
 		return nil, err
 	}
 
-	// 创建索引，neo4j没有提供判断重复创建索引导致报错的函数，所以不处理err
-	if initFlag {
-		session := ret.Driver.NewSession(context.TODO(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-		defer session.Close(context.TODO())
-		session.ExecuteWrite(context.TODO(), func(tx neo4j.ManagedTransaction) (any, error) {
-			// 创建索引：基于节点id
-			tx.Run(context.TODO(),
-				"CREATE INDEX layer_id_index IF NOT EXISTS FOR (l:Layer) ON (l.id)",
-				map[string]any{},
-			)
+	// Criar índices para resolver o problema de lentidão O(N^2) no Neo4j.
+	// Executado incondicionalmente, já que IF NOT EXISTS é seguro.
+	session := ret.Driver.NewSession(context.TODO(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(context.TODO())
+	session.ExecuteWrite(context.TODO(), func(tx neo4j.ManagedTransaction) (any, error) {
+		// 创建索引：基于节点id
+		tx.Run(context.TODO(),
+			"CREATE INDEX layer_id_index IF NOT EXISTS FOR (l:Layer) ON (l.id)",
+			map[string]any{},
+		)
 
-			// 创建索引：基于节点layer-id
-			tx.Run(context.TODO(),
-				"CREATE INDEX layer_digest_index IF NOT EXISTS FOR (l:Layer) ON (l.digest)",
-				map[string]any{},
-			)
+		// 创建索引：基于节点layer-id
+		tx.Run(context.TODO(),
+			"CREATE INDEX layer_digest_index IF NOT EXISTS FOR (l:Layer) ON (l.digest)",
+			map[string]any{},
+		)
 
-			// 创建索引：基于节点layer-id
-			tx.Run(context.TODO(),
-				"CREATE INDEX rawlayer_digest_index IF NOT EXISTS FOR (l:RawLayer) ON (l.digest)",
-				map[string]any{},
-			)
+		// 创建索引：基于节点layer-id
+		tx.Run(context.TODO(),
+			"CREATE INDEX rawlayer_digest_index IF NOT EXISTS FOR (l:RawLayer) ON (l.digest)",
+			map[string]any{},
+		)
 
-			return nil, nil
-		})
-	}
+		return nil, nil
+	})
 
 	return ret, err
 }
