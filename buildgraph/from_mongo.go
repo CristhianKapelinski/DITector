@@ -6,20 +6,11 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/NSSL-SJTU/DITector/myutils"
 )
-
-type GraphJob struct {
-	Registry      string
-	RepoNamespace string
-	RepoName      string
-	TagName       string
-	ImageMeta     *myutils.Image
-}
 
 type cpEntry struct {
 	Namespace string `json:"ns"`
@@ -47,8 +38,6 @@ func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, d
 	m.startReporter(dataDir, metricsDone)
 
 	cpCh := make(chan cpEntry, 1000)
-	jobChan := make(chan GraphJob, 10000)
-
 	go checkpointWriter(cpCh, dataDir)
 
 	numRepo := workers
@@ -60,33 +49,18 @@ func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, d
 		wgRepo.Add(1)
 		go func() {
 			defer wgRepo.Done()
-			repoWorker(myutils.NewHubClient(ip), threshold, jobChan, cpCh, m)
-		}()
-	}
-
-	numGraph := runtime.NumCPU() * 2
-	if numGraph < 8 {
-		numGraph = 8
-	}
-	var wgGraph sync.WaitGroup
-	for i := 0; i < numGraph; i++ {
-		wgGraph.Add(1)
-		go func() {
-			defer wgGraph.Done()
-			graphWorker(jobChan, m)
+			repoWorker(myutils.NewHubClient(ip), threshold, cpCh, m)
 		}()
 	}
 
 	wgRepo.Wait()
-	close(jobChan)
 	close(cpCh)
-	wgGraph.Wait()
 	close(metricsDone)
 }
 
 // repoWorker claims repos one at a time and processes them. Mirrors Stage I's
 // immortal-worker pattern: only exits when the queue is confirmed empty.
-func repoWorker(hub *myutils.HubClient, threshold int64, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) {
+func repoWorker(hub *myutils.HubClient, threshold int64, cpCh chan<- cpEntry, m *BuildMetrics) {
 	emptyCount := 0
 	for {
 		repo, err := myutils.GlobalDBClient.Mongo.ClaimNextBuildRepo(threshold)
@@ -102,9 +76,11 @@ func repoWorker(hub *myutils.HubClient, threshold int64, jobChan chan<- GraphJob
 			continue
 		}
 		emptyCount = 0
-		ok := processRepo(hub, repo, jobChan, cpCh, m)
-		if !ok {
-			// cooldown on repo-level failure (mirrors Stage I 4-min on unexpected errors)
+		
+		// ATOMIC FIX: Only mark as built if processing (API + Neo4j) succeeds.
+		if processRepo(hub, repo, cpCh, m) {
+			markBuilt(repo, cpCh, m)
+		} else {
 			myutils.Logger.Warn(fmt.Sprintf("!!! processRepo failed for %s/%s, cooling off 30s...", repo.Namespace, repo.Name))
 			time.Sleep(30 * time.Second)
 		}
@@ -112,38 +88,39 @@ func repoWorker(hub *myutils.HubClient, threshold int64, jobChan chan<- GraphJob
 	}
 }
 
-func processRepo(hub *myutils.HubClient, repo *myutils.Repository, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) bool {
+func processRepo(hub *myutils.HubClient, repo *myutils.Repository, cpCh chan<- cpEntry, m *BuildMetrics) bool {
 	tags := getTags(hub, repo, m)
-	defer markBuilt(repo, len(tags), cpCh, m)
 	if tags == nil {
 		return false
 	}
 
 	for _, tag := range tags {
-		time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond) // jitter between tag requests (mirrors Stage I page jitter)
+		time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond) // jitter between tag requests
 		imgs, err := getImages(hub, repo, tag, m)
 		if err != nil {
 			m.Errors.Add(1)
 			myutils.Logger.Warn(fmt.Sprintf("getImages %s/%s:%s: %v", repo.Namespace, repo.Name, tag.Name, err))
-			continue
+			return false // Fail atomic process on API error
 		}
 		for _, img := range imgs {
 			if img.OS == "windows" {
 				continue
 			}
-			jobChan <- GraphJob{
-				Registry:      "docker.io",
-				RepoNamespace: repo.Namespace,
-				RepoName:      repo.Name,
-				TagName:       tag.Name,
-				ImageMeta:     img,
+			
+			// SYNC WRITE: The core of the atomic guarantee.
+			id := fmt.Sprintf("docker.io/%s/%s:%s@%s", repo.Namespace, repo.Name, tag.Name, img.Digest)
+			if err := myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(id, img); err != nil {
+				m.Errors.Add(1)
+				myutils.Logger.Error(fmt.Sprintf("Neo4j Sync Error for %s: %v", id, err))
+				return false // Fail the whole repo if graph insertion fails
 			}
+			m.Neo4jInserts.Add(1)
 		}
 	}
 	return true
 }
 
-func markBuilt(repo *myutils.Repository, tagCount int, cpCh chan<- cpEntry, m *BuildMetrics) {
+func markBuilt(repo *myutils.Repository, cpCh chan<- cpEntry, m *BuildMetrics) {
 	if !myutils.GlobalDBClient.MongoFlag {
 		return
 	}
@@ -156,7 +133,6 @@ func markBuilt(repo *myutils.Repository, tagCount int, cpCh chan<- cpEntry, m *B
 		Namespace: repo.Namespace,
 		Name:      repo.Name,
 		BuiltAt:   time.Now().UTC().Format(time.RFC3339),
-		Tags:      tagCount,
 	}
 }
 
@@ -261,17 +237,6 @@ func loadImagesFromCache(refs []myutils.ImageInTag) ([]*myutils.Image, bool) {
 	return imgs, true
 }
 
-func graphWorker(jobChan <-chan GraphJob, m *BuildMetrics) {
-	for job := range jobChan {
-		id := fmt.Sprintf("%s/%s/%s:%s@%s", job.Registry, job.RepoNamespace, job.RepoName, job.TagName, job.ImageMeta.Digest)
-		myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(id, job.ImageMeta)
-		m.Neo4jInserts.Add(1)
-		myutils.Logger.Debug(fmt.Sprintf("Neo4j: %s", id))
-	}
-}
-
-// checkpointWriter persists completed repos to a JSONL file in dataDir.
-// Single goroutine consuming a channel — no mutex needed.
 func checkpointWriter(ch <-chan cpEntry, dir string) {
 	path := filepath.Join(dir, "build_checkpoint.jsonl")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

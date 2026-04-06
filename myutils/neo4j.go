@@ -98,7 +98,7 @@ type layerRecord struct {
 // O(1) per image.
 //
 // imgName format: registry/namespace/repository:tag@digest
-func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(imgName string, image *Image) {
+func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(imgName string, image *Image) error {
 	ctx := context.Background()
 
 	// 1. Precompute all IDs locally — pure CPU, no network.
@@ -113,14 +113,14 @@ func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(imgName string, image *Image) {
 		}
 		if dig == "" {
 			Logger.Error(fmt.Sprintf("digest of layer %d of image %s still none after calculating SHA256", i, imgName))
-			return
+			return fmt.Errorf("digest calculation failed")
 		}
 		currID := Sha256Str(preID + dig)
 		records = append(records, layerRecord{prevID: preID, currID: currID, layer: layer})
 		preID = currID
 	}
 	if len(records) == 0 {
-		return
+		return nil
 	}
 
 	// 2. Write all layers + final image-name tag in ONE transaction.
@@ -143,6 +143,7 @@ func (neo4jDriver *MyNeo4j) InsertImageToNeo4j(imgName string, image *Image) {
 	if err != nil {
 		Logger.Error(fmt.Sprintf("insert image %s failed: %s", imgName, err))
 	}
+	return err
 }
 
 // addNewLayerFunc 返回可用于session.ExecuteWrite的func，将Layer节点及节点间的边插入neo4j
