@@ -1,7 +1,7 @@
 .PHONY: build clean init start stop update logs status
 
 # Detecta docker-compose v1 ou v2 automaticamente
-DOCKER_COMPOSE := $(shell command -v docker-compose 2>/dev/null && echo docker-compose || echo "docker compose")
+DOCKER_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo docker-compose || echo "docker compose")
 
 BINARY = ditector
 
