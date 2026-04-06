@@ -184,7 +184,7 @@ func (m *MyMongo) createRepoCollIndexes() (err error) {
 		Keys: bson.D{{Key: "pull_count", Value: -1}},
 		Options: options.Index().
 			SetName("stage2_partial").
-			SetPartialFilterExpression(bson.D{{Key: "graph_built_at", Value: bson.D{{Key: "$exists", Value: false}}}}),
+			SetPartialFilterExpression(bson.D{{Key: "graph_built_at", Value: nil}}),
 	}
 	_, err = indexView.CreateOne(context.Background(), stageIIPartialModel)
 	if err != nil && !mongo.IsDuplicateKeyError(err) {
