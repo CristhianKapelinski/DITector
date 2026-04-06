@@ -567,8 +567,10 @@ func (m *MyMongo) ResetStaleBuildClaims() {
 func (m *MyMongo) CountAllEligibleRepos(threshold int64) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	// Do not use EstimatedDocumentCount() as it lags behind actual inserts and 
+	// causes negative progress calculations when total < pending.
 	if threshold == 0 {
-		return m.RepoColl.EstimatedDocumentCount(ctx)
+		return m.RepoColl.CountDocuments(ctx, bson.M{})
 	}
 	return m.RepoColl.CountDocuments(ctx, bson.M{"pull_count": bson.M{"$gte": threshold}})
 }
