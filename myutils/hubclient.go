@@ -35,7 +35,7 @@ func NewHubClient(ip IdentityProvider) *HubClient {
 // are returned without error — the caller decides semantics (e.g. 404 vs 500).
 func (h *HubClient) Get(url string) ([]byte, int, error) {
 	for i := 0; i < 3; i++ {
-		time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond) // Jitter per request
+		time.Sleep(time.Duration(200+rand.Intn(200)) * time.Millisecond) // Jitter per request
 		req, _ := http.NewRequest("GET", url, nil)
 		h.setHeaders(req)
 		resp, err := h.client.Do(req)

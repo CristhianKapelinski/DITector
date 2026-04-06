@@ -48,6 +48,15 @@ func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, d
 	cpCh := make(chan cpEntry, 1000)
 	go checkpointWriter(cpCh, dataDir)
 
+	// Async MongoDB cache writes: fire-and-forget so repoWorkers are never
+	// blocked waiting for UpdateTag/UpdateImage round-trips.
+	writesCh := make(chan func(), 10000)
+	go func() {
+		for fn := range writesCh {
+			fn()
+		}
+	}()
+
 	numRepo := workers
 	if numRepo <= 0 {
 		numRepo = 1
@@ -76,13 +85,14 @@ func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, d
 		wgRepo.Add(1)
 		go func() {
 			defer wgRepo.Done()
-			repoWorker(myutils.NewHubClient(ip), threshold, batchChan, cpCh, m)
+			repoWorker(myutils.NewHubClient(ip), threshold, batchChan, cpCh, m, writesCh)
 		}()
 	}
 
 	wgRepo.Wait()
 	close(batchChan)
 	wgGraph.Wait()
+	close(writesCh)
 	close(cpCh)
 	close(metricsDone)
 }
@@ -90,7 +100,7 @@ func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, d
 // repoWorker claims repos one at a time and fetches their tags/images from the
 // Hub API. On success it sends a GraphBatch to batchChan and immediately moves
 // to the next repo — Neo4j latency does not block it.
-func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphBatch, cpCh chan<- cpEntry, m *BuildMetrics) {
+func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphBatch, cpCh chan<- cpEntry, m *BuildMetrics, writesCh chan<- func()) {
 	emptyCount := 0
 	for {
 		repo, err := myutils.GlobalDBClient.Mongo.ClaimNextBuildRepo(threshold)
@@ -102,12 +112,12 @@ func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphB
 					break
 				}
 			}
-			time.Sleep(5 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 		emptyCount = 0
 
-		batch, ok := collectBatch(hub, repo, m)
+		batch, ok := collectBatch(hub, repo, m, writesCh)
 		if !ok {
 			myutils.Logger.Warn(fmt.Sprintf("!!! collectBatch failed for %s/%s, cooling off 30s...", repo.Namespace, repo.Name))
 			time.Sleep(30 * time.Second)
@@ -121,15 +131,15 @@ func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphB
 // cache) and returns a GraphBatch ready to be sent to graphWorker.
 // Returns (batch, false) on any API error — the repo stays claimed so
 // ResetStaleBuildClaims will retry it on the next run.
-func collectBatch(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetrics) (GraphBatch, bool) {
-	tags := getTags(hub, repo, m)
+func collectBatch(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetrics, writesCh chan<- func()) (GraphBatch, bool) {
+	tags := getTags(hub, repo, m, writesCh)
 	if tags == nil {
 		return GraphBatch{}, false
 	}
 
 	var jobs []GraphJob
 	for _, tag := range tags {
-		imgs, err := getImages(hub, repo, tag, m)
+		imgs, err := getImages(hub, repo, tag, m, writesCh)
 		if err != nil {
 			m.Errors.Add(1)
 			myutils.Logger.Warn(fmt.Sprintf("getImages %s/%s:%s: %v", repo.Namespace, repo.Name, tag.Name, err))
@@ -188,7 +198,7 @@ func markBuilt(repo *myutils.Repository, m *BuildMetrics, cpCh chan<- cpEntry) {
 	}
 }
 
-func getTags(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetrics) []*myutils.Tag {
+func getTags(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetrics, writesCh chan<- func()) []*myutils.Tag {
 	if myutils.GlobalDBClient.MongoFlag {
 		tags, err := myutils.GlobalDBClient.Mongo.FindAllTagsByRepoName(repo.Namespace, repo.Name)
 		if err == nil && len(tags) > 0 && allTagsHaveImages(tags) {
@@ -218,15 +228,14 @@ func getTags(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetrics) 
 
 	if myutils.GlobalDBClient.MongoFlag {
 		for _, t := range tags {
-			if err := myutils.GlobalDBClient.Mongo.UpdateTag(t); err != nil {
-				myutils.Logger.Error(fmt.Sprintf("UpdateTag %s/%s:%s: %v", repo.Namespace, repo.Name, t.Name, err))
-			}
+			t := t
+			writesCh <- func() { myutils.GlobalDBClient.Mongo.UpdateTag(t) }
 		}
 	}
 	return tags
 }
 
-func getImages(hub *myutils.HubClient, repo *myutils.Repository, t *myutils.Tag, m *BuildMetrics) ([]*myutils.Image, error) {
+func getImages(hub *myutils.HubClient, repo *myutils.Repository, t *myutils.Tag, m *BuildMetrics, writesCh chan<- func()) ([]*myutils.Image, error) {
 	if myutils.GlobalDBClient.MongoFlag && len(t.Images) > 0 {
 		if imgs, ok := loadImagesFromCache(t.Images); ok {
 			m.ImageCacheHits.Add(1)
@@ -239,22 +248,19 @@ func getImages(hub *myutils.HubClient, repo *myutils.Repository, t *myutils.Tag,
 	}
 	m.ImageAPIFetches.Add(1)
 	if myutils.GlobalDBClient.MongoFlag {
-		persistImages(repo, t, imgs)
+		persistImages(repo, t, imgs, writesCh)
 	}
 	return imgs, nil
 }
 
-func persistImages(repo *myutils.Repository, t *myutils.Tag, imgs []*myutils.Image) {
+func persistImages(repo *myutils.Repository, t *myutils.Tag, imgs []*myutils.Image, writesCh chan<- func()) {
 	for _, img := range imgs {
-		if err := myutils.GlobalDBClient.Mongo.UpdateImage(img); err != nil {
-			myutils.Logger.Error(fmt.Sprintf("UpdateImage %s: %v", img.Digest, err))
-		}
+		img := img
+		writesCh <- func() { myutils.GlobalDBClient.Mongo.UpdateImage(img) }
 	}
 	// t.Images already carries the full ImageInTag payload from the tags API
 	// (Features, Variant, Status, LastPulled, LastPushed, etc.) — do not overwrite.
-	if err := myutils.GlobalDBClient.Mongo.UpdateTag(t); err != nil {
-		myutils.Logger.Error(fmt.Sprintf("UpdateTag %s/%s:%s: %v", repo.Namespace, repo.Name, t.Name, err))
-	}
+	writesCh <- func() { myutils.GlobalDBClient.Mongo.UpdateTag(t) }
 }
 
 func allTagsHaveImages(tags []*myutils.Tag) bool {
