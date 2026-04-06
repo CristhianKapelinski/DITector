@@ -244,16 +244,9 @@ func (pc *ParallelCrawler) processTask(hub *myutils.HubClient, prefix string) bo
 				continue
 			}
 			child := prefix + string(char)
-			priority := 0
+			priority := 255 - len(child)
 			if tokenPlateau {
 				priority = -1
-			} else {
-				if newInPrefix > 0 {
-					priority = 1
-				}
-				if !strings.Contains(child, "-") {
-					priority = 2
-				}
 			}
 			models = append(models, mongo.NewUpdateOneModel().
 				SetFilter(bson.M{"_id": child}).
