@@ -536,10 +536,12 @@ func (m *MyMongo) ResetStaleBuildClaims() {
 func (m *MyMongo) CountPendingBuildRepos(threshold int64) (int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	// Omit build_claimed filter — claimed repos are processed within seconds
+	// and the field is not indexed. Including it forces a full doc fetch on
+	// every entry, making the count time out on large collections.
 	return m.RepoColl.CountDocuments(ctx, bson.M{
 		"pull_count":     bson.M{"$gte": threshold},
 		"graph_built_at": nil,
-		"build_claimed":  bson.M{"$ne": true},
 	})
 }
 
