@@ -2,6 +2,37 @@
 
 ---
 
+## [3.1.0] — 2026-04-05
+
+### Adicionado
+
+**`myutils/hubclient.go`:**
+- `GetTag(ns, name, tagName string) (*Tag, error)` — busca metadados de uma tag específica pelo nome via `GetTagMetadataURL`. Retorna `nil, nil` em 404 (tag inexistente), permitindo que o caller decida se a ausência de `latest` é erro ou comportamento esperado.
+
+### Modificado
+
+**`buildgraph/from_mongo.go` — seleção de tags:**
+- `getTags` passa a buscar sempre duas tags por repositório: (1) a tag mais recentemente atualizada (`GetTags` página 1, tamanho 1) e (2) a tag `latest` via `GetTag`. Se as duas coincidirem pelo nome, apenas uma é retornada. Motivação: `latest` representa a versão canônica usada pela maioria dos usuários; a tag mais recente captura o estado atual do repositório — frequentemente divergem (ex.: ubuntu tem `resolute-20260401` como mais recente e `latest` apontando para a LTS estável).
+- Parâmetro `tagCnt int` removido de `getTags`, `processRepo`, `repoWorker` e `StartFromMongo` — a seleção de tags não é mais configurável via flag.
+
+**`buildgraph/build.go`:**
+- Assinatura de `Build` atualizada: `Build(format, threshold, workers, ip, dataDir)` — parâmetro `tagCnt` removido.
+
+**`cmd/cmd.go`:**
+- Flag `--tags` removida do subcomando `build` (obsoleta após a remoção de `tagCnt`).
+- Workers do subcomando `build` derivados automaticamente de `len(im.Accounts)` em vez de flag manual. Se o arquivo de contas estiver vazio, fallback para 1 worker. Taxa de requisições escala linearmente com o número de contas (1 worker/conta ≈ 1,8 req/s).
+
+**`docker-compose.node3.yml`:**
+- Flag `--tags` e variável `TAGS` removidas do comando de entrada do container `builder`.
+
+### Corrigido
+
+**`myutils/mongo.go` — índice `stage2_queue` substituído por `stage2_partial`:**
+- O índice composto `{graph_built_at: 1, pull_count: -1}` com `sparse: true` estava incorreto: o flag `sparse` não tem efeito quando qualquer outro campo indexado (`pull_count`) está presente em todos os documentos. O índice indexava os 12M repositórios integralmente e nunca encolhia.
+- Substituído por índice parcial `{pull_count: -1}` com `partialFilterExpression: {graph_built_at: {$exists: false}}`. Este índice indexa apenas os repositórios ainda não processados pelo Estágio II, encolhe progressivamente à medida que `MarkRepoGraphBuilt` é chamado, e suporta `CountPendingBuildRepos` com varredura de índice pura (sem fetch de documentos).
+
+---
+
 ## [3.0.0] — 2026-04-06
 
 ### Adicionado

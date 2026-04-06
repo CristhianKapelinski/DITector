@@ -309,6 +309,7 @@ HubClient.Get(url):
 | `Get(url)` | Requisição GET com 3 tentativas e rotação em 401/429/403 |
 | `GetInto(url, dest)` | `Get` + `json.Unmarshal` no destino fornecido |
 | `GetTags(ns, name, pageNum, size)` | Busca paginada de tags de um repositório |
+| `GetTag(ns, name, tagName)` | Busca metadados de uma tag específica pelo nome; retorna `nil, nil` em 404 |
 | `GetImages(ns, name, tag)` | Busca manifests de imagem para uma tag específica |
 
 #### Eliminação de duplicação
@@ -416,8 +417,9 @@ O worker encerra somente quando a contagem retorna zero. Isso evita terminação
 ```
 ClaimNextBuildRepo (por goroutine)
     │
-    ▼ repoWorker × max(NumCPU × 8, 32)   [I/O bound — espera HTTPS]
-    │   1. getTags: busca N tags mais recentes (cache MongoDB + fallback API)
+    ▼ repoWorker × len(accounts)          [I/O bound — espera HTTPS]
+    │   1. getTags: busca tag mais recente (page 1) + tag "latest" via GetTag;
+    │      deduplica se coincidirem (cache MongoDB + fallback API)
     │   2. getImages: busca manifests por tag (cache MongoDB + fallback API)
     │   3. descartar imagens Windows
     │   4. defer markBuilt → MarkRepoGraphBuilt sempre executado
@@ -437,7 +439,7 @@ checkpointWriter (goroutine única)
 ```
 
 **Dimensionamento dos workers:**
-- `repoWorkers`: `max(NumCPU × 8, 32)` — goroutines aguardam respostas HTTPS sem consumir CPU. Mínimo de 32 assegura paralelismo em máquinas compactas.
+- `repoWorkers`: `len(accounts)` — um worker por conta Docker Hub. Cada worker gera ~1,8 req/s; o total de requisições escala linearmente com o número de contas, espelhando o padrão do Estágio I e evitando saturação por IP.
 - `graphWorkers`: `max(NumCPU × 2, 8)` — escrita Neo4j via Bolt é o gargalo; excesso de conexões simultâneas degrada o throughput. O fator 2 equilibra paralelismo com estabilidade.
 
 ### 3.3. Autenticação e Headers (HubClient)
