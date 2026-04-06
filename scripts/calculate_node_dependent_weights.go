@@ -109,11 +109,6 @@ func loadDataFromMongo(page int64, pageSize int, pullCountThreshold int64, ch ch
 			for _, tagDoc := range tagDocs {
 				// 遍历tag的每个image信息
 				for _, imgOfTag := range tagDoc.Images {
-					// 跳过windows镜像，以及其他unknown镜像
-					if imgOfTag.OS == "windows" || (imgOfTag.Architecture == "unknown" && imgOfTag.OS == "unknown") {
-						continue
-					}
-
 					imgDigest := imgOfTag.Digest
 					// 尝试从数据库拿image元数据
 					imgMeta, err := myutils.GlobalDBClient.Mongo.FindImageByDigest(imgDigest)

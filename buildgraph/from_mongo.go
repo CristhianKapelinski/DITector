@@ -149,9 +149,6 @@ func collectBatch(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetr
 			return GraphBatch{}, false
 		}
 		for _, img := range imgs {
-			if img.OS == "windows" {
-				continue
-			}
 			jobs = append(jobs, GraphJob{
 				Registry:      "docker.io",
 				RepoNamespace: repo.Namespace,
