@@ -15,7 +15,6 @@ set -euo pipefail
 # ── config ────────────────────────────────────────────────────────────────────
 SEED="nginx"
 THRESHOLD="100000000"   # 100 M+ pulls → limita Stage II a ~2 repos
-TAGS="2"
 WORKERS="3"
 CRAWL_TIMEOUT="20"
 BUILD_TIMEOUT="60"
@@ -119,12 +118,11 @@ NS_OK=$(mongosh "localhost:27017/${E2E_DB}" --quiet \
 _ok "Com namespace correto: $NS_OK / $REPO_COUNT"
 
 # ── 2. Stage II — Build ───────────────────────────────────────────────────────
-_step "2/4" "BUILD  threshold=${THRESHOLD}  tags=${TAGS}  timeout=${BUILD_TIMEOUT}s..."
+_step "2/4" "BUILD  threshold=${THRESHOLD}  timeout=${BUILD_TIMEOUT}s..."
 
 timeout "${BUILD_TIMEOUT}s" "$BINARY" build \
     --format    mongo \
     --threshold "$THRESHOLD" \
-    --tags      "$TAGS" \
     --accounts  accounts.json \
     --config    "$E2E_CONFIG" \
     --data_dir  /tmp &>/dev/null || true
