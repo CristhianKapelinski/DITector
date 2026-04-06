@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -17,6 +18,15 @@ type cpEntry struct {
 	Name      string `json:"name"`
 	BuiltAt   string `json:"built_at"`
 	Tags      int    `json:"tags"`
+}
+
+// GraphBatch groups all images collected for a single repo so the graphWorker
+// can insert them atomically and only mark the repo as built on full success.
+type GraphBatch struct {
+	Repo *myutils.Repository
+	Jobs []GraphJob
+	cpCh chan<- cpEntry
+	m    *BuildMetrics
 }
 
 // StartFromMongo runs the Stage II distributed pipeline.
@@ -44,23 +54,45 @@ func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, d
 	if numRepo <= 0 {
 		numRepo = 1
 	}
+
+	// batchChan decouples Hub API fetching (repoWorkers) from Neo4j insertion
+	// (graphWorkers), restoring parallel throughput while keeping atomicity:
+	// markBuilt is only called by graphWorker after all inserts succeed.
+	batchChan := make(chan GraphBatch, numRepo*4)
+
+	numGraph := runtime.NumCPU() * 2
+	if numGraph < 8 {
+		numGraph = 8
+	}
+	var wgGraph sync.WaitGroup
+	for i := 0; i < numGraph; i++ {
+		wgGraph.Add(1)
+		go func() {
+			defer wgGraph.Done()
+			graphWorker(batchChan)
+		}()
+	}
+
 	var wgRepo sync.WaitGroup
 	for i := 0; i < numRepo; i++ {
 		wgRepo.Add(1)
 		go func() {
 			defer wgRepo.Done()
-			repoWorker(myutils.NewHubClient(ip), threshold, cpCh, m)
+			repoWorker(myutils.NewHubClient(ip), threshold, batchChan, cpCh, m)
 		}()
 	}
 
 	wgRepo.Wait()
+	close(batchChan)
+	wgGraph.Wait()
 	close(cpCh)
 	close(metricsDone)
 }
 
-// repoWorker claims repos one at a time and processes them. Mirrors Stage I's
-// immortal-worker pattern: only exits when the queue is confirmed empty.
-func repoWorker(hub *myutils.HubClient, threshold int64, cpCh chan<- cpEntry, m *BuildMetrics) {
+// repoWorker claims repos one at a time and fetches their tags/images from the
+// Hub API. On success it sends a GraphBatch to batchChan and immediately moves
+// to the next repo — Neo4j latency does not block it.
+func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphBatch, cpCh chan<- cpEntry, m *BuildMetrics) {
 	emptyCount := 0
 	for {
 		repo, err := myutils.GlobalDBClient.Mongo.ClaimNextBuildRepo(threshold)
@@ -76,48 +108,74 @@ func repoWorker(hub *myutils.HubClient, threshold int64, cpCh chan<- cpEntry, m 
 			continue
 		}
 		emptyCount = 0
-		
-		// ATOMIC FIX: Only mark as built if processing (API + Neo4j) succeeds.
-		if processRepo(hub, repo, cpCh, m) {
-			markBuilt(repo, cpCh, m)
-		} else {
-			myutils.Logger.Warn(fmt.Sprintf("!!! processRepo failed for %s/%s, cooling off 30s...", repo.Namespace, repo.Name))
+
+		batch, ok := collectBatch(hub, repo, cpCh, m)
+		if !ok {
+			myutils.Logger.Warn(fmt.Sprintf("!!! collectBatch failed for %s/%s, cooling off 30s...", repo.Namespace, repo.Name))
 			time.Sleep(30 * time.Second)
+			continue
 		}
+		batchChan <- batch
 		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) // anti-fingerprint jitter
 	}
 }
 
-func processRepo(hub *myutils.HubClient, repo *myutils.Repository, cpCh chan<- cpEntry, m *BuildMetrics) bool {
+// collectBatch fetches all tags and images for a repo from the Hub (or Mongo
+// cache) and returns a GraphBatch ready to be sent to graphWorker.
+// Returns (batch, false) on any API error — the repo stays claimed so
+// ResetStaleBuildClaims will retry it on the next run.
+func collectBatch(hub *myutils.HubClient, repo *myutils.Repository, cpCh chan<- cpEntry, m *BuildMetrics) (GraphBatch, bool) {
 	tags := getTags(hub, repo, m)
 	if tags == nil {
-		return false
+		return GraphBatch{}, false
 	}
 
+	var jobs []GraphJob
 	for _, tag := range tags {
 		time.Sleep(time.Duration(400+rand.Intn(500)) * time.Millisecond) // jitter between tag requests
 		imgs, err := getImages(hub, repo, tag, m)
 		if err != nil {
 			m.Errors.Add(1)
 			myutils.Logger.Warn(fmt.Sprintf("getImages %s/%s:%s: %v", repo.Namespace, repo.Name, tag.Name, err))
-			return false // Fail atomic process on API error
+			return GraphBatch{}, false
 		}
 		for _, img := range imgs {
 			if img.OS == "windows" {
 				continue
 			}
-			
-			// SYNC WRITE: The core of the atomic guarantee.
-			id := fmt.Sprintf("docker.io/%s/%s:%s@%s", repo.Namespace, repo.Name, tag.Name, img.Digest)
-			if err := myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(id, img); err != nil {
-				m.Errors.Add(1)
-				myutils.Logger.Error(fmt.Sprintf("Neo4j Sync Error for %s: %v", id, err))
-				return false // Fail the whole repo if graph insertion fails
-			}
-			m.Neo4jInserts.Add(1)
+			jobs = append(jobs, GraphJob{
+				Registry:      "docker.io",
+				RepoNamespace: repo.Namespace,
+				RepoName:      repo.Name,
+				TagName:       tag.Name,
+				ImageMeta:     img,
+			})
 		}
 	}
-	return true
+	return GraphBatch{Repo: repo, Jobs: jobs, cpCh: cpCh, m: m}, true
+}
+
+// graphWorker inserts all images in each batch into Neo4j. Only if every
+// insert succeeds does it call markBuilt — this is the atomicity guarantee.
+func graphWorker(batchChan <-chan GraphBatch) {
+	for batch := range batchChan {
+		allOk := true
+		for _, job := range batch.Jobs {
+			id := fmt.Sprintf("docker.io/%s/%s:%s@%s", job.RepoNamespace, job.RepoName, job.TagName, job.ImageMeta.Digest)
+			if err := myutils.GlobalDBClient.Neo4j.InsertImageToNeo4j(id, job.ImageMeta); err != nil {
+				batch.m.Errors.Add(1)
+				myutils.Logger.Error(fmt.Sprintf("Neo4j insert error for %s: %v", id, err))
+				allOk = false
+				break
+			}
+			batch.m.Neo4jInserts.Add(1)
+		}
+		if allOk {
+			markBuilt(batch.Repo, batch.cpCh, batch.m)
+		} else {
+			myutils.Logger.Warn(fmt.Sprintf("!!! graphWorker: Neo4j falhou para %s/%s — repo será retentado no próximo reinício", batch.Repo.Namespace, batch.Repo.Name))
+		}
+	}
 }
 
 func markBuilt(repo *myutils.Repository, cpCh chan<- cpEntry, m *BuildMetrics) {
@@ -242,7 +300,8 @@ func checkpointWriter(ch <-chan cpEntry, dir string) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		myutils.Logger.Error(fmt.Sprintf("checkpoint open %s: %v", path, err))
-		for range ch {}
+		for range ch {
+		}
 		return
 	}
 	defer f.Close()
