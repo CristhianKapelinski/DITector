@@ -120,7 +120,6 @@ var buildCmd = &cobra.Command{
 	Short: "fetch tag/image metadata and build Neo4j dependency graph from crawled repos",
 	Run: func(cmd *cobra.Command, args []string) {
 		format, _ := cmd.Flags().GetString("format")
-		tagCnt, _ := cmd.Flags().GetInt("tags")
 		threshold, _ := cmd.Flags().GetInt64("threshold")
 		proxyFile, _ := cmd.Flags().GetString("proxies")
 		accountFile, _ := cmd.Flags().GetString("accounts")
@@ -134,7 +133,7 @@ var buildCmd = &cobra.Command{
 		if workers == 0 {
 			workers = 1
 		}
-		buildgraph.Build(format, tagCnt, threshold, workers, im, dataDir)
+		buildgraph.Build(format, threshold, workers, im, dataDir)
 	},
 }
 
@@ -278,7 +277,6 @@ func init() {
 
 	// buildCmd
 	buildCmd.Flags().String("format", "mongo", "source format: mongo")
-	buildCmd.Flags().Int("tags", 10, "number of tags to fetch per repo")
 	buildCmd.Flags().Int64("threshold", 0, "minimum pull_count to include a repo (0 = all repos, ordered by pull_count DESC)")
 	buildCmd.Flags().String("proxies", "", "path to proxies file (one per line)")
 	buildCmd.Flags().String("accounts", "", "path to accounts JSON file")

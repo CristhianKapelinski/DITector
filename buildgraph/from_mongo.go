@@ -37,7 +37,7 @@ type cpEntry struct {
 // Progress is checkpointed to dataDir/build_checkpoint.jsonl (host-mounted path)
 // so it survives container restarts independently of the Docker daemon.
 // Metrics are written every 60s to dataDir/build_metrics.log with ETA.
-func StartFromMongo(tagCnt int, threshold int64, workers int, ip myutils.IdentityProvider, dataDir string) {
+func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, dataDir string) {
 	if myutils.GlobalDBClient.MongoFlag {
 		myutils.GlobalDBClient.Mongo.ResetStaleBuildClaims()
 	}
@@ -60,7 +60,7 @@ func StartFromMongo(tagCnt int, threshold int64, workers int, ip myutils.Identit
 		wgRepo.Add(1)
 		go func() {
 			defer wgRepo.Done()
-			repoWorker(myutils.NewHubClient(ip), threshold, tagCnt, jobChan, cpCh, m)
+			repoWorker(myutils.NewHubClient(ip), threshold, jobChan, cpCh, m)
 		}()
 	}
 
@@ -86,7 +86,7 @@ func StartFromMongo(tagCnt int, threshold int64, workers int, ip myutils.Identit
 
 // repoWorker claims repos one at a time and processes them. Mirrors Stage I's
 // immortal-worker pattern: only exits when the queue is confirmed empty.
-func repoWorker(hub *myutils.HubClient, threshold int64, tagCnt int, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) {
+func repoWorker(hub *myutils.HubClient, threshold int64, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) {
 	emptyCount := 0
 	for {
 		repo, err := myutils.GlobalDBClient.Mongo.ClaimNextBuildRepo(threshold)
@@ -102,7 +102,7 @@ func repoWorker(hub *myutils.HubClient, threshold int64, tagCnt int, jobChan cha
 			continue
 		}
 		emptyCount = 0
-		ok := processRepo(hub, repo, tagCnt, jobChan, cpCh, m)
+		ok := processRepo(hub, repo, jobChan, cpCh, m)
 		if !ok {
 			// cooldown on repo-level failure (mirrors Stage I 4-min on unexpected errors)
 			myutils.Logger.Warn(fmt.Sprintf("!!! processRepo failed for %s/%s, cooling off 30s...", repo.Namespace, repo.Name))
@@ -112,8 +112,8 @@ func repoWorker(hub *myutils.HubClient, threshold int64, tagCnt int, jobChan cha
 	}
 }
 
-func processRepo(hub *myutils.HubClient, repo *myutils.Repository, tagCnt int, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) bool {
-	tags := getTags(hub, repo, tagCnt, m)
+func processRepo(hub *myutils.HubClient, repo *myutils.Repository, jobChan chan<- GraphJob, cpCh chan<- cpEntry, m *BuildMetrics) bool {
+	tags := getTags(hub, repo, m)
 	defer markBuilt(repo, len(tags), cpCh, m)
 	if tags == nil {
 		return false
@@ -160,7 +160,7 @@ func markBuilt(repo *myutils.Repository, tagCount int, cpCh chan<- cpEntry, m *B
 	}
 }
 
-func getTags(hub *myutils.HubClient, repo *myutils.Repository, tagCnt int, m *BuildMetrics) []*myutils.Tag {
+func getTags(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetrics) []*myutils.Tag {
 	if myutils.GlobalDBClient.MongoFlag {
 		tags, err := myutils.GlobalDBClient.Mongo.FindAllTagsByRepoName(repo.Namespace, repo.Name)
 		if err == nil && allTagsHaveImages(tags) {
@@ -168,13 +168,26 @@ func getTags(hub *myutils.HubClient, repo *myutils.Repository, tagCnt int, m *Bu
 			return tags
 		}
 	}
-	tags, err := hub.GetTags(repo.Namespace, repo.Name, 1, tagCnt)
+	// Always fetch the most recently updated tag (page 1, size 1) plus
+	// "latest" explicitly. Deduplicate in case they are the same tag.
+	recent, err := hub.GetTags(repo.Namespace, repo.Name, 1, 1)
 	if err != nil {
 		m.Errors.Add(1)
 		myutils.Logger.Warn(fmt.Sprintf("GetTags %s/%s: %v", repo.Namespace, repo.Name, err))
 		return nil
 	}
 	m.TagAPIFetches.Add(1)
+
+	tags := recent
+	if len(recent) == 0 || recent[0].Name != "latest" {
+		latest, err := hub.GetTag(repo.Namespace, repo.Name, "latest")
+		if err != nil {
+			myutils.Logger.Warn(fmt.Sprintf("GetTag %s/%s:latest: %v", repo.Namespace, repo.Name, err))
+		} else if latest != nil {
+			tags = append(tags, latest)
+		}
+	}
+
 	if myutils.GlobalDBClient.MongoFlag {
 		for _, t := range tags {
 			if err := myutils.GlobalDBClient.Mongo.UpdateTag(t); err != nil {

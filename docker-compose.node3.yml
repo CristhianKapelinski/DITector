@@ -8,7 +8,6 @@ version: '3.8'
 #   DB_HOST=<primary machine IP>
 #   ACCOUNTS=accounts_builder.json   (or accounts.json)
 #   THRESHOLD=1000000                (minimum pull_count to process)
-#   TAGS=1                           (tags to fetch per repo; default=1, most recent only)
 #
 # Usage:
 #   make start-build
@@ -25,4 +24,4 @@ services:
     environment:
       - MONGO_URI=${MONGO_URI}
       - NEO4J_URI=${NEO4J_URI}
-    command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector build --accounts ${ACCOUNTS:-accounts.json} --threshold ${THRESHOLD:-0} --tags ${TAGS:-1} --config config.yaml --data_dir /app"
+    command: sh -c "go build -buildvcs=false -o /tmp/ditector . && /tmp/ditector build --accounts ${ACCOUNTS:-accounts.json} --threshold ${THRESHOLD:-0} --config config.yaml --data_dir /app"

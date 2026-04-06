@@ -90,6 +90,25 @@ func (h *HubClient) GetTags(ns, name string, pageNum, size int) ([]*Tag, error) 
 	return result.Results, nil
 }
 
+// GetTag fetches metadata for a single named tag. Returns nil, nil if the tag
+// does not exist (404).
+func (h *HubClient) GetTag(ns, name, tagName string) (*Tag, error) {
+	var t Tag
+	code, err := h.GetInto(GetTagMetadataURL(ns, name, tagName), &t)
+	if err != nil {
+		return nil, err
+	}
+	if code == 404 {
+		return nil, nil
+	}
+	if code != 200 {
+		return nil, fmt.Errorf("GetTag %s/%s:%s: HTTP %d", ns, name, tagName, code)
+	}
+	t.RepositoryNamespace = ns
+	t.RepositoryName = name
+	return &t, nil
+}
+
 // GetImages fetches image manifests for a tag.
 func (h *HubClient) GetImages(ns, name, tag string) ([]*Image, error) {
 	var imgs []*Image
