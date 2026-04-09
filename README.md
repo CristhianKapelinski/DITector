@@ -84,7 +84,7 @@ A base científica é o paper **"Dr. Docker: A Large-Scale Security Measurement 
                                                   │
                                        ┌──────────▼───────────┐
                                        │  OpenVAS Scanning    │
-                                       │  (seu script externo)│
+                                       │                      │
                                        └──────────────────────┘
 ```
 
