@@ -35,11 +35,14 @@ init:
 start:
 	@[ -f .env ] || (echo "Execute 'make init' primeiro." && exit 1)
 	MONGO_URI=$(_MONGO) NEO4J_URI=$(_NEO4J) \
-	  $(DOCKER_COMPOSE) $(_PROFILES) up -d --force-recreate --remove-orphans crawler \
+	  $(DOCKER_COMPOSE) $(_PROFILES) -p ditector-crawler up -d --force-recreate crawler \
 	  $(if $(_PROFILES),mongodb neo4j,)
 
 stop:
-	$(DOCKER_COMPOSE) $(_PROFILES) stop
+	$(DOCKER_COMPOSE) $(_PROFILES) -p ditector-crawler stop
+
+stop-build:
+	$(DOCKER_COMPOSE) -f docker-compose.node3.yml -p ditector-builder stop
 
 clean-containers:
 	@echo "Limpando containers fantasmas do projeto..."
@@ -52,7 +55,7 @@ update:
 start-build:
 	@[ -f .env ] || (echo "Execute 'make init' primeiro." && exit 1)
 	MONGO_URI=$(_MONGO) NEO4J_URI=$(_NEO4J) \
-	  $(DOCKER_COMPOSE) -f docker-compose.node3.yml up -d --force-recreate --remove-orphans builder
+	  $(DOCKER_COMPOSE) -f docker-compose.node3.yml -p ditector-builder up -d --force-recreate builder
 
 logs:
 	@docker logs -f ditector_crawler 2>&1 | grep -E "Flushed|WARN|ERROR|401|429"
