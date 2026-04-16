@@ -21,7 +21,8 @@ type mockIP struct{ client *http.Client }
 func (m *mockIP) GetNextClient() (*http.Client, string, string) {
 	return m.client, "", "test-ua/1.0"
 }
-func (m *mockIP) ClearToken(string) {}
+func (m *mockIP) ClearToken(string)                    {}
+func (m *mockIP) RefreshToken(string) (string, bool)   { return "", false }
 
 // redirectTransport rewrites every outgoing request to point to the test server,
 // regardless of the original host. Allows HubClient to hit the mock server.

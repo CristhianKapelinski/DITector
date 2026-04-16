@@ -121,6 +121,35 @@ func (im *IdentityManager) ClearToken(token string) {
 	}
 }
 
+// RefreshToken clears and re-logs in the account that currently holds oldToken,
+// returning the freshly minted token. Unlike ClearToken+GetNextClient, this
+// keeps the same identity (avoiding a rotation that may land on another
+// account whose cached token is also stale). Returns ok=false if the token
+// does not belong to any known account or the relogin fails.
+func (im *IdentityManager) RefreshToken(oldToken string) (string, bool) {
+	if oldToken == "" {
+		return "", false
+	}
+	im.mu.Lock()
+	var target *Account
+	for _, acc := range im.Accounts {
+		if acc.Token == oldToken {
+			target = acc
+			acc.Token = ""
+			break
+		}
+	}
+	im.mu.Unlock()
+	if target == nil {
+		return "", false
+	}
+	if err := im.LoginDockerHub(target); err != nil {
+		myutils.Logger.Warn(fmt.Sprintf("RefreshToken login failed for %s: %v", target.Username, err))
+		return "", false
+	}
+	return target.Token, true
+}
+
 // GetNextClient returns http.Client, Token and the Sticky User-Agent
 func (im *IdentityManager) GetNextClient() (*http.Client, string, string) {
 	im.mu.Lock()

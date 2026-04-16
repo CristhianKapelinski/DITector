@@ -102,6 +102,7 @@ func StartFromMongo(threshold int64, workers int, ip myutils.IdentityProvider, d
 // to the next repo — Neo4j latency does not block it.
 func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphBatch, cpCh chan<- cpEntry, m *BuildMetrics, writesCh chan<- func()) {
 	emptyCount := 0
+	consecutiveFail := 0
 	for {
 		repo, err := myutils.GlobalDBClient.Mongo.ClaimNextBuildRepo(threshold)
 		if err != nil || repo == nil {
@@ -119,11 +120,29 @@ func repoWorker(hub *myutils.HubClient, threshold int64, batchChan chan<- GraphB
 
 		batch, ok := collectBatch(hub, repo, m, writesCh)
 		if !ok {
-			myutils.Logger.Warn(fmt.Sprintf("!!! collectBatch failed for %s/%s, cooling off 30s...", repo.Namespace, repo.Name))
-			time.Sleep(30 * time.Second)
+			consecutiveFail++
+			cool := coolOff(consecutiveFail)
+			myutils.Logger.Warn(fmt.Sprintf("!!! collectBatch failed for %s/%s (consecutive=%d), cooling off %s...", repo.Namespace, repo.Name, consecutiveFail, cool))
+			time.Sleep(cool)
 			continue
 		}
+		consecutiveFail = 0
 		batchChan <- batch
+	}
+}
+
+// coolOff returns the sleep duration after a collectBatch failure. Short for
+// isolated failures (most are single-repo 401/network blips recovered on the
+// next repo), ramping up if failures keep stacking (systemic auth/quota issue
+// — back off to avoid hammering the Hub).
+func coolOff(consecutive int) time.Duration {
+	switch {
+	case consecutive <= 2:
+		return 2 * time.Second
+	case consecutive <= 5:
+		return 10 * time.Second
+	default:
+		return 30 * time.Second
 	}
 }
 

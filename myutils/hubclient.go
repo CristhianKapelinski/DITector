@@ -13,6 +13,7 @@ import (
 type IdentityProvider interface {
 	GetNextClient() (*http.Client, string, string) // client, token, userAgent
 	ClearToken(string)
+	RefreshToken(oldToken string) (string, bool) // re-login same account
 }
 
 // HubClient is a Docker Hub HTTP client with JWT auth, browser fingerprinting,
@@ -49,9 +50,14 @@ func (h *HubClient) Get(url string) ([]byte, int, error) {
 		case 200:
 			return body, 200, nil
 		case 401:
-			Logger.Warn(fmt.Sprintf("HTTP 401 (attempt %d/3): %s — rotating identity", i+1, url))
-			h.ip.ClearToken(h.token)
-			h.rotate()
+			if newToken, ok := h.ip.RefreshToken(h.token); ok {
+				Logger.Warn(fmt.Sprintf("HTTP 401 (attempt %d/3): %s — refreshed JWT for current identity", i+1, url))
+				h.token = newToken
+			} else {
+				Logger.Warn(fmt.Sprintf("HTTP 401 (attempt %d/3): %s — rotating identity", i+1, url))
+				h.ip.ClearToken(h.token)
+				h.rotate()
+			}
 		case 429:
 			Logger.Warn(fmt.Sprintf("HTTP 429 rate-limit (attempt %d/3): %s — sleeping 15s then rotating", i+1, url))
 			time.Sleep(15 * time.Second)
