@@ -50,14 +50,21 @@ func (h *HubClient) Get(url string) ([]byte, int, error) {
 		case 200:
 			return body, 200, nil
 		case 401:
-			if newToken, ok := h.ip.RefreshToken(h.token); ok {
-				Logger.Warn(fmt.Sprintf("HTTP 401 (attempt %d/3): %s — refreshed JWT for current identity", i+1, url))
-				h.token = newToken
-			} else {
-				Logger.Warn(fmt.Sprintf("HTTP 401 (attempt %d/3): %s — rotating identity", i+1, url))
-				h.ip.ClearToken(h.token)
-				h.rotate()
+			// First attempt: try refreshing current identity — the most common
+			// cause of 401 is a JWT that simply timed out. Cheaper than rotation
+			// and avoids burning attempts on other accounts whose caches are
+			// also stale. If a subsequent attempt still 401s, the account is
+			// likely blocked or the endpoint is private — rotate then.
+			if i == 0 {
+				if newToken, ok := h.ip.RefreshToken(h.token); ok {
+					Logger.Warn(fmt.Sprintf("HTTP 401 (attempt %d/3): %s — refreshed JWT for current identity", i+1, url))
+					h.token = newToken
+					continue
+				}
 			}
+			Logger.Warn(fmt.Sprintf("HTTP 401 (attempt %d/3): %s — rotating identity", i+1, url))
+			h.ip.ClearToken(h.token)
+			h.rotate()
 		case 429:
 			Logger.Warn(fmt.Sprintf("HTTP 429 rate-limit (attempt %d/3): %s — sleeping 15s then rotating", i+1, url))
 			time.Sleep(15 * time.Second)
