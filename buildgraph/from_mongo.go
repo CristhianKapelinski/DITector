@@ -251,6 +251,13 @@ func getTags(hub *myutils.HubClient, repo *myutils.Repository, m *BuildMetrics, 
 			writesCh <- func() { myutils.GlobalDBClient.Mongo.UpdateTag(t) }
 		}
 	}
+	// Both GetTags and GetTag("latest") returned nil+nil → repo was deleted
+	// on Docker Hub after the crawl. Return an empty (not nil) slice so
+	// collectBatch proceeds to markBuilt with zero jobs; otherwise the repo
+	// stays build_claimed forever and the worker burns cooldowns on it.
+	if tags == nil {
+		tags = []*myutils.Tag{}
+	}
 	return tags
 }
 
