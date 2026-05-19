@@ -1,6 +1,32 @@
 # DITector — Large-Scale Docker Hub Security Research Pipeline
 
-> Fork de [NSSL-SJTU/DITector](https://github.com/NSSL-SJTU/DITector), estendido para suportar crawling distribuído em larga escala, construção paralela do grafo de dependências e geração de datasets priorizados para scanning de segurança com OpenVAS.
+> Fork de [NSSL-SJTU/DITector](https://github.com/NSSL-SJTU/DITector), estendido para suportar crawling distribuído em larga escala, construção paralela do grafo de dependências e geração de datasets priorizados para scanning de segurança.
+
+> **Estágios I e II da pipeline ChimangoScan — descoberta e priorização.**
+> Este repositório contém os três componentes da etapa de *descoberta e
+> priorização*:
+>
+> - **Estágio I — Crawler** (Go): varredura distribuída do Docker Hub para
+>   descobrir repositórios e seus *pull counts*.
+> - **Estágio II — Grafo de camadas** (Go): construção paralela do grafo IDEA
+>   de herança entre imagens no Neo4j.
+> - **Ranker de exposure** (`scripts/compute_exposure_ranking.py`, Python):
+>   calcula a exposure de cada repositório (pull count próprio + soma de pull
+>   count da subárvore downstream) sobre o grafo IDEA.
+>
+> O crawler (`crawler/`) e o builder do grafo (`buildgraph/`, `myutils/neo4j.go`)
+> são **implementação original dos autores** deste fork — o paper *Dr. Docker*
+> apenas inspirou o método (a estratégia DFS de keywords e o esquema de hashing
+> de Layer IDs); o upstream `NSSL-SJTU/DITector` distribuía o subcomando `crawl`
+> como *stub* sem implementação. O ranker de exposure também é contribuição
+> original.
+>
+> A **saída** desta etapa é o arquivo `exposure_ranked.jsonl` — uma linha JSON
+> por repositório, ordenada por exposure decrescente. Esse arquivo é o
+> **contrato** consumido pelo Estágio III (varredura multi-scanner), que vive no
+> repositório [`scanners`](https://github.com/ChimangoScan/scanners). A
+> orquestração ponta a ponta dos dois estágios é feita pelo repositório
+> [`chimangoscan`](https://github.com/ChimangoScan/chimangoscan).
 
 ---
 
@@ -14,8 +40,8 @@
 6. [Configuração do `config.yaml`](#6-configuração-do-configyaml)
 7. [Estágio I — Crawling (Descoberta)](#7-estágio-i--crawling-descoberta)
 8. [Estágio II — Build (Grafo IDEA)](#8-estágio-ii--build-grafo-idea)
-9. [Estágio III — Rank (Priorização)](#9-estágio-iii--rank-priorização)
-10. [Integração com OpenVAS](#10-integração-com-openvas)
+9. [Ranker de Exposure (Priorização)](#9-ranker-de-exposure-priorização)
+10. [Saída e entrega ao Estágio III](#10-saída-e-entrega-ao-estágio-iii)
 11. [Automação da Pipeline](#11-automação-da-pipeline)
 12. [Monitoramento](#12-monitoramento)
 13. [Referência de Comandos](#13-referência-de-comandos)
@@ -26,11 +52,16 @@
 
 ## 1. Contexto e Motivação
 
-Este projeto implementa a coleta e priorização de imagens Docker para scanning de segurança dinâmico com **OpenVAS**. O objetivo é selecionar ~100.000 containers do Docker Hub de forma inteligente — não aleatoriamente — priorizando imagens com:
+Este projeto implementa a coleta e priorização de imagens Docker para varredura
+de segurança em larga escala. O objetivo é selecionar containers do Docker Hub
+de forma inteligente — não aleatoriamente — priorizando imagens com:
 
 - **Alto Pull Count** (amplamente usadas, impacto direto em usuários)
 - **Alto Dependency Weight** (imagens base cujas vulnerabilidades se propagam para imagens filhas)
-- **Exposição de rede** (containers com serviços de rede configurados via `EXPOSE`, candidatos ao scan OpenVAS)
+- **Alta exposure de cadeia de suprimentos** (imagens cujas filhas, somadas, acumulam grande volume de pulls)
+
+A priorização resultante (`exposure_ranked.jsonl`) é entregue ao Estágio III
+(repositório `scanners`), que executa a varredura multi-scanner.
 
 A base científica é o paper **"Dr. Docker: A Large-Scale Security Measurement of Docker Image Ecosystem"** (WWW '25, Shi et al., Shanghai Jiao Tong University), que propõe o framework **DITector** para medir a segurança do ecossistema Docker em larga escala.
 
@@ -69,22 +100,23 @@ A base científica é o paper **"Dr. Docker: A Large-Scale Security Measurement 
                                        └──────────┬───────────┘
                                                   │
                                        ┌──────────▼───────────┐
-                                       │     Stage III        │
-                                       │     RANK             │
-                                       │  Dependency Weight   │
-                                       │  + Pull Count sort   │
+                                       │  Ranker de Exposure  │
+                                       │  compute_exposure_   │
+                                       │  ranking.py          │
+                                       │  subtree pull sum    │
                                        └──────────┬───────────┘
                                                   │
                                        ┌──────────▼───────────┐
-                                       │  final_prioritized_  │
-                                       │  dataset.json        │
+                                       │  exposure_ranked     │
+                                       │  .jsonl              │
                                        │  (JSONL, one record  │
-                                       │   per image)         │
+                                       │   per repository)    │
                                        └──────────┬───────────┘
-                                                  │
+                                                  │  contrato
                                        ┌──────────▼───────────┐
-                                       │  OpenVAS Scanning    │
-                                       │                      │
+                                       │  Estágio III         │
+                                       │  repo `scanners`     │
+                                       │  varredura 6 scanners│
                                        └──────────────────────┘
 ```
 
@@ -652,13 +684,31 @@ O Neo4j persiste em `./neo4j_data/` (host path explícito). Essa pasta é criada
 
 ---
 
-## 9. Estágio III — Rank (Priorização)
+## 9. Ranker de Exposure (Priorização)
 
 ### O que faz
 
-Para cada imagem processada no grafo Neo4j, calcula o **Dependency Weight** (Out-Degree no IDEA) — número de imagens downstream que herdam desta imagem — e exporta um arquivo JSONL com os resultados.
+O ranker de exposure (`scripts/compute_exposure_ranking.py`) lê o grafo IDEA
+do Neo4j construído no Estágio II e produz a priorização final consumida pelo
+Estágio III. É implementação original dos autores deste fork.
 
-**Schema de saída (um JSON por linha):**
+Para cada repositório presente no grafo, escolhe uma tag representativa e
+computa, em uma única passagem *bottom-up* (O(nós)):
+
+- **`dependency_weight`** — número de imagens na subárvore *downstream* (estrita)
+  do top layer da imagem; quantas imagens herdam dela.
+- **`downstream_pull_sum`** — soma dos *pull counts* dos repositórios de todas
+  as imagens dessa subárvore downstream.
+- **`exposure`** = `pull_count(repo) + downstream_pull_sum` — métrica de
+  priorização: combina o uso direto do repositório com o impacto de cadeia de
+  suprimentos das imagens que dependem dele.
+
+O grafo `IS_BASE_OF` é uma *floresta de out-trees* (cada Layer tem no máximo um
+pai, pois `Layer.id = sha256(parent.id + sha256(digest))`), de modo que a soma
+de subárvore é exata e sem dedup entre ramos.
+
+**Schema de saída — `exposure_ranked.jsonl` (um JSON por linha, ordenado por
+`exposure` decrescente):**
 
 ```json
 {
@@ -666,56 +716,70 @@ Para cada imagem processada no grafo Neo4j, calcula o **Dependency Weight** (Out
   "repository_name": "nginx",
   "tag_name": "latest",
   "image_digest": "sha256:abc123...",
-  "weights": 1847,
-  "downstream_images": ["user1/app:latest", "user2/service:v2", ...]
+  "pull_count": 1000000000,
+  "dependency_weight": 1847,
+  "downstream_pull_sum": 5300000000,
+  "exposure": 6300000000
 }
 ```
 
 ### Como executar
 
 ```bash
-go run main.go execute \
-  --script calculate-node-weights \
-  --threshold 1000 \
-  --file final_prioritized_dataset.json \
-  --config config.yaml
+RANKER_SHARDS=4 \
+NEO4J_URI=bolt://127.0.0.1:7687 \
+MONGO_URI=mongodb://127.0.0.1:27017 \
+OUT_PATH=$PWD/exposure_ranked.jsonl \
+python3 scripts/compute_exposure_ranking.py
 ```
 
-### Pós-processamento para OpenVAS
+| Variável de ambiente | Padrão | Descrição |
+|----------------------|--------|-----------|
+| `NEO4J_URI` | `bolt://127.0.0.1:7687` | Grafo IDEA construído no Estágio II |
+| `MONGO_URI` | `mongodb://127.0.0.1:27017` | Pull counts dos repositórios (Estágio I) |
+| `WORKDIR` | `~/scanners/data/exposure_work` | Dumps intermediários gzip (resumível) |
+| `OUT_PATH` | `~/scanners/data/ditector_exposure_ranked.jsonl` | Arquivo de saída |
+| `RANKER_SHARDS` | `4` | Streaming paralelo do Neo4j em N shards |
 
-Ordene por dependency weight (descrescente) e pull count para priorização:
+A execução é **resumível**: os dumps do Neo4j/Mongo são gravados em arquivos
+gzip primeiro; a recomputação relê esses dumps sem reconsultar os bancos.
 
-```bash
-# Top 100 por dependency weight
-jq -s 'sort_by(-.weights) | .[0:100]' final_prioritized_dataset.json
+### Contrato com o Estágio III
 
-# Extrair nomes de imagem para scanning
-jq -r '"\(.repository_namespace)/\(.repository_name):\(.tag_name)"' final_prioritized_dataset.json \
-  | sort -u \
-  > images_for_openvas.txt
-```
+O `exposure_ranked.jsonl` é o único artefato que cruza a fronteira para o
+Estágio III. O repositório [`scanners`](https://github.com/ChimangoScan/scanners)
+o consome diretamente via `scanners seed` — seu leitor de JSONL reconhece
+nativamente este schema (`repository_namespace` / `repository_name` /
+`tag_name`). Não é necessária nenhuma conversão intermediária.
 
 ---
 
-## 10. Integração com OpenVAS
+## 10. Saída e entrega ao Estágio III
 
-O objetivo final da pipeline é alimentar um scanner OpenVAS com containers de rede. O fluxo é:
+A descoberta e a priorização terminam aqui. O artefato `exposure_ranked.jsonl`
+gerado pelo ranker (Seção 9) é entregue ao **Estágio III — varredura
+multi-scanner**, implementado no repositório
+[`scanners`](https://github.com/ChimangoScan/scanners).
 
 ```
-images_for_openvas.txt
-        │
-        ▼
-[seu script de scanning]
-  1. docker pull <image>
-  2. docker run -d --name scan_target <image>
-  3. docker inspect scan_target → pegar IP do container
-  4. openvas-cli --target <IP> --scan-config "Full and Fast"
-  5. coletar relatório
-  6. docker rm -f scan_target
-  7. próxima imagem
+DITector (este repo)                       scanners (Estágio III)
+┌─────────────────────────┐                ┌──────────────────────────┐
+│ Estágio I  — crawler     │                │ scanners seed            │
+│ Estágio II — grafo IDEA  │  exposure_     │   → fila de trabalho     │
+│ ranker de exposure       │─ranked.jsonl──▶│ scanners run             │
+│                          │   (contrato)   │   → 6 scanners por alvo  │
+└─────────────────────────┘                │ scanners report/analyze  │
+                                            └──────────────────────────┘
 ```
 
-**Containers sem serviços de rede:** se o container não expõe portas ou não roda um daemon de rede, o OpenVAS não encontrará serviços. O script externo de scanning deve tratar esse caso avançando para o próximo container.
+O Estágio III faz, para cada repositório priorizado: `docker pull`, execução dos
+seis scanners (estáticos contra a imagem, dinâmicos contra o container),
+normalização e consolidação dos *findings*. Os detalhes — incluindo a integração
+com varreduras OpenVAS pré-existentes via `scanners import-openvas` — estão
+documentados no `README.md` do repositório `scanners`.
+
+A orquestração automática dos dois estágios em sequência está no repositório
+[`chimangoscan`](https://github.com/ChimangoScan/chimangoscan).
 
 ---
 
@@ -833,7 +897,7 @@ docker-scan calculate  — Calcula o node ID de uma imagem pelo digest
 
 | Script | Descrição |
 |--------|-----------|
-| `calculate-node-weights` | Calcula Dependency Weight de cada imagem e exporta JSONL |
+| `calculate-node-weights` | (legado) calcula Dependency Weight de cada imagem e exporta JSONL — superado pelo ranker de exposure (`scripts/compute_exposure_ranking.py`, Seção 9) |
 | `analyze-threshold` | Analisa imagens com pull_count acima de threshold |
 | `analyze-all` | Analisa todas as imagens no MongoDB |
 | `count-images-with-upstream` | Conta imagens com upstream (In-Degree > 0) |
