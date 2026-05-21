@@ -401,7 +401,7 @@ SEV_KEYS = {"critical": "c", "high": "h", "medium": "m", "low": "l",
 
 
 CONTAINERS_FULL_PATH = "/data/scanner-report/dit-containers-full.json"
-CONTAINERS_FULL_MAX_AGE = 2 * 60 * 60  # 2h: depois disso, fallback p/ slow path
+CONTAINERS_FULL_MAX_AGE = 12 * 60 * 60  # 12h: cron containers-full roda a cada 10h, 2h de margem antes do fallback slow path
 
 
 def _load_containers_from_static() -> dict | None:
