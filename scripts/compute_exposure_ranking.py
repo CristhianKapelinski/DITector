@@ -23,7 +23,6 @@ import json
 import os
 import sys
 import time
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://127.0.0.1:7687")
@@ -398,54 +397,51 @@ def main():
             parent[ci] = pi
     log("  multiparent (distinct conflicting):", multiparent)
     if multiparent:
-        log("  WARNING: graph not a pure forest; subtree-sum metric may double-count shared descendants.")
-    # childcount derived from parent[] -> counts each child once (immune to duplicate edges)
-    childcount = array.array("q", bytes(8 * n_slots))
-    n_roots = 0
-    for ci in range(n_slots):
-        pa = parent[ci]
-        if pa == -1:
-            n_roots += 1
-        else:
-            childcount[pa] += 1
-    log("  roots (incl. unused id slots):", n_roots)
-
-    # ---- per-node w/p seed + subtree sums ----
-    log("PHASE 3: seed per-node w/p + subtree sums")
-    sub_w = array.array("q", bytes(8 * n_slots))   # becomes subtree sum of image-count (incl self)
-    sub_p = array.array("q", bytes(8 * n_slots))   # becomes subtree sum of repo-pull-sum (incl self)
-    self_w = {}             # node -> len(images)            (top layers only)
-    self_p = {}             # node -> sum repo pull over refs (top layers only)
+        log("  WARNING: graph not a pure forest; ancestor walk uses the last parent edge seen per child.")
+    # ---- per-node pull seed (single-owner downstream attribution) ----
+    # pull_node[ni] = pull_count do ref MAIS POPULAR carregado pelo nó ni (o canônico daquele
+    # conteúdo). Nós sem imagens (layers intermediárias) valem 0. É a base da regra de downstream:
+    # cada pull pertence a UMA única imagem — a de MAIOR pull em toda a cadeia de ancestrais.
+    log("PHASE 3: seed per-node pull (best ref por nó)")
+    pull_node = array.array("q", bytes(8 * n_slots))   # node -> pull do ref mais popular do nó (0 se sem imagem)
     for ni, imgs in top_images.items():
-        s = 0
+        best_pc = 0
         for ref in imgs:
             pr = ref_parsed[ref]
-            s += repo_pull.get(pr[0] + KEYSEP + pr[1], 0)
-        lw = len(imgs)
-        sub_w[ni] = lw
-        sub_p[ni] = s
-        self_w[ni] = lw
-        self_p[ni] = s
+            pc = repo_pull.get(pr[0] + KEYSEP + pr[1], 0)
+            if pc > best_pc:
+                best_pc = pc
+        pull_node[ni] = best_pc
 
-    # Kahn from leaves: process node when childcount==0, add its subtree to parent.
-    q = deque(i for i in range(n_slots) if childcount[i] == 0)
-    processed = 0
-    while q:
-        i = q.popleft()
-        processed += 1
-        pa = parent[i]
-        if pa != -1:
-            sub_w[pa] += sub_w[i]
-            sub_p[pa] += sub_p[i]
-            childcount[pa] -= 1
-            if childcount[pa] == 0:
-                q.append(pa)
-        if processed % 8_000_000 == 0:
-            log("  subtree-processed:", processed)
-    log("  processed nodes:", processed, "of", n_slots, "slots")
-    if processed != n_slots:
-        log("  WARNING: not all slots processed (cycle?). processed=%d slots=%d" % (processed, n_slots))
-    del childcount, parent
+    # ---- downstream de dono único ----
+    # Regra (confirmada pelo autor): o pull de um nó D é creditado ao downstream de UM só ancestral —
+    # aquele com o MAIOR pull_node em toda a cadeia acima de D, e somente se esse maior for > pull de D.
+    # Se D já é o de maior pull da sua cadeia, ele não é creditado a ninguém.
+    log("PHASE 3: atribuir downstream ao ancestral de maior pull (dono único)")
+    downstream = array.array("q", bytes(8 * n_slots))   # node -> soma dos pulls dos descendentes creditados a ele
+    dep_weight = array.array("q", bytes(8 * n_slots))    # node -> nº de descendentes creditados a ele
+    walked = 0
+    for nd, imgs in top_images.items():
+        v = pull_node[nd]
+        if v <= 0:
+            continue
+        a = parent[nd]
+        best_anc = -1
+        best_pull = v
+        while a != -1:
+            pa = pull_node[a]
+            if pa > best_pull:
+                best_pull = pa
+                best_anc = a
+            a = parent[a]
+        if best_anc != -1:
+            downstream[best_anc] += v
+            dep_weight[best_anc] += 1
+        walked += 1
+        if walked % 1_000_000 == 0:
+            log("  downstream-walked:", walked)
+    log("  nós com imagem percorridos:", walked)
+    del parent
 
     # ---- representative tag per (ns,repo) ----
     log("PHASE 4: load tags for representative-tag selection")
@@ -514,10 +510,10 @@ def main():
         ns, repo, tag, digest = ref_parsed[ref]
         key = ns + KEYSEP + repo
         pc = repo_pull.get(key, 0)
-        # usar apenas pc do best_ref — self_p[ni] soma TODOS os repos no nó (inclui rebrands)
-        # e distorce dps de repos com poucos pulls que compartilham nó com algo gigante
-        dps = sub_p[ni] - pc
-        dw = sub_w[ni] - self_w[ni]
+        # downstream[ni] já é a soma dos pulls dos descendentes creditados SÓ a este nó
+        # (regra de dono único: cada pull pertence ao ancestral de maior pull da cadeia).
+        dps = downstream[ni]
+        dw = dep_weight[ni]
         exposure = pc + dps
         rt = repr_tag(key)
         matched = (tag == rt)
