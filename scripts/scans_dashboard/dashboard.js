@@ -315,7 +315,11 @@ function renderDistributions() {
   const ctx2 = document.getElementById("chart-top-vuln")?.getContext("2d");
   if (ctx2) {
     if (charts.topVuln) charts.topVuln.destroy();
-    const labels = ranked.map(r => r.image.length > 50 ? "…" + r.image.slice(-48) : r.image);
+    const labels = ranked.map(r => {
+      // mostra "ns/repo:tag" sem o "@sha256:...". Se ja for curto, usa inteiro.
+      const noDigest = r.image.split("@")[0];
+      return noDigest.length > 50 ? noDigest.slice(0, 48) + "…" : noDigest;
+    });
     charts.topVuln = new Chart(ctx2, {
       type: "bar",
       data: { labels, datasets: [{ data: ranked.map(r=>r.ch), backgroundColor: "rgba(235,87,87,.65)", borderColor: "#eb5757", borderWidth: 1 }] },
